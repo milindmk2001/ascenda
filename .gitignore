@@ -1,0 +1,16 @@
+# Local Environment Files
+.env
+.env.local
+.env.production
+
+# Dependencies
+node_modules/
+backend/venv/
+backend/__pycache__/
+
+# Build Outputs
+dist/
+.vercel
+
+# System Files
+.DS_Store
