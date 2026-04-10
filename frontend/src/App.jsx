@@ -6,14 +6,14 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
-  // Animation values for the red and green dots
+  // Physics animation values for the charges
   const x1 = useMotionValue(100);
   const x2 = useMotionValue(300);
 
   const handleStartLesson = async () => {
     setLoading(true);
     setError(false);
-    setResponse(""); // Clear old text
+    setResponse(""); 
     
     try {
       const res = await fetch("https://ascenda-production.up.railway.app/api/chat", {
@@ -22,9 +22,10 @@ const App = () => {
         body: JSON.stringify({ message: "Explain Coulomb's Law using Gen Z slang." }),
       });
 
-      if (!res.ok) throw new Error("Connection failed");
+      if (!res.ok) throw new Error("Backend response was not OK");
 
-      // FIX: Instead of res.json(), we use a Reader to handle the stream
+      // CRITICAL: We do NOT use res.json() here. 
+      // That is what causes the "Unexpected token" error.
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
@@ -35,11 +36,11 @@ const App = () => {
         // Decode binary chunk to text ("Okay, bet...")
         const chunk = decoder.decode(value, { stream: true });
         
-        // Append text word-by-word
+        // Update the UI immediately (streaming effect)
         setResponse((prev) => prev + chunk); 
       }
     } catch (err) {
-      console.error("Stream error:", err);
+      console.error("Connection Error:", err);
       setError(true);
     } finally {
       setLoading(false);
@@ -54,64 +55,45 @@ const App = () => {
         <div style={styles.statusBadge}>● API: Online</div>
       </header>
 
-      {/* PHYSICS INTERACTIVE SANDBOX */}
+      {/* INTERACTIVE PHYSICS BOX */}
       <div style={styles.sandbox}>
         <p style={styles.sandboxHint}>Drag the charges to feel the "vibe power"</p>
-        
-        {/* Positive Charge (Red) */}
         <motion.div
           drag="x"
           dragConstraints={{ left: 0, right: 400 }}
           style={{ ...styles.charge, x: x1, backgroundColor: '#ff4d4d', boxShadow: '0 0 20px #ff4d4d' }}
-        >
-          +
-        </motion.div>
-
-        {/* Negative Charge (Green) */}
+        > + </motion.div>
         <motion.div
           drag="x"
           dragConstraints={{ left: 0, right: 400 }}
           style={{ ...styles.charge, x: x2, backgroundColor: '#2ecc71', boxShadow: '0 0 20px #2ecc71' }}
-        >
-          -
-        </motion.div>
+        > - </motion.div>
       </div>
 
       <div style={styles.lessonCard}>
         <h3 style={styles.lessonTitle}>Current Lesson: Electrostatics</h3>
-        
         <div style={styles.textContent}>
           {error ? (
             <span style={{ color: '#ff4d4d' }}>
-              Connection failed. Check if Railway CORS is set to this URL.
+              Connection failed. Check if Railway URL or CORS is correct.
             </span>
           ) : (
             response || "Ready for a vibe check on physics?"
           )}
         </div>
-
         <button 
           onClick={handleStartLesson} 
           disabled={loading}
-          style={{
-            ...styles.button,
-            backgroundColor: loading ? '#444' : '#6366f1',
-            cursor: loading ? 'not-allowed' : 'pointer'
-          }}
+          style={{ ...styles.button, backgroundColor: loading ? '#444' : '#6366f1' }}
         >
           {loading ? "AI is typing..." : "Start Coulomb's Law Lesson"}
         </button>
       </div>
-
-      <footer style={styles.footer}>
-        BACKEND: HTTPS://ASCENDA-PRODUCTION.UP.RAILWAY.APP<br />
-        PHYSICS EDTECH PLATFORM • 2026
-      </footer>
     </div>
   );
 };
 
-// Simplified CSS-in-JS
+// ... (Styles same as previous)
 const styles = {
   container: { padding: '20px', fontFamily: 'Inter, sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center' },
   header: { display: 'flex', alignItems: 'center', width: '100%', maxWidth: '600px', marginBottom: '20px' },
@@ -124,8 +106,7 @@ const styles = {
   lessonCard: { width: '100%', maxWidth: '600px', backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' },
   lessonTitle: { color: '#6366f1', marginBottom: '15px', fontSize: '1rem' },
   textContent: { minHeight: '150px', backgroundColor: '#f1f5f9', padding: '15px', borderRadius: '12px', color: '#334155', lineHeight: '1.6', marginBottom: '20px', whiteSpace: 'pre-wrap' },
-  button: { width: '100%', padding: '14px', borderRadius: '10px', border: 'none', color: 'white', fontWeight: 'bold' },
-  footer: { marginTop: 'auto', textAlign: 'center', fontSize: '0.7rem', color: '#94a3b8', letterSpacing: '1px', lineHeight: '2' }
+  button: { width: '100%', padding: '14px', borderRadius: '10px', border: 'none', color: 'white', fontWeight: 'bold', cursor: 'pointer' }
 };
 
 export default App;
