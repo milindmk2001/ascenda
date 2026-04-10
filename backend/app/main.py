@@ -6,42 +6,26 @@ from .core.config import settings
 
 app = FastAPI(title="Ascenda API")
 
-# Updated CORS logic to ensure your Vercel URL is always prioritized
-origins = [
-    "http://localhost:5173",
-    "https://ascenda-umber.vercel.app",
-]
-
+# CORS setup
+origins = ["http://localhost:5173", "https://ascenda-umber.vercel.app"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins if not settings.DEBUG else ["*"], 
     allow_credentials=True,
-    allow_methods=["*"], # Allow all methods for better compatibility
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# AI CONFIGURATION
+# AI CONFIGURATION (2026 STABLE)
 try:
     genai.configure(api_key=settings.GEMINI_API_KEY)
-    # Try the 2026 stable flagship first
-    # If this fails, the SDK itself might need an update (see below)
-    model = genai.GenerativeModel("models/gemini-2.5-flash")
-    
-    # Alternative for the very latest (uncomment if 2.5 fails):
-    # model = genai.GenerativeModel("models/gemini-3-flash-preview")
+    # Gemini 1.5 is retired. Use 2.5 Flash for the best price/performance.
+    model = genai.GenerativeModel("gemini-2.5-flash")
 except Exception as e:
     print(f"CRITICAL: AI Configuration Failed: {e}")
 
 class ChatRequest(BaseModel):
-    # Matches the 'message' field in your current request
-    message: str 
-
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "Online",
-        "environment": "Production" if not settings.DEBUG else "Development"
-    }
+    message: str
 
 @app.post("/api/chat")
 async def chat_lesson(request: ChatRequest):
@@ -49,20 +33,14 @@ async def chat_lesson(request: ChatRequest):
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     try:
-        # Added a safety check to the generation
         response = model.generate_content(request.message)
         
-        # Check if the response was blocked or empty
-        if not response or not response.candidates:
-             return {"response": "The AI is unable to provide an answer right now. Please try rephrasing."}
+        # In 2026, some responses require explicit candidate checking
+        if not response.candidates:
+             return {"response": "The AI is currently unavailable. Please try again."}
              
         return {"response": response.text}
-
     except Exception as e:
-        # CRITICAL: This print will now show the REAL error in your Railway Deploy Logs
         print(f"DEBUG - Gemini Request Failed: {str(e)}")
-        
-        # If it's a 403, it's likely the API Key or Location.
-        # If it's a 429, you hit the free tier limit.
         error_msg = str(e) if settings.DEBUG else "AI Service temporarily unavailable."
         return {"response": f"Service Error: {error_msg}"}
