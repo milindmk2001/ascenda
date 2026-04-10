@@ -45,7 +45,7 @@ async def health_check():
 async def chat_lesson(request: ChatRequest):
     # Validation: Ensure message isn't empty (Functional Testing baseline)
     if not request.message.strip():
-        throw HTTPException(status_code=400, detail="Message cannot be empty")
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     try:
         # We use a timeout or safety check here for performance audit
