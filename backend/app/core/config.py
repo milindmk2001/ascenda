@@ -2,24 +2,13 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 class Settings:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-    # Splits comma-separated string into list for CORS
+    # Default to your Vercel URL if the env var is missing
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "https://ascenda-umber.vercel.app").split(",")
     PORT = int(os.getenv("PORT", 8000))
-    # Add this line to stop the crash!
+    # This is the line your main.py is dying for:
     DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-
-settings = Settings()
-class Settings:
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-    # Splits comma-separated string into list for CORS
-    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
-    PORT = int(os.getenv("PORT", 8000))
 
 settings = Settings()
