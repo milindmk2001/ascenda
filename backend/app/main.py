@@ -6,56 +6,58 @@ from .core.config import settings
 
 app = FastAPI(title="Ascenda API")
 
-# DYNAMIC CORS: Secure and Browser-Compatible
-# We pull this from your Railway environment variables
+# Updated CORS logic to ensure your Vercel URL is always prioritized
 origins = [
-    "http://localhost:5173",  # Local Vite
-    "https://ascenda-umber.vercel.app", # Production Frontend
+    "http://localhost:5173",
+    "https://ascenda-umber.vercel.app",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins if not settings.DEBUG else ["*"], 
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["*"], # Allow all methods for better compatibility
     allow_headers=["*"],
 )
 
 # AI CONFIGURATION
 try:
     genai.configure(api_key=settings.GEMINI_API_KEY)
-    # Move model name to settings to avoid hardcoding
     model = genai.GenerativeModel("gemini-1.5-flash-latest")
 except Exception as e:
     print(f"CRITICAL: AI Configuration Failed: {e}")
 
 class ChatRequest(BaseModel):
-    message: str
+    # Matches the 'message' field in your current request
+    message: str 
 
 @app.get("/health")
 async def health_check():
-    """Enhanced health check for CI/CD monitoring"""
     return {
         "status": "Online",
-        "version": "1.0.0-baseline",
         "environment": "Production" if not settings.DEBUG else "Development"
     }
 
 @app.post("/api/chat")
 async def chat_lesson(request: ChatRequest):
-    # Validation: Ensure message isn't empty (Functional Testing baseline)
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     try:
-        # We use a timeout or safety check here for performance audit
+        # Added a safety check to the generation
         response = model.generate_content(request.message)
         
-        if not response.text:
-            return {"response": "The AI mentor is thinking... please try again."}
-            
+        # Check if the response was blocked or empty
+        if not response or not response.candidates:
+             return {"response": "The AI is unable to provide an answer right now. Please try rephrasing."}
+             
         return {"response": response.text}
+
     except Exception as e:
-        # SECURITY: Don't leak raw stack traces to the frontend in production
+        # CRITICAL: This print will now show the REAL error in your Railway Deploy Logs
+        print(f"DEBUG - Gemini Request Failed: {str(e)}")
+        
+        # If it's a 403, it's likely the API Key or Location.
+        # If it's a 429, you hit the free tier limit.
         error_msg = str(e) if settings.DEBUG else "AI Service temporarily unavailable."
         return {"response": f"Service Error: {error_msg}"}
