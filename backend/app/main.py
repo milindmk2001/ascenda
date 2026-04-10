@@ -23,7 +23,12 @@ app.add_middleware(
 # AI CONFIGURATION
 try:
     genai.configure(api_key=settings.GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-3-flash")
+    # Try the 2026 stable flagship first
+    # If this fails, the SDK itself might need an update (see below)
+    model = genai.GenerativeModel("models/gemini-2.5-flash")
+    
+    # Alternative for the very latest (uncomment if 2.5 fails):
+    # model = genai.GenerativeModel("models/gemini-3-flash-preview")
 except Exception as e:
     print(f"CRITICAL: AI Configuration Failed: {e}")
 
