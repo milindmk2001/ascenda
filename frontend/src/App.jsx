@@ -87,4 +87,5 @@ const styles = {
   button: { width: '100%', padding: '14px', borderRadius: '10px', border: 'none', color: 'white', fontWeight: 'bold', cursor: 'pointer' }
 };
 
+
 export default App;
