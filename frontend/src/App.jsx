@@ -54,7 +54,7 @@ const App = () => {
           {/* THE BASE LESSON VIDEO */}
           <video 
             ref={videoRef}
-            src="https://www.w3schools.com/html/mov_bbb.mp4" 
+            src="https://archive.org/download/electromagnetic-theory/01.%20Electrostatics%20-%20Coulomb%27s%20Law.mp4" 
             style={styles.video}
             controls={!isAsking}
           />

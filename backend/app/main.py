@@ -29,27 +29,21 @@ async def health():
 
 @app.post("/api/interact")
 async def tutor_interaction(request: InteractRequest):
-    """
-    Simulates the AI 'seeing' the video at a specific time.
-    In production, this would use a metadata map or Gemini Multimodal 
-    to determine where to draw the SVG elements.
-    """
-    # Example logic: If the user asks during the first 30 seconds
-    if request.timestamp < 30.0:
-        return {
-            "explanation": "You're looking at the initial state. The red sphere (+) and green sphere (-) have an attractive force because opposite charges vibe together. Watch how the vector grows as they get closer!",
-            "visuals": [
-                {"type": "arrow", "x1": 300, "y1": 225, "x2": 450, "y2": 225}, # Force vector
-                {"type": "circle", "cx": 280, "cy": 225, "r": 40}            # Highlight Red Charge
-            ]
-        }
-    else:
-        return {
-            "explanation": "At this stage, the distance 'r' is very small, so the force is peaking. It follows the Inverse Square Law!",
-            "visuals": [
-                {"type": "arrow", "x1": 400, "y1": 225, "x2": 700, "y2": 225}
-            ]
-        }
+    # Logic: Point the AI to specific pixel coordinates 
+    # based on where the charges are in YOUR video.
+    
+    return {
+        "explanation": "Notice the force vectors between these two spheres. Because they are both positive (red), they are repelling. The length of the yellow arrow represents the magnitude of that 'beef' between them.",
+        "visuals": [
+            # Drawing a 'Repulsion' arrow on the right
+            {"type": "arrow", "x1": 500, "y1": 225, "x2": 650, "y2": 225},
+            # Drawing a 'Repulsion' arrow on the left
+            {"type": "arrow", "x1": 300, "y1": 225, "x2": 150, "y2": 225},
+            # Highlighting the charges
+            {"type": "circle", "cx": 300, "cy": 225, "r": 50},
+            {"type": "circle", "cx": 500, "cy": 225, "r": 50}
+        ]
+    }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
