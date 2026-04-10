@@ -20,7 +20,7 @@ app.add_middleware(
 try:
     genai.configure(api_key=settings.GEMINI_API_KEY)
     # Gemini 1.5 is retired. Use 2.5 Flash for the best price/performance.
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel("gemini-3-flash-preview")
 except Exception as e:
     print(f"CRITICAL: AI Configuration Failed: {e}")
 
