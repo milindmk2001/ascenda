@@ -16,7 +16,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins if not settings.DEBUG else ["*"], 
+    allow_origins=["*"], # Temporarily set to "*" to test if the connection works
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
