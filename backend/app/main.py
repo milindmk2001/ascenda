@@ -25,7 +25,7 @@ app.add_middleware(
 try:
     genai.configure(api_key=settings.GEMINI_API_KEY)
     # Move model name to settings to avoid hardcoding
-    model = genai.GenerativeModel(getattr(settings, "GEMINI_MODEL", "gemini-1.5-flash"))
+    model = genai.GenerativeModel("gemini-1.5-flash-latest")
 except Exception as e:
     print(f"CRITICAL: AI Configuration Failed: {e}")
 
