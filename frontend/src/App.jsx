@@ -1,91 +1,125 @@
-import React, { useState } from 'react';
-import { motion, useMotionValue } from 'framer-motion';
+import React, { useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const App = () => {
-  const [response, setResponse] = useState("");
+  const videoRef = useRef(null);
+  const [isAsking, setIsAsking] = useState(false);
+  const [aiResponse, setAiResponse] = useState("");
+  const [svgElements, setSvgElements] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
 
-  const x1 = useMotionValue(100);
-  const x2 = useMotionValue(300);
-
-  const handleStartLesson = async () => {
-    // TRACKER: If you don't see this in your console, the old code is still live!
-    console.log("🚀 STREAMING MODE ACTIVATED"); 
-    
+  const handleRaiseHand = async () => {
     setLoading(true);
-    setError(false);
-    setResponse(""); 
+    videoRef.current.pause(); // Pause the 'Udemy' video
+    setIsAsking(true);
     
+    const currentTime = videoRef.current.currentTime;
+
     try {
-      const res = await fetch("https://ascenda-production.up.railway.app/api/chat", {
+      const res = await fetch("https://ascenda-production.up.railway.app/api/interact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "Explain Coulomb's Law using Gen Z slang." }),
+        body: JSON.stringify({ 
+          timestamp: currentTime,
+          query: "What's happening in this frame?" 
+        }),
       });
-
-      if (!res.ok) throw new Error("Backend connection failed");
-
-      // CRITICAL FIX: We use the reader, NOT res.json()
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value, { stream: true });
-        setResponse((prev) => prev + chunk); 
-      }
+      
+      const data = await res.json();
+      setAiResponse(data.explanation);
+      setSvgElements(data.visuals);
     } catch (err) {
-      console.error("DEBUG ERROR:", err);
-      setError(true);
+      setAiResponse("Connection error. Is the backend running?");
     } finally {
       setLoading(false);
     }
   };
 
+  const resume = () => {
+    setIsAsking(false);
+    setSvgElements([]);
+    setAiResponse("");
+    videoRef.current.play();
+  };
+
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <div style={styles.badge}>A</div>
-        <h1 style={styles.title}>Ascenda</h1>
-        <div style={styles.statusBadge}>● API: Online</div>
+        <div style={styles.logo}>A</div>
+        <h2 style={{margin: 0}}>Ascenda Pro</h2>
       </header>
 
-      <div style={styles.sandbox}>
-        <p style={styles.sandboxHint}>Drag the charges to feel the "vibe power"</p>
-        <motion.div drag="x" dragConstraints={{ left: 0, right: 400 }} style={{ ...styles.charge, x: x1, backgroundColor: '#ff4d4d' }}> + </motion.div>
-        <motion.div drag="x" dragConstraints={{ left: 0, right: 400 }} style={{ ...styles.charge, x: x2, backgroundColor: '#2ecc71' }}> - </motion.div>
-      </div>
+      <div style={styles.stage}>
+        <div style={styles.videoWrapper}>
+          {/* THE BASE LESSON VIDEO */}
+          <video 
+            ref={videoRef}
+            src="https://www.w3schools.com/html/mov_bbb.mp4" 
+            style={styles.video}
+            controls={!isAsking}
+          />
 
-      <div style={styles.lessonCard}>
-        <h3 style={styles.lessonTitle}>Current Lesson: Electrostatics</h3>
-        <div style={styles.textContent}>
-          {error ? <span style={{ color: '#ff4d4d' }}>Check Railway CORS or Backend URL.</span> : (response || "Ready for the vibe check?")}
+          {/* THE INTERACTIVE DRAWING LAYER */}
+          <AnimatePresence>
+            {isAsking && (
+              <motion.svg 
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                style={styles.svgLayer}
+                viewBox="0 0 800 450"
+              >
+                {svgElements.map((el, i) => (
+                  el.type === 'arrow' ? (
+                    <motion.line
+                      key={i} x1={el.x1} y1={el.y1} x2={el.x2} y2={el.y2}
+                      stroke="#fbbf24" strokeWidth="6" strokeLinecap="round"
+                      initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
+                    />
+                  ) : (
+                    <motion.circle
+                      key={i} cx={el.cx} cy={el.cy} r={el.r}
+                      fill="transparent" stroke="#60a5fa" strokeWidth="4"
+                      initial={{ scale: 0 }} animate={{ scale: 1 }}
+                    />
+                  )
+                ))}
+              </motion.svg>
+            )}
+          </AnimatePresence>
         </div>
-        <button onClick={handleStartLesson} disabled={loading} style={{ ...styles.button, backgroundColor: loading ? '#444' : '#6366f1' }}>
-          {loading ? "AI is typing..." : "Start Coulomb's Law Lesson"}
-        </button>
+
+        {/* INTERACTIVE UI PANEL */}
+        <div style={styles.uiPanel}>
+          {!isAsking ? (
+            <button onClick={handleRaiseHand} style={styles.askBtn}>
+              ✋ RAISE HAND TO ASK AI
+            </button>
+          ) : (
+            <motion.div initial={{ y: 20 }} animate={{ y: 0 }} style={styles.responseBox}>
+              <h4 style={{color: '#fbbf24', marginTop: 0}}>AI TUTOR</h4>
+              <p style={{fontSize: '0.95rem', lineHeight: '1.5'}}>
+                {loading ? "Analyzing frame..." : aiResponse}
+              </p>
+              <button onClick={resume} style={styles.resumeBtn}>Got it, Continue Lesson</button>
+            </motion.div>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
 const styles = {
-  container: { padding: '20px', fontFamily: 'sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center' },
-  header: { display: 'flex', alignItems: 'center', width: '100%', maxWidth: '600px', marginBottom: '20px' },
-  badge: { backgroundColor: '#6366f1', color: 'white', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', marginRight: '10px' },
-  title: { fontSize: '1.5rem', color: '#1e293b', flexGrow: 1 },
-  statusBadge: { backgroundColor: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem' },
-  sandbox: { width: '100%', maxWidth: '600px', height: '180px', backgroundColor: 'white', borderRadius: '16px', position: 'relative', marginBottom: '20px', border: '1px solid #e2e8f0', overflow: 'hidden' },
-  sandboxHint: { textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem', marginTop: '10px' },
-  charge: { width: '50px', height: '50px', borderRadius: '50%', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 'bold', position: 'absolute', top: '60px', cursor: 'grab' },
-  lessonCard: { width: '100%', maxWidth: '600px', backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' },
-  lessonTitle: { color: '#6366f1', marginBottom: '15px' },
-  textContent: { minHeight: '150px', backgroundColor: '#f1f5f9', padding: '15px', borderRadius: '12px', color: '#334155', lineHeight: '1.6', marginBottom: '20px', whiteSpace: 'pre-wrap' },
-  button: { width: '100%', padding: '14px', borderRadius: '10px', border: 'none', color: 'white', fontWeight: 'bold', cursor: 'pointer' }
+  container: { padding: '20px', backgroundColor: '#0f172a', minHeight: '100vh', color: 'white', fontFamily: 'Inter, sans-serif' },
+  header: { display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '30px' },
+  logo: { backgroundColor: '#6366f1', padding: '10px 15px', borderRadius: '8px', fontWeight: 'bold' },
+  stage: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' },
+  videoWrapper: { position: 'relative', width: '100%', maxWidth: '854px', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' },
+  video: { width: '100%', display: 'block' },
+  svgLayer: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', backgroundColor: 'rgba(0,0,0,0.4)' },
+  uiPanel: { width: '100%', maxWidth: '854px' },
+  askBtn: { width: '100%', padding: '20px', borderRadius: '12px', border: 'none', backgroundColor: '#6366f1', color: 'white', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem' },
+  responseBox: { backgroundColor: '#1e293b', padding: '25px', borderRadius: '16px', borderLeft: '6px solid #fbbf24' },
+  resumeBtn: { marginTop: '15px', padding: '10px 25px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: 'white', cursor: 'pointer', fontWeight: 'bold' }
 };
-
 
 export default App;

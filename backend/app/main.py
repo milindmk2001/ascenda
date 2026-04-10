@@ -1,14 +1,11 @@
-import google.generativeai as genai
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from .core.config import settings
-import asyncio
+import uvicorn
 
-app = FastAPI(title="Ascenda API")
+app = FastAPI(title="Ascenda Interactive Engine")
 
-# Allow Vercel and Localhost
+# Update origins to match your Vercel URL
 origins = [
     "http://localhost:5173",
     "https://ascenda-umber.vercel.app",
@@ -16,41 +13,43 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Temporarily set to "*" to test if the connection works
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# AI CONFIGURATION (2026 Stable)
-try:
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-2.5-flash")
-except Exception as e:
-    print(f"CRITICAL: AI Configuration Failed: {e}")
-
-class ChatRequest(BaseModel):
-    message: str
+class InteractRequest(BaseModel):
+    timestamp: float
+    query: str
 
 @app.get("/health")
-async def health_check():
-    return {"status": "Online"}
+async def health():
+    return {"status": "online"}
 
-@app.post("/api/chat")
-async def chat_lesson(request: ChatRequest):
-    if not request.message.strip():
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
+@app.post("/api/interact")
+async def tutor_interaction(request: InteractRequest):
+    """
+    Simulates the AI 'seeing' the video at a specific time.
+    In production, this would use a metadata map or Gemini Multimodal 
+    to determine where to draw the SVG elements.
+    """
+    # Example logic: If the user asks during the first 30 seconds
+    if request.timestamp < 30.0:
+        return {
+            "explanation": "You're looking at the initial state. The red sphere (+) and green sphere (-) have an attractive force because opposite charges vibe together. Watch how the vector grows as they get closer!",
+            "visuals": [
+                {"type": "arrow", "x1": 300, "y1": 225, "x2": 450, "y2": 225}, # Force vector
+                {"type": "circle", "cx": 280, "cy": 225, "r": 40}            # Highlight Red Charge
+            ]
+        }
+    else:
+        return {
+            "explanation": "At this stage, the distance 'r' is very small, so the force is peaking. It follows the Inverse Square Law!",
+            "visuals": [
+                {"type": "arrow", "x1": 400, "y1": 225, "x2": 700, "y2": 225}
+            ]
+        }
 
-    async def generate():
-        try:
-            # stream=True is the magic part
-            response = model.generate_content(request.message, stream=True)
-            for chunk in response:
-                if chunk.text:
-                    yield chunk.text
-                await asyncio.sleep(0.01) # Small delay for smoother UI streaming
-        except Exception as e:
-            print(f"Streaming Error: {e}")
-            yield f"Service Error: {str(e)}"
-
-    return StreamingResponse(generate(), media_type="text/plain")
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
