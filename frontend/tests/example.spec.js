@@ -1,19 +1,21 @@
-// @ts-check
 import { test, expect } from '@playwright/test';
 
-test('has title', async ({ page }) => {
-  await page.goto('https://playwright.dev/');
+test('Ascenda Physics POC - Chrome/Edge Test', async ({ page }) => {
+  // 1. Go to your local dev site (or your Vercel URL)
+  await page.goto('http://localhost:5173'); 
 
-  // Expect a title "to contain" a substring.
-  await expect(page).toHaveTitle(/Playwright/);
-});
+  // 2. Verify the Brand Name exists
+  await expect(page.locator('h1')).toContainText('Ascenda');
 
-test('get started link', async ({ page }) => {
-  await page.goto('https://playwright.dev/');
+  // 3. Find and click the Start Lesson button
+  const startBtn = page.getByRole('button', { name: /Start Coulomb's Law/i });
+  await expect(startBtn).toBeVisible();
+  await startBtn.click();
 
-  // Click the get started link.
-  await page.getByRole('link', { name: 'Get started' }).click();
+  // 4. Verify that the loading state appears
+  await expect(page.getByText(/Consulting/i)).toBeVisible();
 
-  // Expects page to have a heading with the name of Installation.
-  await expect(page.getByRole('heading', { name: 'Installation' })).toBeVisible();
+  // 5. Verify that the AI response eventually arrives
+  // We give it 15 seconds because AI generation can be slow
+  await expect(page.locator('article')).toBeVisible({ timeout: 15000 });
 });
