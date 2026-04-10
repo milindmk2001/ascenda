@@ -1,81 +1,108 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 function App() {
   const [lesson, setLesson] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Use the environment variable from Vercel, or fallback to your Railway URL
-  const API_URL = import.meta.env.VITE_API_URL || 'https://ascenda-production.up.railway.app';
+  // AUDIT FIX: Ensure API_URL never ends in a trailing slash to prevent double-slashes in fetch
+  const API_URL = (import.meta.env.VITE_API_URL || 'https://ascenda-production.up.railway.app').replace(/\/$/, "");
 
   const startLesson = async () => {
     setLoading(true);
+    setError(null);
+    
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s Timeout for performance audit
+
       const response = await fetch(`${API_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: "Explain Coulomb's Law using a Gen-Z analogy." })
+        body: JSON.stringify({ message: "Explain Coulomb's Law like a Physics Mentor." }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+
       const data = await response.json();
-      setLesson(data.response); // Adjust this based on your exact backend JSON structure
-    } catch (error) {
-      console.error("Error connecting to Physics Brain:", error);
-      setLesson("Connection failed. Check if Railway CORS is set to this URL.");
+      setLesson(data.response);
+    } catch (err) {
+      console.error("Audit Log - Connection Error:", err);
+      setError(err.name === 'AbortError' ? "Request timed out. Is the AI overloaded?" : "Connection failed.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-      <div className="max-w-2xl w-full bg-white rounded-xl shadow-lg p-8 border border-slate-200">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 antialiased">
+      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl p-8 border border-slate-200 transition-all duration-500">
         
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        {/* Header - Scalable for more subjects */}
+        <div className="flex items-center justify-between mb-8">
           <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">
+            <div className="h-10 w-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-indigo-200 shadow-lg">
               A
             </div>
-            <h1 className="text-2xl font-bold text-slate-800">Ascenda</h1>
+            <div>
+              <h1 className="text-2xl font-black text-slate-800 tracking-tight">Ascenda</h1>
+              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">K-12 EdTech India</p>
+            </div>
           </div>
-          <div className="flex items-center p-2 bg-green-50 rounded-lg border border-green-100">
-            <div className="h-2 w-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-            <span className="text-xs font-medium text-green-700">API: Online</span>
+          <div className={`flex items-center px-3 py-1 rounded-full border ${error ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
+            <div className={`h-2 w-2 rounded-full mr-2 ${error ? 'bg-red-500' : 'bg-green-500 animate-pulse'}`}></div>
+            <span className={`text-[10px] font-bold uppercase ${error ? 'text-red-700' : 'text-green-700'}`}>
+              {error ? 'API: Error' : 'API: Online'}
+            </span>
           </div>
         </div>
 
-        {/* Lesson Display Area */}
-        <div className="min-h-[200px] bg-slate-100 rounded-lg p-6 mb-8 border-dashed border-2 border-slate-200">
+        {/* Dynamic Lesson Display Area */}
+        <div className="min-h-[250px] bg-slate-50 rounded-2xl p-6 mb-8 border-2 border-slate-100 relative overflow-hidden">
           {loading ? (
-            <div className="flex flex-col items-center justify-center h-full text-slate-400">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
-              <p>Consulting the Physics Brain...</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm z-10">
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-slate-200 border-t-indigo-600 mb-4"></div>
+              <p className="text-sm font-medium text-slate-500">Synthesizing Physics Concept...</p>
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="text-center py-10">
+              <p className="text-red-500 font-medium mb-2">Oops! Something went wrong.</p>
+              <p className="text-xs text-slate-400">{error}</p>
             </div>
           ) : lesson ? (
-            <div className="prose prose-slate text-slate-700">
-              <h3 className="text-lg font-semibold text-indigo-600 mb-2">Current Lesson: Electrostatics</h3>
-              <p className="leading-relaxed">{lesson}</p>
-            </div>
+            <article className="animate-in fade-in slide-in-from-bottom-2 duration-700">
+              <h3 className="text-xs font-black text-indigo-500 uppercase tracking-widest mb-4">Unit 1: Electrostatics</h3>
+              <div className="text-slate-700 leading-relaxed text-lg font-medium whitespace-pre-wrap">
+                {lesson}
+              </div>
+            </article>
           ) : (
-            <p className="text-center text-slate-400 mt-10">
-              Click below to generate your first AI Physics lesson.
-            </p>
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl text-slate-300">⚛️</span>
+              </div>
+              <p className="text-slate-400 font-medium">Ready to start Class 12 Physics?</p>
+            </div>
           )}
         </div>
 
-        {/* Action Button */}
         <button 
-          className="w-full py-4 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 text-white font-semibold rounded-lg transition duration-200 shadow-md"
+          className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] disabled:bg-slate-300 text-white font-bold rounded-xl transition-all duration-200 shadow-lg shadow-indigo-100 disabled:shadow-none"
           onClick={startLesson}
           disabled={loading}
         >
-          {loading ? 'Generating...' : 'Start Coulomb\'s Law Lesson'}
+          {loading ? 'Consulting Brain...' : 'Launch Coulomb\'s Law Lesson'}
         </button>
       </div>
 
-      <footer className="mt-8 text-slate-400 text-xs tracking-widest uppercase text-center">
-        Backend: {API_URL}<br/>
-        <span className="mt-2 block font-bold text-indigo-500">Physics EdTech Platform • 2026</span>
-      </footer>
+      <p className="mt-8 text-slate-300 text-[10px] font-bold tracking-[0.2em] uppercase">
+        Authenticated Shell v1.0 • Secure Environment
+      </p>
     </div>
   )
 }
