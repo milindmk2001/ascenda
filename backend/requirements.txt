@@ -2,7 +2,5 @@ fastapi
 uvicorn
 python-dotenv
 google-generativeai>=0.8.3
-openai
-anthropic
 python-multipart
 pydantic-settings

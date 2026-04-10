@@ -1,110 +1,78 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react';
+import { motion, useMotionValue, useTransform } from 'framer-motion';
 
-function App() {
-  const [lesson, setLesson] = useState(null);
+const App = () => {
+  const [input, setInput] = useState("");
+  const [response, setResponse] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
 
-  // AUDIT FIX: Ensure API_URL never ends in a trailing slash to prevent double-slashes in fetch
-  const API_URL = (import.meta.env.VITE_API_URL || 'https://ascenda-production.up.railway.app').replace(/\/$/, "");
+  // Animation state for the charges
+  const x1 = useMotionValue(100);
+  const x2 = useMotionValue(300);
 
-  const startLesson = async () => {
+  const handleStartLesson = async () => {
     setLoading(true);
-    setError(null);
+    setResponse(""); // Clear previous text
     
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s Timeout for performance audit
-
-      const response = await fetch(`${API_URL}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: "Explain Coulomb's Law like a Physics Mentor." }),
-        signal: controller.signal
+      const res = await fetch("https://ascenda-production.up.railway.app/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Explain Coulomb's Law using Gen Z slang." }),
       });
 
-      clearTimeout(timeoutId);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
 
-      if (!response.ok) throw new Error(`Server responded with ${response.status}`);
-
-      const data = await response.json();
-      setLesson(data.response);
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        setResponse((prev) => prev + chunk); // Stream text to UI
+      }
     } catch (err) {
-      console.error("Audit Log - Connection Error:", err);
-      setError(err.name === 'AbortError' ? "Request timed out. Is the AI overloaded?" : "Connection failed.");
+      setResponse("Failed to connect to AI service.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 antialiased">
-      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl p-8 border border-slate-200 transition-all duration-500">
+    <div style={{ padding: '40px', fontFamily: 'sans-serif', backgroundColor: '#121212', color: 'white', minHeight: '100vh' }}>
+      <h1>Ascenda: Electrostatics</h1>
+      
+      {/* PHYSICS SANDBOX */}
+      <div style={{ height: '200px', background: '#1e1e1e', borderRadius: '15px', position: 'relative', overflow: 'hidden', marginBottom: '20px', border: '1px solid #333' }}>
+        <p style={{ textAlign: 'center', color: '#666' }}>Drag the charges to feel the force</p>
         
-        {/* Header - Scalable for more subjects */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-indigo-200 shadow-lg">
-              A
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-slate-800 tracking-tight">Ascenda</h1>
-              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">K-12 EdTech India</p>
-            </div>
-          </div>
-          <div className={`flex items-center px-3 py-1 rounded-full border ${error ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
-            <div className={`h-2 w-2 rounded-full mr-2 ${error ? 'bg-red-500' : 'bg-green-500 animate-pulse'}`}></div>
-            <span className={`text-[10px] font-bold uppercase ${error ? 'text-red-700' : 'text-green-700'}`}>
-              {error ? 'API: Error' : 'API: Online'}
-            </span>
-          </div>
-        </div>
+        {/* Positive Charge (Red) */}
+        <motion.div
+          drag="x"
+          style={{ x: x1, width: 50, height: 50, borderRadius: '50%', background: '#ff4d4d', position: 'absolute', top: 75, cursor: 'grab', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px #ff4d4d' }}
+          whileTap={{ scale: 0.9 }}
+        > + </motion.div>
 
-        {/* Dynamic Lesson Display Area */}
-        <div className="min-h-[250px] bg-slate-50 rounded-2xl p-6 mb-8 border-2 border-slate-100 relative overflow-hidden">
-          {loading ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm z-10">
-              <div className="animate-spin rounded-full h-10 w-10 border-4 border-slate-200 border-t-indigo-600 mb-4"></div>
-              <p className="text-sm font-medium text-slate-500">Synthesizing Physics Concept...</p>
-            </div>
-          ) : null}
-
-          {error ? (
-            <div className="text-center py-10">
-              <p className="text-red-500 font-medium mb-2">Oops! Something went wrong.</p>
-              <p className="text-xs text-slate-400">{error}</p>
-            </div>
-          ) : lesson ? (
-            <article className="animate-in fade-in slide-in-from-bottom-2 duration-700">
-              <h3 className="text-xs font-black text-indigo-500 uppercase tracking-widest mb-4">Unit 1: Electrostatics</h3>
-              <div className="text-slate-700 leading-relaxed text-lg font-medium whitespace-pre-wrap">
-                {lesson}
-              </div>
-            </article>
-          ) : (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl text-slate-300">⚛️</span>
-              </div>
-              <p className="text-slate-400 font-medium">Ready to start Class 12 Physics?</p>
-            </div>
-          )}
-        </div>
-
-        <button 
-          className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] disabled:bg-slate-300 text-white font-bold rounded-xl transition-all duration-200 shadow-lg shadow-indigo-100 disabled:shadow-none"
-          onClick={startLesson}
-          disabled={loading}
-        >
-          {loading ? 'Consulting Brain...' : 'Launch Coulomb\'s Law Lesson'}
-        </button>
+        {/* Negative Charge (Green) */}
+        <motion.div
+          drag="x"
+          style={{ x: x2, width: 50, height: 50, borderRadius: '50%', background: '#2ecc71', position: 'absolute', top: 75, cursor: 'grab', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px #2ecc71' }}
+          whileTap={{ scale: 0.9 }}
+        > - </motion.div>
       </div>
 
-      <p className="mt-8 text-slate-300 text-[10px] font-bold tracking-[0.2em] uppercase">
-        Authenticated Shell v1.0 • Secure Environment
-      </p>
-    </div>
-  )
-}
+      <button 
+        onClick={handleStartLesson} 
+        disabled={loading}
+        style={{ padding: '12px 24px', borderRadius: '8px', border: 'none', background: '#6200ee', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}
+      >
+        {loading ? "AI is typing..." : "Start Coulomb's Law Lesson"}
+      </button>
 
-export default App
+      <div style={{ marginTop: '30px', lineHeight: '1.6', fontSize: '1.1rem', whiteSpace: 'pre-wrap' }}>
+        {response}
+      </div>
+    </div>
+  );
+};
+
+export default App;
