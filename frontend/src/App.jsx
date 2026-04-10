@@ -6,17 +6,16 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
-  // Physics animation values for the charges
+  // Animation values for the red and green dots
   const x1 = useMotionValue(100);
   const x2 = useMotionValue(300);
 
   const handleStartLesson = async () => {
     setLoading(true);
     setError(false);
-    setResponse(""); // Clear old text for the new stream
+    setResponse(""); // Clear old text
     
     try {
-      // 1. Point this to your ACTUAL Railway URL
       const res = await fetch("https://ascenda-production.up.railway.app/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -25,7 +24,7 @@ const App = () => {
 
       if (!res.ok) throw new Error("Connection failed");
 
-      // 2. Handle the STREAM instead of JSON
+      // FIX: Instead of res.json(), we use a Reader to handle the stream
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
@@ -33,10 +32,10 @@ const App = () => {
         const { value, done } = await reader.read();
         if (done) break;
         
-        // Decode the binary chunk into text
+        // Decode binary chunk to text ("Okay, bet...")
         const chunk = decoder.decode(value, { stream: true });
         
-        // Update the UI immediately (streaming effect)
+        // Append text word-by-word
         setResponse((prev) => prev + chunk); 
       }
     } catch (err) {
@@ -55,7 +54,7 @@ const App = () => {
         <div style={styles.statusBadge}>● API: Online</div>
       </header>
 
-      {/* PHYSICS INTERACTIVE SECTION */}
+      {/* PHYSICS INTERACTIVE SANDBOX */}
       <div style={styles.sandbox}>
         <p style={styles.sandboxHint}>Drag the charges to feel the "vibe power"</p>
         
@@ -87,7 +86,7 @@ const App = () => {
               Connection failed. Check if Railway CORS is set to this URL.
             </span>
           ) : (
-            response || "Ready to start the vibe check?"
+            response || "Ready for a vibe check on physics?"
           )}
         </div>
 
@@ -112,9 +111,9 @@ const App = () => {
   );
 };
 
-// Simple Styles Object (Copy-Paste friendly)
+// Simplified CSS-in-JS
 const styles = {
-  container: { padding: '20px', fontFamily: 'Inter, system-ui, sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center' },
+  container: { padding: '20px', fontFamily: 'Inter, sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center' },
   header: { display: 'flex', alignItems: 'center', width: '100%', maxWidth: '600px', marginBottom: '20px' },
   badge: { backgroundColor: '#6366f1', color: 'white', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', marginRight: '10px' },
   title: { fontSize: '1.5rem', color: '#1e293b', flexGrow: 1 },
@@ -122,10 +121,10 @@ const styles = {
   sandbox: { width: '100%', maxWidth: '600px', height: '180px', backgroundColor: '#ffffff', borderRadius: '16px', position: 'relative', marginBottom: '20px', border: '1px solid #e2e8f0', overflow: 'hidden' },
   sandboxHint: { textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem', marginTop: '10px' },
   charge: { width: '50px', height: '50px', borderRadius: '50%', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 'bold', position: 'absolute', top: '60px', cursor: 'grab' },
-  lessonCard: { width: '100%', maxWidth: '600px', backgroundColor: 'white', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', border: '1px solid #e2e8f0' },
+  lessonCard: { width: '100%', maxWidth: '600px', backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' },
   lessonTitle: { color: '#6366f1', marginBottom: '15px', fontSize: '1rem' },
   textContent: { minHeight: '150px', backgroundColor: '#f1f5f9', padding: '15px', borderRadius: '12px', color: '#334155', lineHeight: '1.6', marginBottom: '20px', whiteSpace: 'pre-wrap' },
-  button: { width: '100%', padding: '14px', borderRadius: '10px', border: 'none', color: 'white', fontWeight: 'bold', transition: 'all 0.2s' },
+  button: { width: '100%', padding: '14px', borderRadius: '10px', border: 'none', color: 'white', fontWeight: 'bold' },
   footer: { marginTop: 'auto', textAlign: 'center', fontSize: '0.7rem', color: '#94a3b8', letterSpacing: '1px', lineHeight: '2' }
 };
 
