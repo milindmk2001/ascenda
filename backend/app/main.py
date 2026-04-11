@@ -1,20 +1,21 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from typing import List
 
-# Import our database logic and models using the apps folder context
-from .database import get_db
-from . import models
+# These imports look for the files inside your new 'routers' folder
+from backend.apps.routers import organizations, courses
 
-app = FastAPI(title="Ascenda API")
+app = FastAPI(
+    title="Ascenda Admin API",
+    description="Modular API for managing Boards, Exams, and Course Content",
+    version="1.0.0"
+)
 
 # --- CORS CONFIGURATION ---
-# Vital for Vercel (Frontend) to communicate with Railway (Backend)
+# Vital for allowing your Vercel frontend to talk to this Railway backend
 origins = [
-    "http://localhost:3000",           # Local React
-    "https://ascenda-umber.vercel.app"  # Your Vercel URL
+    "http://localhost:3000",
+    "https://ascenda-umber.vercel.app"
 ]
 
 app.add_middleware(
@@ -25,49 +26,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- ENDPOINTS ---
+# --- REGISTER ROUTERS ---
+# This pulls in all the CRUD logic we wrote in the separate files
+app.include_router(organizations.router)
+app.include_router(courses.router)
 
 @app.get("/")
-def read_root():
+def health_check():
+    """
+    Root endpoint to verify the API is online and 
+    confirming the environment (Local vs Production).
+    """
     return {
         "status": "Online",
-        "app": "Ascenda Backend",
+        "system": "Ascenda Modular Backend",
         "environment": os.getenv("RAILWAY_ENVIRONMENT", "local")
     }
-
-@app.get("/api/home/categories")
-def get_categories(db: Session = Depends(get_db)):
-    """
-    Fetches all Organizations (Boards/Exams).
-    This handles the logic for the Home Page selection bar.
-    """
-    # Using SQLAlchemy ORM for Azure compatibility
-    organizations = db.query(models.Organization).all()
-    
-    return [
-        {
-            "id": str(org.id), 
-            "name": org.name, 
-            "type": org.org_type,
-            "icon": org.icon_url
-        } 
-        for org in organizations
-    ]
-
-@app.get("/api/home/featured-courses")
-def get_featured_courses(db: Session = Depends(get_db)):
-    """
-    Fetches courses where is_featured = True for the Byju's style carousel.
-    """
-    featured = db.query(models.Course).filter(models.Course.is_featured == True).all()
-    
-    return [
-        {
-            "id": str(c.id),
-            "title": c.title,
-            "description": c.description,
-            "thumbnail": c.thumbnail_url,
-            "rigor": c.rigor_level
-        }
-        for c in featured
-    ]
