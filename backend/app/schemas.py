@@ -1,37 +1,52 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional, List, Literal
+from pydantic import BaseModel, ConfigDict, field_validator
+from typing import Optional, List, Literal, Any
+from uuid import UUID
 
 # --- ORGANIZATION SCHEMAS ---
 
 class OrganizationBase(BaseModel):
     name: str
-    # Literal ensures ONLY these exact strings are accepted. 
-    # This must match your frontend dropdown exactly.
+    # We keep this strict for NEW entries, but we'll add a validator 
+    # below to handle existing "dirty" data in your database.
     org_type: Literal["board", "competitive", "other"]
 
+    @field_validator("org_type", mode="before")
+    @classmethod
+    def validate_org_type(cls, value: Any) -> str:
+        # If the DB has "IIT/JEE" or something else, map it to "competitive" 
+        # so the application doesn't crash.
+        allowed = ["board", "competitive", "other"]
+        if value not in allowed:
+            return "competitive" 
+        return value
+
 class OrganizationCreate(OrganizationBase):
-    """Schema for creating a new organization (Incoming Data)"""
     pass
 
 class Organization(OrganizationBase):
-    """Schema for returning organization data (Outgoing Data)"""
-    id: str
+    # Change id type to Any or UUID to stop the "Input should be a valid string" error
+    id: Any 
 
-    # Pydantic v2 configuration to work with SQLAlchemy models
     model_config = ConfigDict(from_attributes=True)
 
+    # Convert UUID to string automatically for the frontend
+    @field_validator("id", mode="before")
+    @classmethod
+    def transform_uuid(cls, value: Any) -> str:
+        if isinstance(value, UUID):
+            return str(value)
+        return value
 
-# --- COURSE SCHEMAS (For future use) ---
+# --- COURSE SCHEMAS ---
 
 class CourseBase(BaseModel):
     title: str
     description: Optional[str] = None
-    organization_id: str
+    organization_id: Any
 
 class CourseCreate(CourseBase):
     pass
 
 class Course(CourseBase):
-    id: str
-
+    id: Any
     model_config = ConfigDict(from_attributes=True)
