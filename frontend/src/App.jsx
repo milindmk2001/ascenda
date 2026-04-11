@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import LandingPage from './LandingPage';
 import VideoLesson from './VideoLesson';
 import AdminDashboard from './components/AdminDashboard';
 
-/**
- * Verified Production URL from Railway Settings
- */
+// Verified Production URL from your Railway settings
 export const API_BASE = "https://ascenda-production.up.railway.app"; 
 
 function App() {
   const [view, setView] = useState('landing');
+
+  // Debugging: This will print to your browser console to prove the URL is correct
+  useEffect(() => {
+    console.log("🚀 Ascenda is connecting to:", API_BASE);
+  }, []);
 
   const startLesson = () => {
     window.scrollTo(0, 0);
@@ -28,6 +31,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-950">
+      {/* 1. ADMIN PANEL */}
       {view === 'admin' ? (
         <div className="relative">
           <button 
@@ -36,9 +40,13 @@ function App() {
           >
             <span>←</span> <span>Exit Admin</span>
           </button>
+          {/* Passing the correct API_BASE to the component */}
           <AdminDashboard apiBase={API_BASE} />
         </div>
-      ) : view === 'lesson' ? (
+      ) : 
+      
+      /* 2. LESSON PLAYER */
+      view === 'lesson' ? (
         <div className="relative animate-in fade-in duration-500">
           <button 
             onClick={goBackHome}
@@ -52,6 +60,8 @@ function App() {
           </footer>
         </div>
       ) : (
+
+        /* 3. LANDING PAGE */
         <>
           <LandingPage onStartLesson={startLesson} />
           <footer className="py-12 text-center bg-slate-950">
