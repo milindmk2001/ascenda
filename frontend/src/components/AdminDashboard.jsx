@@ -1,13 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit, X } from 'lucide-react';
 
-<<<<<<< HEAD
 const AdminDashboard = ({ apiBase }) => {
-=======
-// REMOVED: The hardcoded placeholder line that was causing the error.
-
-const AdminDashboard = ({ apiBase }) => { // Using the prop passed from App.jsx
->>>>>>> e8d84cdb10f9655a34f61ddc89c79a71547c5d55
   const [organizations, setOrganizations] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -17,11 +11,7 @@ const AdminDashboard = ({ apiBase }) => { // Using the prop passed from App.jsx
   // 1. Fetch Organizations
   const fetchOrgs = async () => {
     try {
-<<<<<<< HEAD
       setLoading(true);
-=======
-      // Use backticks and the prop variable 'apiBase'
->>>>>>> e8d84cdb10f9655a34f61ddc89c79a71547c5d55
       const response = await fetch(`${apiBase}/api/admin/organizations/`);
       const data = await response.json();
       setOrganizations(data);
@@ -32,13 +22,8 @@ const AdminDashboard = ({ apiBase }) => { // Using the prop passed from App.jsx
     }
   };
 
-<<<<<<< HEAD
   useEffect(() => {
     if (apiBase) fetchOrgs();
-=======
-  useEffect(() => { 
-    if (apiBase) fetchOrgs(); 
->>>>>>> e8d84cdb10f9655a34f61ddc89c79a71547c5d55
   }, [apiBase]);
 
   // 2. Handle Form Submission (Create or Update)
@@ -51,28 +36,17 @@ const AdminDashboard = ({ apiBase }) => { // Using the prop passed from App.jsx
     const method = editingId ? 'PUT' : 'POST';
 
     try {
-<<<<<<< HEAD
       const response = await fetch(url, {
         method: method,
-=======
-      const response = await fetch(`${apiBase}/api/admin/organizations/`, {
-        method: 'POST',
->>>>>>> e8d84cdb10f9655a34f61ddc89c79a71547c5d55
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
 
       if (response.ok) {
-<<<<<<< HEAD
         closeModal();
         fetchOrgs();
       } else {
         alert("Error saving organization. Please check your backend.");
-=======
-        setIsModalOpen(false);
-        setFormData({ name: '', org_type: 'board' });
-        fetchOrgs();
->>>>>>> e8d84cdb10f9655a34f61ddc89c79a71547c5d55
       }
     } catch (error) {
       alert("Error saving organization");
@@ -82,7 +56,6 @@ const AdminDashboard = ({ apiBase }) => { // Using the prop passed from App.jsx
   // 3. Handle Delete with UI Refresh
   const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this organization?")) {
-<<<<<<< HEAD
       try {
         const response = await fetch(`${apiBase}/api/admin/organizations/${id}`, { 
           method: 'DELETE' 
@@ -93,10 +66,6 @@ const AdminDashboard = ({ apiBase }) => { // Using the prop passed from App.jsx
       } catch (error) {
         console.error("Delete failed:", error);
       }
-=======
-      await fetch(`${apiBase}/api/admin/organizations/${id}`, { method: 'DELETE' });
-      fetchOrgs();
->>>>>>> e8d84cdb10f9655a34f61ddc89c79a71547c5d55
     }
   };
 
