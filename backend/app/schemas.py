@@ -1,52 +1,54 @@
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Optional, List, Literal, Any
+from typing import Optional, Literal, Any
 from uuid import UUID
-
-# --- ORGANIZATION SCHEMAS ---
 
 class OrganizationBase(BaseModel):
     name: str
-    # We keep this strict for NEW entries, but we'll add a validator 
-    # below to handle existing "dirty" data in your database.
-    org_type: Literal["board", "competitive", "other"]
+    org_type: str  # We change this to str to prevent the crash
 
     @field_validator("org_type", mode="before")
     @classmethod
     def validate_org_type(cls, value: Any) -> str:
-        # If the DB has "IIT/JEE" or something else, map it to "competitive" 
-        # so the application doesn't crash.
+        # Define your strictly allowed types for the frontend
         allowed = ["board", "competitive", "other"]
+        # If the DB value is something like "IIT/JEE", map it to "competitive"
         if value not in allowed:
-            return "competitive" 
+            return "competitive"
         return value
 
 class OrganizationCreate(OrganizationBase):
+    # For NEW entries, you can still enforce the Literal if you want, 
+    # but for now, let's keep it simple to get you running.
     pass
 
 class Organization(OrganizationBase):
-    # Change id type to Any or UUID to stop the "Input should be a valid string" error
-    id: Any 
+    id: str  # We will force this to be a string
 
     model_config = ConfigDict(from_attributes=True)
 
-    # Convert UUID to string automatically for the frontend
     @field_validator("id", mode="before")
     @classmethod
     def transform_uuid(cls, value: Any) -> str:
+        # If it's a UUID object from Postgres, turn it into a string
         if isinstance(value, UUID):
             return str(value)
-        return value
+        return str(value)
 
 # --- COURSE SCHEMAS ---
 
 class CourseBase(BaseModel):
     title: str
     description: Optional[str] = None
-    organization_id: Any
+    organization_id: str
 
 class CourseCreate(CourseBase):
     pass
 
 class Course(CourseBase):
-    id: Any
+    id: str
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("id", "organization_id", mode="before")
+    @classmethod
+    def transform_uuids(cls, value: Any) -> str:
+        return str(value)
