@@ -28,8 +28,8 @@ httpx==0.28.1
 idna==3.11
 jiter==0.13.0
 openai==2.30.0
-packaging @ file:///C:/miniconda3/conda-bld/packaging_1761049096285/work
 proto-plus==1.27.2
+packaging
 protobuf==5.29.6
 psycopg2-binary==2.9.11
 pyasn1==0.6.3
