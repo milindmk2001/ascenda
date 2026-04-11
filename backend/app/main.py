@@ -1,53 +1,73 @@
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import uvicorn
+from sqlalchemy.orm import Session
+from typing import List
 
-app = FastAPI(title="Ascenda Interactive Tutor")
+# Import our database logic and models using the apps folder context
+from backend.apps.database import get_db
+from backend.apps import models
 
-# 1. CORS CONFIGURATION
-# Matches your Vercel URL from your previous logs
+app = FastAPI(title="Ascenda API")
+
+# --- CORS CONFIGURATION ---
+# Vital for Vercel (Frontend) to communicate with Railway (Backend)
+origins = [
+    "http://localhost:3000",           # Local React
+    "https://ascenda-umber.vercel.app"  # Your Vercel URL
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://ascenda-umber.vercel.app", 
-        "http://localhost:5173"
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 2. DATA MODELS
-class InteractRequest(BaseModel):
-    timestamp: float
-    query: str
+# --- ENDPOINTS ---
 
-# 3. INTERACTIVE TUTOR ENDPOINT
-@app.post("/api/interact")
-async def tutor_interaction(request: InteractRequest):
-    """
-    Analyzes the video timestamp to return SVG drawing instructions.
-    This replaces the old text-only streaming that caused JSON errors.
-    """
-    # logic for Coulomb's Law visuals
-    if request.timestamp < 5.0:
-        return {
-            "explanation": "We're starting with two opposite charges. The Red sphere is positive, and the Green is negative. Opposite charges attract—it's physics, bestie!",
-            "visuals": [
-                {"type": "circle", "cx": 250, "cy": 225, "r": 60}, # Focus on Red charge
-                {"type": "arrow", "x1": 310, "y1": 225, "x2": 450, "y2": 225} # Attraction vector
-            ]
-        }
-    else:
-        return {
-            "explanation": "Notice the force vector growing! As they get closer, the 'vibe' gets stronger. This follows the inverse square law.",
-            "visuals": [
-                {"type": "arrow", "x1": 310, "y1": 225, "x2": 550, "y2": 225}, # Longer vector
-                {"type": "circle", "cx": 600, "cy": 225, "r": 60}  # Focus on Green charge
-            ]
-        }
+@app.get("/")
+def read_root():
+    return {
+        "status": "Online",
+        "app": "Ascenda Backend",
+        "environment": os.getenv("RAILWAY_ENVIRONMENT", "local")
+    }
 
-# 4. ENTRY POINT
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.get("/api/home/categories")
+def get_categories(db: Session = Depends(get_db)):
+    """
+    Fetches all Organizations (Boards/Exams).
+    This handles the logic for the Home Page selection bar.
+    """
+    # Using SQLAlchemy ORM for Azure compatibility
+    organizations = db.query(models.Organization).all()
+    
+    return [
+        {
+            "id": str(org.id), 
+            "name": org.name, 
+            "type": org.org_type,
+            "icon": org.icon_url
+        } 
+        for org in organizations
+    ]
+
+@app.get("/api/home/featured-courses")
+def get_featured_courses(db: Session = Depends(get_db)):
+    """
+    Fetches courses where is_featured = True for the Byju's style carousel.
+    """
+    featured = db.query(models.Course).filter(models.Course.is_featured == True).all()
+    
+    return [
+        {
+            "id": str(c.id),
+            "title": c.title,
+            "description": c.description,
+            "thumbnail": c.thumbnail_url,
+            "rigor": c.rigor_level
+        }
+        for c in featured
+    ]
