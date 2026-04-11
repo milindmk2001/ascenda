@@ -1,65 +1,37 @@
-from pydantic import BaseModel
-from typing import Optional, List
-from uuid import UUID
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List, Literal
 
-# --- Organization ---
+# --- ORGANIZATION SCHEMAS ---
+
 class OrganizationBase(BaseModel):
     name: str
-    org_type: str  # 'board' (CBSE) or 'competitive' (JEE)
-    icon_url: Optional[str] = None
+    # Literal ensures ONLY these exact strings are accepted. 
+    # This must match your frontend dropdown exactly.
+    org_type: Literal["board", "competitive", "other"]
 
 class OrganizationCreate(OrganizationBase):
+    """Schema for creating a new organization (Incoming Data)"""
     pass
 
 class Organization(OrganizationBase):
-    id: UUID
-    class Config:
-        from_attributes = True
+    """Schema for returning organization data (Outgoing Data)"""
+    id: str
 
-# --- Grade (Class 1-12) ---
-class GradeBase(BaseModel):
-    name: str
-    org_id: UUID
+    # Pydantic v2 configuration to work with SQLAlchemy models
+    model_config = ConfigDict(from_attributes=True)
 
-class GradeCreate(GradeBase):
-    pass
 
-class Grade(GradeBase):
-    id: UUID
-    class Config:
-        from_attributes = True
+# --- COURSE SCHEMAS (For future use) ---
 
-# --- Subjects (Regular & Exam) ---
-class SubjectBase(BaseModel):
-    name: str
-    subject_code: str
-    discipline: Optional[str] = None  # e.g., 'Science', 'Arts'
-
-class RegularSubjectCreate(SubjectBase):
-    grade_id: UUID
-
-class ExamSubjectCreate(SubjectBase):
-    org_id: UUID
-
-class Subject(SubjectBase):
-    id: UUID
-    class Config:
-        from_attributes = True
-
-# --- Course (The Final Product) ---
 class CourseBase(BaseModel):
     title: str
     description: Optional[str] = None
-    thumbnail_url: Optional[str] = None
-    rigor_level: str  # 'Foundation', 'Advanced', 'Board'
-    is_featured: bool = False
+    organization_id: str
 
 class CourseCreate(CourseBase):
-    # A course can belong to either a regular grade subject or a competitive exam subject
-    regular_subject_id: Optional[UUID] = None
-    exam_subject_id: Optional[UUID] = None
+    pass
 
 class Course(CourseBase):
-    id: UUID
-    class Config:
-        from_attributes = True
+    id: str
+
+    model_config = ConfigDict(from_attributes=True)
