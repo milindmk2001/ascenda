@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit, X } from 'lucide-react';
 
-const API_BASE = "https://your-railway-url.railway.app"; // Update with your actual URL
-
 const AdminDashboard = ({ apiBase }) => {
   const [organizations, setOrganizations] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ name: '', org_type: 'board' });
 
-  // 1. Fetch Organizations on Load
+  // 1. Fetch Organizations
   const fetchOrgs = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/admin/organizations/`);
+      setLoading(true);
+      const response = await fetch(`${apiBase}/api/admin/organizations/`);
       const data = await response.json();
       setOrganizations(data);
     } catch (error) {
@@ -22,39 +22,69 @@ const AdminDashboard = ({ apiBase }) => {
     }
   };
 
-  useEffect(() => { fetchOrgs(); }, []);
+  useEffect(() => {
+    if (apiBase) fetchOrgs();
+  }, [apiBase]);
 
-  // 2. Handle Form Submission
+  // 2. Handle Form Submission (Create or Update)
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const url = editingId 
+      ? `${apiBase}/api/admin/organizations/${editingId}`
+      : `${apiBase}/api/admin/organizations/`;
+    
+    const method = editingId ? 'PUT' : 'POST';
+
     try {
-      const response = await fetch(`${API_BASE}/api/admin/organizations/`, {
-        method: 'POST',
+      const response = await fetch(url, {
+        method: method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
+
       if (response.ok) {
-        setIsModalOpen(false);
-        setFormData({ name: '', org_type: 'board' });
-        fetchOrgs(); // Refresh table
+        closeModal();
+        fetchOrgs();
+      } else {
+        alert("Error saving organization. Please check your backend.");
       }
     } catch (error) {
       alert("Error saving organization");
     }
   };
 
-  // 3. Handle Delete
+  // 3. Handle Delete with UI Refresh
   const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this organization?")) {
-      await fetch(`${API_BASE}/api/admin/organizations/${id}`, { method: 'DELETE' });
-      fetchOrgs();
+      try {
+        const response = await fetch(`${apiBase}/api/admin/organizations/${id}`, { 
+          method: 'DELETE' 
+        });
+        if (response.ok) {
+          fetchOrgs(); // Refresh table immediately after delete
+        }
+      } catch (error) {
+        console.error("Delete failed:", error);
+      }
     }
+  };
+
+  // 4. Modal Helpers
+  const openEditModal = (org) => {
+    setEditingId(org.id);
+    setFormData({ name: org.name, org_type: org.org_type });
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingId(null);
+    setFormData({ name: '', org_type: 'board' });
   };
 
   return (
     <div className="min-h-screen bg-slate-900 text-white p-8">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Organization Manager</h1>
           <button 
@@ -65,7 +95,6 @@ const AdminDashboard = ({ apiBase }) => {
           </button>
         </div>
 
-        {/* Table */}
         <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-700/50">
@@ -88,7 +117,12 @@ const AdminDashboard = ({ apiBase }) => {
                   </td>
                   <td className="p-4 border-b border-slate-700 text-right">
                     <div className="flex justify-end gap-3">
-                      <button className="text-slate-400 hover:text-white transition"><Edit size={18} /></button>
+                      <button 
+                        onClick={() => openEditModal(org)}
+                        className="text-slate-400 hover:text-white transition"
+                      >
+                        <Edit size={18} />
+                      </button>
                       <button 
                         onClick={() => handleDelete(org.id)}
                         className="text-slate-400 hover:text-red-400 transition"
@@ -104,13 +138,14 @@ const AdminDashboard = ({ apiBase }) => {
         </div>
       </div>
 
-      {/* Modal Form */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-800 p-6 rounded-2xl w-full max-w-md border border-slate-700 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold">New Organization</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white">
+              <h2 className="text-xl font-semibold">
+                {editingId ? 'Edit Organization' : 'New Organization'}
+              </h2>
+              <button onClick={closeModal} className="text-slate-400 hover:text-white">
                 <X size={24} />
               </button>
             </div>
@@ -143,7 +178,7 @@ const AdminDashboard = ({ apiBase }) => {
                 type="submit"
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg mt-4 transition"
               >
-                Save Organization
+                {editingId ? 'Update Organization' : 'Save Organization'}
               </button>
             </form>
           </div>
