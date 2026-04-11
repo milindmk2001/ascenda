@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit, X } from 'lucide-react';
 
-const API_BASE = "https://your-railway-url.railway.app"; // Update with your actual URL
+// REMOVED: The hardcoded placeholder line that was causing the error.
 
-const AdminDashboard = ({ apiBase }) => {
+const AdminDashboard = ({ apiBase }) => { // Using the prop passed from App.jsx
   const [organizations, setOrganizations] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -12,7 +12,8 @@ const AdminDashboard = ({ apiBase }) => {
   // 1. Fetch Organizations on Load
   const fetchOrgs = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/admin/organizations/`);
+      // Use backticks and the prop variable 'apiBase'
+      const response = await fetch(`${apiBase}/api/admin/organizations/`);
       const data = await response.json();
       setOrganizations(data);
     } catch (error) {
@@ -22,13 +23,15 @@ const AdminDashboard = ({ apiBase }) => {
     }
   };
 
-  useEffect(() => { fetchOrgs(); }, []);
+  useEffect(() => { 
+    if (apiBase) fetchOrgs(); 
+  }, [apiBase]);
 
   // 2. Handle Form Submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_BASE}/api/admin/organizations/`, {
+      const response = await fetch(`${apiBase}/api/admin/organizations/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -36,7 +39,7 @@ const AdminDashboard = ({ apiBase }) => {
       if (response.ok) {
         setIsModalOpen(false);
         setFormData({ name: '', org_type: 'board' });
-        fetchOrgs(); // Refresh table
+        fetchOrgs();
       }
     } catch (error) {
       alert("Error saving organization");
@@ -46,7 +49,7 @@ const AdminDashboard = ({ apiBase }) => {
   // 3. Handle Delete
   const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this organization?")) {
-      await fetch(`${API_BASE}/api/admin/organizations/${id}`, { method: 'DELETE' });
+      await fetch(`${apiBase}/api/admin/organizations/${id}`, { method: 'DELETE' });
       fetchOrgs();
     }
   };
@@ -54,7 +57,6 @@ const AdminDashboard = ({ apiBase }) => {
   return (
     <div className="min-h-screen bg-slate-900 text-white p-8">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Organization Manager</h1>
           <button 
@@ -65,7 +67,6 @@ const AdminDashboard = ({ apiBase }) => {
           </button>
         </div>
 
-        {/* Table */}
         <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-700/50">
@@ -104,7 +105,6 @@ const AdminDashboard = ({ apiBase }) => {
         </div>
       </div>
 
-      {/* Modal Form */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-800 p-6 rounded-2xl w-full max-w-md border border-slate-700 shadow-2xl">
