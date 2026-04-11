@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # Import our database logic and models using the apps folder context
-from backend.apps.database import get_db
-from backend.apps import models
+from .database import get_db
+from . import models
 
 app = FastAPI(title="Ascenda API")
 
