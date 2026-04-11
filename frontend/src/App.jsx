@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import LandingPage from './LandingPage';
 import VideoLesson from './VideoLesson';
-import AdminDashboard from './components/AdminDashboard'; // Ensure path is correct
+import AdminDashboard from './components/AdminDashboard';
+
+/**
+ * GLOBAL CONFIGURATION
+ * Change the API_BASE to your actual Railway production URL.
+ */
+export const API_BASE = "https://ascenda-production.up.railway.app"; 
 
 /**
  * App Component
@@ -17,6 +23,7 @@ function App() {
   };
 
   const goBackHome = () => {
+    window.scrollTo(0, 0);
     setView('landing');
   };
 
@@ -30,13 +37,16 @@ function App() {
       {/* 1. ADMIN VIEW */}
       {view === 'admin' ? (
         <div className="relative">
+          {/* Back Button for Admin */}
           <button 
             onClick={goBackHome}
             className="fixed top-6 left-6 z-[100] flex items-center gap-2 bg-slate-800/80 hover:bg-slate-700 text-white px-5 py-2 rounded-full backdrop-blur-md border border-slate-700 transition-all font-bold shadow-xl"
           >
             <span>←</span> <span>Exit Admin</span>
           </button>
-          <AdminDashboard />
+          
+          {/* We pass the API_BASE as a prop to keep the AdminDashboard flexible */}
+          <AdminDashboard apiBase={API_BASE} />
         </div>
       ) : 
       
@@ -59,14 +69,16 @@ function App() {
         /* 3. LANDING PAGE (DEFAULT) */
         <>
           <LandingPage onStartLesson={startLesson} />
-          {/* Secret Admin Button in Footer */}
-          <footer className="py-8 text-center">
+          
+          {/* Admin Access Point */}
+          <footer className="py-12 text-center bg-slate-950">
             <button 
               onClick={openAdmin}
-              className="text-slate-800 hover:text-slate-700 text-[10px] transition-colors"
+              className="text-slate-800 hover:text-slate-600 text-[10px] transition-colors tracking-widest uppercase"
             >
               Admin Portal
             </button>
+            <p className="text-slate-700 text-[9px] mt-2">Internal Use Only</p>
           </footer>
         </>
       )}

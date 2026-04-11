@@ -3,7 +3,7 @@ import { Plus, Trash2, Edit, X } from 'lucide-react';
 
 const API_BASE = "https://your-railway-url.railway.app"; // Update with your actual URL
 
-const AdminDashboard = () => {
+const AdminDashboard = ({ apiBase }) => {
   const [organizations, setOrganizations] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);

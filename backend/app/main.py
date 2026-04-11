@@ -23,14 +23,16 @@ app = FastAPI(
 # --- CORS Configuration ---
 # This allows your Vercel frontend (ascenda-umber.vercel.app) 
 # to make requests to this Railway backend.
+# --- CORS Configuration ---
 origins = [
     "http://localhost:3000",
-    "https://ascenda-umber.vercel.app"
+    "http://localhost:5173",          # Added for Vite local dev
+    "https://ascenda-umber.vercel.app" # Your production frontend
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=origins,            # This must match your Vercel URL exactly
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
