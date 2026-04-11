@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # These imports look for the files inside your new 'routers' folder
-from backend.apps.routers import organizations, courses
+from .routers import organizations, courses
 
 app = FastAPI(
     title="Ascenda Admin API",
