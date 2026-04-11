@@ -4,34 +4,44 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from pydantic_settings import BaseSettings
 
-# 1. Configuration Handling
+# 1. Configuration Handling (Pydantic V2 Style)
 class Settings(BaseSettings):
-    # This looks for DATABASE_URL in your .env (local) or Railway Variables (production)
-    database_url: str = os.getenv("DATABASE_URL")
+    """
+    Handles loading credentials. 
+    It will prioritize Railway/System environment variables, 
+    then look at a .env file if it exists.
+    """
+    # database_url is optional to prevent crash-on-start if env-vars are loading slowly
+    database_url: str | None = os.getenv("DATABASE_URL")
 
-    class Config:
-        # Tells pydantic to look for a .env file if it exists
-        env_file = ".env"
+    model_config = {
+        "env_file": ".env",
+        "extra": "ignore"
+    }
 
+# Initialize settings
 settings = Settings()
 
 # 2. Universal Engine Logic
-# Checks if we are using Postgres (Supabase) or MSSQL (Azure)
+# This block ensures "Zero Code Changes" when migrating to Azure SQL in the future.
 if settings.database_url and settings.database_url.startswith("postgresql"):
-    # pool_pre_ping=True is critical for Supabase to handle idle connection timeouts
+    # Settings optimized for Supabase/Postgres
     engine = create_engine(
         settings.database_url, 
-        pool_pre_ping=True,
-        pool_size=5,
+        pool_pre_ping=True,  # Checks if connection is alive before using it
+        pool_size=5,         # Efficient for Railway's shared resources
         max_overflow=10
     )
 elif settings.database_url and settings.database_url.startswith("mssql"):
-    # Logic for future Azure SQL migration
+    # Logic for future Azure SQL (T-SQL) migration
     engine = create_engine(settings.database_url, echo=False)
 else:
-    # Fallback for local dev if no DATABASE_URL is found
-    print("Warning: DATABASE_URL not found. Falling back to local SQLite.")
-    engine = create_engine("sqlite:///./ascenda_local.db", connect_args={"check_same_thread": False})
+    # Fallback for local development or if Railway variables are misconfigured
+    print("⚠️ WARNING: DATABASE_URL not found or invalid. Falling back to local SQLite.")
+    engine = create_engine(
+        "sqlite:///./ascenda_local.db", 
+        connect_args={"check_same_thread": False}
+    )
 
 # 3. Session and Base Setup
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -42,8 +52,8 @@ Base = declarative_base()
 # 4. FastAPI Dependency
 def get_db():
     """
-    Creates a new database session for each request and closes it after.
-    This ensures we don't leak connections on Supabase's free tier.
+    Database session lifecycle management.
+    Ensures every request gets a fresh connection and closes it after use.
     """
     db = SessionLocal()
     try:
