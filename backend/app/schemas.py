@@ -78,3 +78,21 @@ class RegularSubjectArea(SubjectAreaBase):
     @field_validator("id", "subject_id", mode="before")
     @classmethod
     def transform_uuid(cls, v): return uuid_to_str(v)
+
+    class CourseBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+
+class CourseCreate(CourseBase):
+    pass
+
+class Course(CourseBase):
+    id: Any
+    model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator("id", mode="before")
+    @classmethod
+    def transform_id(cls, v):
+        if isinstance(v, UUID):
+            return str(v)
+        return str(v)
