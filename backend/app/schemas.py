@@ -8,7 +8,7 @@ def uuid_to_str(value: Any) -> str:
         return str(value)
     return str(value)
 
-# --- ORGANIZATION SCHEMAS ---
+# --- ORGANIZATION ---
 class OrganizationBase(BaseModel):
     name: str
     org_type: str 
@@ -31,7 +31,7 @@ class Organization(OrganizationBase):
     @classmethod
     def transform_id(cls, v): return uuid_to_str(v)
 
-# --- GRADE SCHEMAS ---
+# --- GRADE ---
 class GradeBase(BaseModel):
     level: str
 
@@ -45,7 +45,7 @@ class Grade(GradeBase):
     @classmethod
     def transform_id(cls, v): return uuid_to_str(v)
 
-# --- SUBJECT SCHEMAS ---
+# --- SUBJECT ---
 class SubjectBase(BaseModel):
     name: str
     subject_code: str
@@ -62,3 +62,24 @@ class Subject(SubjectBase):
     @field_validator("id", mode="before")
     @classmethod
     def transform_id(cls, v): return uuid_to_str(v)
+
+# --- COURSE (The Missing Part) ---
+class CourseBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    organization_id: Optional[str] = None
+    grade_id: Optional[str] = None
+    subject_id: Optional[str] = None
+
+class CourseCreate(CourseBase):
+    pass
+
+class Course(CourseBase):
+    id: Any
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("id", "organization_id", "grade_id", "subject_id", mode="before")
+    @classmethod
+    def transform_uuids(cls, v):
+        if v is None: return None
+        return uuid_to_str(v)
