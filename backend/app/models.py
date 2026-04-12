@@ -12,9 +12,7 @@ class Organization(Base):
 class Grade(Base):
     __tablename__ = "grades"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    # The database requires 'name'. We map it here.
-    name = Column(String, nullable=True) 
-    # 'level' is used for the display logic in your frontend
+    name = Column(String, nullable=False) # Required by DB constraint
     level = Column(String, nullable=False)
 
 class RegularSubject(Base):
