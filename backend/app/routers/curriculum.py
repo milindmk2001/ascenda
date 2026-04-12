@@ -50,7 +50,7 @@ def delete_grade(grade_id: UUID, db: Session = Depends(get_db)):
 
 @router.get("/regular/subjects", response_model=List[schemas.RegularSubject])
 def get_regular_subjects(db: Session = Depends(get_db)):
-    """Fetch all school subjects (linked to Grades)"""
+    """Used by both Admin and User UI to list school subjects"""
     return db.query(models.RegularSubject).all()
 
 @router.post("/regular/subjects", response_model=schemas.RegularSubject)
@@ -67,7 +67,7 @@ def create_regular_subject(sub: schemas.RegularSubjectCreate, db: Session = Depe
 
 @router.get("/regular/subject-areas", response_model=List[schemas.RegularSubjectArea])
 def get_regular_subject_areas(db: Session = Depends(get_db)):
-    """Fetch sub-divisions like Algebra, Physics, etc."""
+    """Used to fetch chapters/units once a subject is selected"""
     return db.query(models.RegularSubjectArea).all()
 
 @router.post("/regular/subject-areas", response_model=schemas.RegularSubjectArea)
@@ -87,7 +87,7 @@ def create_regular_subject_area(area: schemas.RegularSubjectAreaCreate, db: Sess
 
 @router.get("/exam/subjects", response_model=List[schemas.ExamSubject])
 def get_exam_subjects(db: Session = Depends(get_db)):
-    """Fetch all competitive subjects (linked to Organizations)"""
+    """Used by both Admin and User UI to list competitive subjects"""
     return db.query(models.ExamSubject).all()
 
 @router.post("/exam/subjects", response_model=schemas.ExamSubject)
@@ -104,6 +104,7 @@ def create_exam_subject(sub: schemas.ExamSubjectCreate, db: Session = Depends(ge
 
 @router.get("/exam/subject-areas", response_model=List[schemas.ExamSubjectArea])
 def get_exam_subject_areas(db: Session = Depends(get_db)):
+    """Used to fetch competitive units once an exam subject is selected"""
     return db.query(models.ExamSubjectArea).all()
 
 @router.post("/exam/subject-areas", response_model=schemas.ExamSubjectArea)
