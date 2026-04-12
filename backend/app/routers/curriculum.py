@@ -7,8 +7,11 @@ from uuid import UUID
 
 router = APIRouter(prefix="/api/admin/curriculum", tags=["curriculum"])
 
+# --- GRADE ROUTES ---
+
 @router.get("/grades", response_model=List[schemas.Grade])
 def get_grades(db: Session = Depends(get_db)):
+    """Fetch all grade levels (e.g., Grade 10, 1st PUC)"""
     return db.query(models.Grade).all()
 
 @router.post("/grades", response_model=schemas.Grade)
@@ -42,19 +45,75 @@ def delete_grade(grade_id: UUID, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Grade deleted"}
 
-@router.post("/subjects/regular", response_model=schemas.RegularSubject)
+
+# --- REGULAR CURRICULUM ROUTES (K-12) ---
+
+@router.get("/regular/subjects", response_model=List[schemas.RegularSubject])
+def get_regular_subjects(db: Session = Depends(get_db)):
+    """Fetch all school subjects (linked to Grades)"""
+    return db.query(models.RegularSubject).all()
+
+@router.post("/regular/subjects", response_model=schemas.RegularSubject)
 def create_regular_subject(sub: schemas.RegularSubjectCreate, db: Session = Depends(get_db)):
-    new_sub = models.RegularSubject(**sub.model_dump())
+    new_sub = models.RegularSubject(
+        name=sub.name,
+        subject_code=sub.subject_code,
+        grade_id=sub.grade_id
+    )
     db.add(new_sub)
     db.commit()
     db.refresh(new_sub)
     return new_sub
 
-# For the Exam route, use the ExamSubject schema
-@router.post("/subjects/exam", response_model=schemas.ExamSubject)
+@router.get("/regular/subject-areas", response_model=List[schemas.RegularSubjectArea])
+def get_regular_subject_areas(db: Session = Depends(get_db)):
+    """Fetch sub-divisions like Algebra, Physics, etc."""
+    return db.query(models.RegularSubjectArea).all()
+
+@router.post("/regular/subject-areas", response_model=schemas.RegularSubjectArea)
+def create_regular_subject_area(area: schemas.RegularSubjectAreaCreate, db: Session = Depends(get_db)):
+    new_area = models.RegularSubjectArea(
+        name=area.name,
+        area_code=area.area_code,
+        subject_id=area.subject_id
+    )
+    db.add(new_area)
+    db.commit()
+    db.refresh(new_area)
+    return new_area
+
+
+# --- EXAM CURRICULUM ROUTES (Competitive) ---
+
+@router.get("/exam/subjects", response_model=List[schemas.ExamSubject])
+def get_exam_subjects(db: Session = Depends(get_db)):
+    """Fetch all competitive subjects (linked to Organizations)"""
+    return db.query(models.ExamSubject).all()
+
+@router.post("/exam/subjects", response_model=schemas.ExamSubject)
 def create_exam_subject(sub: schemas.ExamSubjectCreate, db: Session = Depends(get_db)):
-    new_sub = models.ExamSubject(**sub.model_dump())
+    new_sub = models.ExamSubject(
+        name=sub.name,
+        subject_code=sub.subject_code,
+        organization_id=sub.organization_id
+    )
     db.add(new_sub)
     db.commit()
     db.refresh(new_sub)
     return new_sub
+
+@router.get("/exam/subject-areas", response_model=List[schemas.ExamSubjectArea])
+def get_exam_subject_areas(db: Session = Depends(get_db)):
+    return db.query(models.ExamSubjectArea).all()
+
+@router.post("/exam/subject-areas", response_model=schemas.ExamSubjectArea)
+def create_exam_subject_area(area: schemas.ExamSubjectAreaCreate, db: Session = Depends(get_db)):
+    new_area = models.ExamSubjectArea(
+        name=area.name,
+        area_code=area.area_code,
+        exam_subject_id=area.exam_subject_id
+    )
+    db.add(new_area)
+    db.commit()
+    db.refresh(new_area)
+    return new_area
