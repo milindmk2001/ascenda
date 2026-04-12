@@ -50,11 +50,12 @@ def delete_grade(grade_id: UUID, db: Session = Depends(get_db)):
 
 @router.get("/regular/subjects", response_model=List[schemas.RegularSubject])
 def get_regular_subjects(db: Session = Depends(get_db)):
-    """Used by both Admin and User UI to list school subjects"""
+    """Fetches all subjects for the Learning Hub"""
     return db.query(models.RegularSubject).all()
 
-@router.post("/regular/subjects", response_model=schemas.RegularSubject)
+@router.post("/subjects/regular", response_model=schemas.RegularSubject)
 def create_regular_subject(sub: schemas.RegularSubjectCreate, db: Session = Depends(get_db)):
+    # Explicitly mapping fields ensures UUIDs are handled correctly by SQLAlchemy
     new_sub = models.RegularSubject(
         name=sub.name,
         subject_code=sub.subject_code,
@@ -67,10 +68,10 @@ def create_regular_subject(sub: schemas.RegularSubjectCreate, db: Session = Depe
 
 @router.get("/regular/subject-areas", response_model=List[schemas.RegularSubjectArea])
 def get_regular_subject_areas(db: Session = Depends(get_db)):
-    """Used to fetch chapters/units once a subject is selected"""
+    """Fetches all units/chapters for the Learning Hub"""
     return db.query(models.RegularSubjectArea).all()
 
-@router.post("/regular/subject-areas", response_model=schemas.RegularSubjectArea)
+@router.post("/subjects/regular/areas", response_model=schemas.RegularSubjectArea)
 def create_regular_subject_area(area: schemas.RegularSubjectAreaCreate, db: Session = Depends(get_db)):
     new_area = models.RegularSubjectArea(
         name=area.name,
@@ -87,7 +88,7 @@ def create_regular_subject_area(area: schemas.RegularSubjectAreaCreate, db: Sess
 
 @router.get("/exam/subjects", response_model=List[schemas.ExamSubject])
 def get_exam_subjects(db: Session = Depends(get_db)):
-    """Used by both Admin and User UI to list competitive subjects"""
+    """Fetch all competitive subjects (linked to Organizations)"""
     return db.query(models.ExamSubject).all()
 
 @router.post("/exam/subjects", response_model=schemas.ExamSubject)
@@ -104,7 +105,7 @@ def create_exam_subject(sub: schemas.ExamSubjectCreate, db: Session = Depends(ge
 
 @router.get("/exam/subject-areas", response_model=List[schemas.ExamSubjectArea])
 def get_exam_subject_areas(db: Session = Depends(get_db)):
-    """Used to fetch competitive units once an exam subject is selected"""
+    """Fetch all exam units for the Learning Hub"""
     return db.query(models.ExamSubjectArea).all()
 
 @router.post("/exam/subject-areas", response_model=schemas.ExamSubjectArea)
