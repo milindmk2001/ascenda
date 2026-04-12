@@ -1,4 +1,8 @@
-# Inside backend/apps/schemas.py
+from pydantic import BaseModel, ConfigDict, field_validator
+from typing import Optional, List, Literal, Any
+from uuid import UUID
+
+# --- ORGANIZATION SCHEMAS ---
 
 class OrganizationBase(BaseModel):
     name: str
@@ -10,14 +14,44 @@ class OrganizationBase(BaseModel):
         if not value:
             return "other"
             
-        # Convert to lowercase to match our list exactly
         val_lower = str(value).lower().strip()
         allowed = ["board", "competitive", "other"]
         
-        # If it's a known valid type, return the lowercase version
         if val_lower in allowed:
             return val_lower
             
-        # If it's something weird like "IIT/JEE", map it to "competitive"
-        # But only if it's NOT one of our three standard types
         return "competitive"
+
+class OrganizationCreate(OrganizationBase):
+    pass
+
+class Organization(OrganizationBase):
+    id: str 
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def transform_uuid(cls, value: Any) -> str:
+        if isinstance(value, UUID):
+            return str(value)
+        return str(value)
+
+# --- COURSE SCHEMAS ---
+
+class CourseBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    organization_id: str
+
+class CourseCreate(CourseBase):
+    pass
+
+class Course(CourseBase):
+    id: str
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("id", "organization_id", mode="before")
+    @classmethod
+    def transform_uuids(cls, value: Any) -> str:
+        return str(value)

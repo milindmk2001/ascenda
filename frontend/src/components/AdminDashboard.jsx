@@ -171,7 +171,7 @@ const AdminDashboard = ({ apiBase }) => {
                 >
                   <option value="board">Educational Board</option>
                   <option value="competitive">Competitive Exam</option>
-                  <option value="other">Other</option>
+                  <option value="other">Other</option>{/* Ensure this is 'other' lowercase */}
                 </select>
               </div>
               <button 
