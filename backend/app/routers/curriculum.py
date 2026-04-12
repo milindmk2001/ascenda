@@ -8,7 +8,12 @@ router = APIRouter(prefix="/api/admin/curriculum", tags=["curriculum"])
 
 @router.post("/grades", response_model=schemas.Grade)
 def create_grade(grade: schemas.GradeCreate, db: Session = Depends(get_db)):
-    new_grade = models.Grade(level=grade.level)
+    # The database has a NOT NULL constraint on the 'name' column.
+    # We satisfy this by using the 'level' value for the 'name' field.
+    new_grade = models.Grade(
+        level=grade.level,
+        name=grade.name or grade.level
+    )
     db.add(new_grade)
     db.commit()
     db.refresh(new_grade)
@@ -16,6 +21,7 @@ def create_grade(grade: schemas.GradeCreate, db: Session = Depends(get_db)):
 
 @router.get("/grades", response_model=List[schemas.Grade])
 def get_grades(db: Session = Depends(get_db)):
+    # Retrieves all grades to populate the curriculum dashboard.
     return db.query(models.Grade).all()
 
 @router.post("/subjects/regular", response_model=schemas.Subject)

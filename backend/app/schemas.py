@@ -23,9 +23,11 @@ class Organization(OrganizationBase):
     def transform_id(cls, v): 
         return uuid_to_str(v)
 
-# Grade Schemas - Level is now Optional to prevent validation crashes
+# Grade Schemas
 class GradeBase(BaseModel):
-    level: Optional[str] = "Unnamed Grade"
+    level: str
+    # Adding optional name to satisfy DB constraints
+    name: Optional[str] = None
 
 class GradeCreate(GradeBase):
     pass
@@ -59,7 +61,7 @@ class RegularSubjectCreate(SubjectBase):
 class ExamSubjectCreate(SubjectBase):
     organization_id: str
 
-# Course Schemas (Added to prevent AttributeError in routers)
+# Course Schemas
 class CourseBase(BaseModel):
     title: str
     description: Optional[str] = None
