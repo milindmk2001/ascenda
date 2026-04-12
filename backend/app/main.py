@@ -7,7 +7,7 @@ from .database import engine
 from . import models
 
 # Import our modular routers
-from .routers import organizations, courses
+from .routers import organizations, courses,curriculum
 
 # --- Database Initialization ---
 models.Base.metadata.create_all(bind=engine)
@@ -47,6 +47,7 @@ app.add_middleware(
 # --- Router Registration ---
 app.include_router(organizations.router)
 app.include_router(courses.router)
+app.include_router(curriculum.router) # Register the curriculum endpoints
 
 @app.get("/")
 def health_check():

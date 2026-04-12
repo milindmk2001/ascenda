@@ -1,9 +1,14 @@
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Optional, List, Literal, Any
+from typing import Optional, Any, List
 from uuid import UUID
 
-# --- ORGANIZATION SCHEMAS ---
+# --- HELPER FOR UUID TO STRING ---
+def uuid_to_str(value: Any) -> str:
+    if isinstance(value, UUID):
+        return str(value)
+    return str(value)
 
+# --- ORGANIZATION SCHEMAS ---
 class OrganizationBase(BaseModel):
     name: str
     org_type: str 
@@ -11,47 +16,49 @@ class OrganizationBase(BaseModel):
     @field_validator("org_type", mode="before")
     @classmethod
     def validate_org_type(cls, value: Any) -> str:
-        if not value:
-            return "other"
-            
+        if not value: return "other"
         val_lower = str(value).lower().strip()
         allowed = ["board", "competitive", "other"]
-        
-        if val_lower in allowed:
-            return val_lower
-            
-        return "competitive"
+        return val_lower if val_lower in allowed else "competitive"
 
 class OrganizationCreate(OrganizationBase):
     pass
 
 class Organization(OrganizationBase):
-    id: str 
-
+    id: Any 
     model_config = ConfigDict(from_attributes=True)
-
     @field_validator("id", mode="before")
     @classmethod
-    def transform_uuid(cls, value: Any) -> str:
-        if isinstance(value, UUID):
-            return str(value)
-        return str(value)
+    def transform_id(cls, v): return uuid_to_str(v)
 
-# --- COURSE SCHEMAS ---
+# --- GRADE SCHEMAS ---
+class GradeBase(BaseModel):
+    level: str
 
-class CourseBase(BaseModel):
-    title: str
-    description: Optional[str] = None
-    organization_id: str
-
-class CourseCreate(CourseBase):
+class GradeCreate(GradeBase):
     pass
 
-class Course(CourseBase):
-    id: str
+class Grade(GradeBase):
+    id: Any
     model_config = ConfigDict(from_attributes=True)
-
-    @field_validator("id", "organization_id", mode="before")
+    @field_validator("id", mode="before")
     @classmethod
-    def transform_uuids(cls, value: Any) -> str:
-        return str(value)
+    def transform_id(cls, v): return uuid_to_str(v)
+
+# --- SUBJECT SCHEMAS ---
+class SubjectBase(BaseModel):
+    name: str
+    subject_code: str
+
+class RegularSubjectCreate(SubjectBase):
+    grade_id: str
+
+class ExamSubjectCreate(SubjectBase):
+    organization_id: str
+
+class Subject(SubjectBase):
+    id: Any
+    model_config = ConfigDict(from_attributes=True)
+    @field_validator("id", mode="before")
+    @classmethod
+    def transform_id(cls, v): return uuid_to_str(v)
