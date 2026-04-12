@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import LandingPage from './LandingPage';
+import UserLearningHub from './UserLearningHub'; // Updated Import
 import VideoLesson from './VideoLesson';
 import AdminDashboard from './components/AdminDashboard';
 
@@ -66,11 +66,12 @@ function App() {
         </div>
       ) : (
 
-        /* 3. LANDING PAGE VIEW (Default) */
+        /* 3. LEARNING HUB VIEW (Dynamic User UI) */
         <div className="animate-in fade-in duration-700">
-          <LandingPage onStartLesson={startLesson} />
+          {/* Replacing LandingPage with UserLearningHub for dynamic data fetching */}
+          <UserLearningHub apiBase={API_BASE} onStartLesson={startLesson} />
           
-          <footer className="py-12 text-center bg-slate-950 border-t border-slate-900/50">
+          <footer className="py-12 text-center bg-[#05070a] border-t border-slate-900/50">
             <button 
               onClick={openAdmin}
               className="text-slate-800 hover:text-indigo-400 text-[10px] transition-all tracking-[0.2em] uppercase font-medium group"
@@ -78,7 +79,7 @@ function App() {
               <span className="opacity-50 group-hover:opacity-100">Access</span> Admin Portal
             </button>
             <p className="mt-4 text-slate-900 text-[9px] uppercase tracking-widest">
-              Build Version 1.0.4-Stable
+              Build Version 1.0.5-Stable
             </p>
           </footer>
         </div>
