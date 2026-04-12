@@ -1,226 +1,173 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit, X, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Edit, X, RefreshCw, BookOpen, Layers } from 'lucide-react';
 
 const AdminDashboard = ({ apiBase }) => {
+  const [activeTab, setActiveTab] = useState('orgs'); // 'orgs' or 'curriculum'
   const [organizations, setOrganizations] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [grades, setGrades] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState(null);
-  const [formData, setFormData] = useState({ name: '', org_type: 'board' });
+  
+  // Modal states
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalType, setModalType] = useState('org'); // 'org', 'grade', or 'subject'
+  const [formData, setFormData] = useState({});
 
-  // 1. Fetch Organizations
-  const fetchOrgs = async () => {
-    if (!apiBase) return;
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await fetch(`${apiBase}/api/admin/organizations/`);
-      if (!response.ok) throw new Error("Failed to fetch data");
-      const data = await response.json();
-      setOrganizations(data);
-    } catch (error) {
-      console.error("Fetch error:", error);
+      const [orgRes, gradeRes] = await Promise.all([
+        fetch(`${apiBase}/api/admin/organizations/`),
+        fetch(`${apiBase}/api/admin/curriculum/grades`)
+      ]);
+      setOrganizations(await orgRes.json());
+      setGrades(await gradeRes.json());
+    } catch (e) {
+      console.error("Fetch error:", e);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchOrgs();
-  }, [apiBase]);
+  useEffect(() => { fetchData(); }, [apiBase]);
 
-  // 2. Create or Update Logic
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Determine if we are updating or creating
-    const url = editingId 
-      ? `${apiBase}/api/admin/organizations/${editingId}`
-      : `${apiBase}/api/admin/organizations/`;
-    
-    const method = editingId ? 'PUT' : 'POST';
-
-    try {
-      const response = await fetch(url, {
-        method: method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      if (response.ok) {
-        closeModal();
-        fetchOrgs(); // Refresh list
-      } else {
-        const errData = await response.json();
-        alert(`Error: ${errData.detail || "Could not save organization"}`);
-      }
-    } catch (error) {
-      alert("Network error: Check if backend is running.");
+    let endpoint = `${apiBase}/api/admin/organizations/`;
+    if (modalType === 'grade') endpoint = `${apiBase}/api/admin/curriculum/grades`;
+    if (modalType === 'subject') {
+      const subType = formData.type === 'regular' ? 'regular' : 'exam';
+      endpoint = `${apiBase}/api/admin/curriculum/subjects/${subType}`;
     }
-  };
 
-  // 3. Delete Logic
-  const handleDelete = async (id) => {
-    if (window.confirm("Delete this organization? This cannot be undone.")) {
-      try {
-        const response = await fetch(`${apiBase}/api/admin/organizations/${id}`, { 
-          method: 'DELETE' 
-        });
-        if (response.ok) {
-          fetchOrgs();
-        }
-      } catch (error) {
-        console.error("Delete failed:", error);
-      }
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData),
+    });
+
+    if (response.ok) {
+      setIsModalOpen(false);
+      setFormData({});
+      fetchData();
     }
-  };
-
-  // 4. Modal Management
-  const openEditModal = (org) => {
-    setEditingId(org.id);
-    setFormData({ name: org.name, org_type: org.org_type });
-    setIsModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingId(null);
-    setFormData({ name: '', org_type: 'board' });
   };
 
   return (
     <div className="min-h-screen bg-slate-900 text-white p-8">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         
         {/* Header */}
-        <div className="flex justify-between items-center mb-10">
+        <div className="flex justify-between items-end mb-8">
           <div>
-            <h1 className="text-4xl font-black tracking-tight text-white mb-2">Ascenda Admin</h1>
-            <p className="text-slate-400">Manage your educational boards and competitive exams.</p>
-          </div>
-          <div className="flex gap-3">
-            <button 
-              onClick={fetchOrgs}
-              className="p-3 bg-slate-800 hover:bg-slate-700 rounded-lg transition border border-slate-700"
-              title="Refresh Data"
-            >
-              <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
-            </button>
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-indigo-500/20"
-            >
-              <Plus size={20} /> Add New
-            </button>
-          </div>
-        </div>
-
-        {/* Content Table */}
-        <div className="bg-slate-800/50 rounded-2xl overflow-hidden border border-slate-700 backdrop-blur-sm">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-800 text-slate-400 uppercase text-xs font-bold tracking-widest">
-                <th className="p-5">Organization Name</th>
-                <th className="p-5">Category</th>
-                <th className="p-5 text-right">Control</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700/50">
-              {loading && organizations.length === 0 ? (
-                <tr>
-                  <td colSpan="3" className="p-20 text-center">
-                    <div className="flex flex-col items-center gap-4 text-slate-500">
-                      <RefreshCw size={40} className="animate-spin" />
-                      <p>Loading records from Railway...</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : organizations.map((org) => (
-                <tr key={org.id} className="hover:bg-slate-700/20 transition group">
-                  <td className="p-5">
-                    <div className="font-semibold text-lg text-slate-200">{org.name}</div>
-                  </td>
-                  <td className="p-5">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-tighter ${
-                      org.org_type === 'competitive' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 
-                      org.org_type === 'board' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                      'bg-slate-500/10 text-slate-400 border border-slate-500/20'
-                    }`}>
-                      {org.org_type}
-                    </span>
-                  </td>
-                  <td className="p-5 text-right">
-                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={() => openEditModal(org)}
-                        className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition"
-                      >
-                        <Edit size={18} />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(org.id)}
-                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {!loading && organizations.length === 0 && (
-                <tr>
-                  <td colSpan="3" className="p-20 text-center text-slate-500 italic">
-                    No organizations found. Click "Add New" to begin.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal Overlay */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-[200]">
-          <div className="bg-slate-800 p-8 rounded-3xl w-full max-w-md border border-slate-700 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-2xl font-bold">
-                {editingId ? 'Edit Record' : 'Create New'}
-              </h2>
-              <button onClick={closeModal} className="text-slate-400 hover:text-white transition">
-                <X size={24} />
+            <h1 className="text-4xl font-black tracking-tight mb-2">Ascenda Admin</h1>
+            <div className="flex gap-4 mt-4">
+              <button 
+                onClick={() => setActiveTab('orgs')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition ${activeTab === 'orgs' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+              >
+                <Layers size={18} /> Organizations
+              </button>
+              <button 
+                onClick={() => setActiveTab('curriculum')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition ${activeTab === 'curriculum' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+              >
+                <BookOpen size={18} /> Curriculum
               </button>
             </div>
-            
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-500 mb-2 ml-1">Name</label>
-                <input 
-                  autoFocus
-                  required
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-                  placeholder="e.g. UPSC, CBSE, or Harvard"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-500 mb-2 ml-1">Category Type</label>
-                <select 
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white focus:outline-none focus:border-indigo-500 transition appearance-none"
-                  value={formData.org_type}
-                  onChange={(e) => setFormData({...formData, org_type: e.target.value})}
-                >
-                  <option value="board">Educational Board</option>
-                  <option value="competitive">Competitive Exam</option>
-                  <option value="other">Other / Special</option>
-                </select>
-              </div>
-              <button 
-                type="submit"
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]"
-              >
-                {editingId ? 'Save Changes' : 'Create Organization'}
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => { setModalType(activeTab === 'orgs' ? 'org' : 'grade'); setIsModalOpen(true); }} 
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-xl font-bold transition">
+              <Plus size={20} /> Add {activeTab === 'orgs' ? 'Organization' : 'Grade'}
+            </button>
+            {activeTab === 'curriculum' && (
+              <button onClick={() => { setModalType('subject'); setIsModalOpen(true); }} 
+                      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 px-6 py-3 rounded-xl font-bold transition">
+                <Plus size={20} /> Add Subject
               </button>
+            )}
+          </div>
+        </div>
+
+        {/* Organizations Table */}
+        {activeTab === 'orgs' ? (
+          <div className="bg-slate-800/50 rounded-2xl border border-slate-700 overflow-hidden">
+            <table className="w-full text-left">
+              <thead className="bg-slate-800 text-slate-400 text-xs font-bold uppercase">
+                <tr><th className="p-5">Name</th><th className="p-5">Category</th><th className="p-5 text-right">Control</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {organizations.map(org => (
+                  <tr key={org.id} className="hover:bg-slate-700/20">
+                    <td className="p-5 font-semibold">{org.name}</td>
+                    <td className="p-5"><span className="px-3 py-1 rounded-full text-[10px] bg-slate-700 uppercase font-bold">{org.org_type}</span></td>
+                    <td className="p-5 text-right"><Trash2 size={18} className="inline text-slate-500 hover:text-red-400 cursor-pointer" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* Curriculum View */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Layers className="text-indigo-400" /> Grade Levels</h3>
+              <div className="space-y-2">
+                {grades.map(g => (
+                  <div key={g.id} className="p-4 bg-slate-900 rounded-xl border border-slate-800 flex justify-between">
+                    <span className="font-bold">{g.level}</span>
+                    <Trash2 size={16} className="text-slate-600 hover:text-red-400 cursor-pointer" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><BookOpen className="text-emerald-400" /> Subjects</h3>
+              <p className="text-slate-500 text-sm italic">Subjects are linked to Grades or Exams via the "Add Subject" button.</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Dynamic Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-[200]">
+          <div className="bg-slate-800 p-8 rounded-3xl w-full max-w-md border border-slate-700">
+            <h2 className="text-2xl font-bold mb-6 uppercase tracking-tighter">Add {modalType}</h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {modalType === 'org' && (
+                <>
+                  <input className="w-full bg-slate-900 p-4 rounded-xl border border-slate-700" placeholder="Org Name" onChange={e => setFormData({...formData, name: e.target.value})} />
+                  <select className="w-full bg-slate-900 p-4 rounded-xl border border-slate-700" onChange={e => setFormData({...formData, org_type: e.target.value})}>
+                    <option value="board">Board</option>
+                    <option value="competitive">Competitive</option>
+                  </select>
+                </>
+              )}
+              {modalType === 'grade' && (
+                <input className="w-full bg-slate-900 p-4 rounded-xl border border-slate-700" placeholder="Grade Level (e.g. Class 10)" onChange={e => setFormData({...formData, level: e.target.value})} />
+              )}
+              {modalType === 'subject' && (
+                <>
+                  <input className="w-full bg-slate-900 p-4 rounded-xl border border-slate-700" placeholder="Subject Name" onChange={e => setFormData({...formData, name: e.target.value})} />
+                  <input className="w-full bg-slate-900 p-4 rounded-xl border border-slate-700" placeholder="Code (BIO-10)" onChange={e => setFormData({...formData, subject_code: e.target.value})} />
+                  <select className="w-full bg-slate-900 p-4 rounded-xl border border-slate-700" onChange={e => setFormData({...formData, type: e.target.value})}>
+                    <option value="regular">Regular (Links to Grade)</option>
+                    <option value="exam">Exam (Links to Org)</option>
+                  </select>
+                  <select className="w-full bg-slate-900 p-4 rounded-xl border border-slate-700" onChange={e => setFormData({
+                    ...formData, 
+                    [formData.type === 'exam' ? 'organization_id' : 'grade_id']: e.target.value
+                  })}>
+                    <option value="">Select Target</option>
+                    {(formData.type === 'exam' ? organizations : grades).map(item => (
+                      <option key={item.id} value={item.id}>{item.name || item.level}</option>
+                    ))}
+                  </select>
+                </>
+              )}
+              <button className="w-full bg-indigo-600 py-4 rounded-xl font-bold mt-4">Save Entry</button>
+              <button type="button" onClick={() => setIsModalOpen(false)} className="w-full text-slate-500 mt-2">Cancel</button>
             </form>
           </div>
         </div>
