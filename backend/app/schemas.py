@@ -3,8 +3,26 @@ from typing import Optional, Any, List
 from uuid import UUID
 
 def uuid_to_str(value: Any) -> str:
-    if isinstance(value, UUID): return str(value)
+    if isinstance(value, UUID): 
+        return str(value)
     return str(value)
+
+# --- Base Course Model (To fix your crash) ---
+class CourseBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+
+class CourseCreate(CourseBase):
+    pass
+
+class Course(CourseBase):
+    id: Any
+    model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator("id", mode="before")
+    @classmethod
+    def transform_id(cls, v):
+        return uuid_to_str(v)
 
 # --- Organization ---
 class OrganizationBase(BaseModel):
@@ -79,20 +97,17 @@ class RegularSubjectArea(SubjectAreaBase):
     @classmethod
     def transform_uuid(cls, v): return uuid_to_str(v)
 
-    class CourseBase(BaseModel):
-    title: str
-    description: Optional[str] = None
+class ExamSubjectAreaCreate(SubjectAreaBase):
+    name: str
+    area_code: str
+    exam_subject_id: UUID
 
-class CourseCreate(CourseBase):
-    pass
-
-class Course(CourseBase):
+class ExamSubjectArea(BaseModel):
     id: Any
+    name: str
+    area_code: str
+    exam_subject_id: Any
     model_config = ConfigDict(from_attributes=True)
-    
-    @field_validator("id", mode="before")
+    @field_validator("id", "exam_subject_id", mode="before")
     @classmethod
-    def transform_id(cls, v):
-        if isinstance(v, UUID):
-            return str(v)
-        return str(v)
+    def transform_uuid(cls, v): return uuid_to_str(v)
