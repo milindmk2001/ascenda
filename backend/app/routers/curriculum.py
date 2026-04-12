@@ -42,7 +42,7 @@ def delete_grade(grade_id: UUID, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Grade deleted"}
 
-@router.post("/subjects/regular", response_model=schemas.Subject)
+@router.post("/subjects/regular", response_model=schemas.RegularSubject)
 def create_regular_subject(sub: schemas.RegularSubjectCreate, db: Session = Depends(get_db)):
     new_sub = models.RegularSubject(**sub.model_dump())
     db.add(new_sub)
@@ -50,7 +50,8 @@ def create_regular_subject(sub: schemas.RegularSubjectCreate, db: Session = Depe
     db.refresh(new_sub)
     return new_sub
 
-@router.post("/subjects/exam", response_model=schemas.Subject)
+# For the Exam route, use the ExamSubject schema
+@router.post("/subjects/exam", response_model=schemas.ExamSubject)
 def create_exam_subject(sub: schemas.ExamSubjectCreate, db: Session = Depends(get_db)):
     new_sub = models.ExamSubject(**sub.model_dump())
     db.add(new_sub)
