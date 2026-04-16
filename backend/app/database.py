@@ -21,7 +21,7 @@ if settings.database_url and "postgresql" in settings.database_url:
         settings.database_url,
         pool_pre_ping=True,
         pool_size=5,
-        echo=True, # Added missing comma here
+        echo=True,        # Fixed: Added missing comma
         max_overflow=10,
         pool_recycle=300 
     )

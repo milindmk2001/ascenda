@@ -6,10 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from .database import engine
 from . import models
 
-# Import our modular routers
-from .routers import organizations, courses,curriculum
+# Import modular routers
+from .routers import organizations, courses, curriculum
 
 # --- Database Initialization ---
+# This creates tables if they don't exist
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -19,43 +20,35 @@ app = FastAPI(
 )
 
 # --- CORS Configuration ---
-# We combine hardcoded defaults with the environment variable from Railway
+# Allows your Vercel frontend and local development to communicate with this API
 raw_origins = os.getenv("CORS_ORIGINS", "https://ascenda-umber.vercel.app")
 origins = [origin.strip() for origin in raw_origins.split(",")]
 
-# Always include local development URLs
+# Include local development URLs
 origins.extend([
     "http://localhost:3000",
     "http://localhost:5173",
     "https://ascenda-umber.vercel.app"
 ])
 
-# Remove duplicates
-origins = list(set(origins))
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=list(set(origins)),
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
-    # This is important for cloud deployments to prevent 
-    # the browser from losing the handshake.
     expose_headers=["*"],
 )
 
 # --- Router Registration ---
 app.include_router(organizations.router)
 app.include_router(courses.router)
-app.include_router(curriculum.router) # Register the curriculum endpoints
+app.include_router(curriculum.router)
 
 @app.get("/")
 def health_check():
     return {
-        "status": "Online",
-        "system": "Ascenda Modular Backend",
-        "allowed_origins": origins, # Useful for debugging in the browser
-        "environment": os.getenv("RAILWAY_ENVIRONMENT", "production")
+        "status": "online", 
+        "database": "connected" if engine else "error",
+        "version": "1.0.0"
     }
-
-# --- Optional: Custom Error Handlers ---
