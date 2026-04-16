@@ -39,6 +39,7 @@ def create_regular_subject(sub: schemas.RegularSubjectCreate, db: Session = Depe
         subject_code=sub.subject_code,
         grade_id=sub.grade_id,
         discipline=sub.discipline
+        video_url=sub.video_url
     )
     db.add(new_sub)
     db.commit()

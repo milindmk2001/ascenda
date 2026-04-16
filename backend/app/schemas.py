@@ -46,6 +46,7 @@ class SubjectBase(BaseModel):
     name: str
     subject_code: str
     discipline: Optional[str] = "Science"
+    video_url: Optional[str] = "https://www.youtube.com/embed/dQw4w9WgXcQ"
 
 class RegularSubjectCreate(SubjectBase):
     grade_id: UUID
@@ -53,6 +54,7 @@ class RegularSubjectCreate(SubjectBase):
 class RegularSubject(SubjectBase):
     id: Any
     grade_id: Any
+    video_url: Optional[str] = None # Ensure it's included in the response
     model_config = ConfigDict(from_attributes=True)
     @field_validator("id", "grade_id", mode="before")
     @classmethod
