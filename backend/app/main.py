@@ -21,23 +21,19 @@ app = FastAPI(
 
 # --- CORS Configuration ---
 # Allows your Vercel frontend and local development to communicate with this API
-raw_origins = os.getenv("CORS_ORIGINS", "https://ascenda-umber.vercel.app")
-origins = [origin.strip() for origin in raw_origins.split(",")]
-
-# Include local development URLs
-origins.extend([
+# Setup CORS
+origins = [
+    "https://ascenda-umber.vercel.app",
     "http://localhost:3000",
     "http://localhost:5173",
-    "https://ascenda-umber.vercel.app"
-])
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list(set(origins)),
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
 # --- Router Registration ---
