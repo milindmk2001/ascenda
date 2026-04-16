@@ -7,7 +7,7 @@ def uuid_to_str(value: Any) -> str:
         return str(value)
     return str(value)
 
-# --- Base Course Model (To fix your crash) ---
+# --- Base Course Model ---
 class CourseBase(BaseModel):
     title: str
     description: Optional[str] = None
@@ -43,6 +43,7 @@ class Organization(OrganizationBase):
 class GradeBase(BaseModel):
     level: str
     name: Optional[str] = None
+    org_id: Optional[UUID] = None  # FIXED: Added this to match DB model
 
 class GradeCreate(GradeBase):
     pass
@@ -50,14 +51,15 @@ class GradeCreate(GradeBase):
 class Grade(GradeBase):
     id: Any
     model_config = ConfigDict(from_attributes=True)
-    @field_validator("id", mode="before")
+    @field_validator("id", "org_id", mode="before")
     @classmethod
-    def transform_id(cls, v): return uuid_to_str(v)
+    def transform_uuid(cls, v): return uuid_to_str(v)
 
 # --- Subjects ---
 class SubjectBase(BaseModel):
     name: str
     subject_code: str
+    discipline: Optional[str] = "Science" # Default for Physics/Chemistry logic
 
 class RegularSubjectCreate(SubjectBase):
     grade_id: UUID
@@ -81,7 +83,7 @@ class ExamSubject(SubjectBase):
     @classmethod
     def transform_uuid(cls, v): return uuid_to_str(v)
 
-# --- Subject Areas (Sub-topics) ---
+# --- Subject Areas (Units) ---
 class SubjectAreaBase(BaseModel):
     name: str
     area_code: str
@@ -98,14 +100,10 @@ class RegularSubjectArea(SubjectAreaBase):
     def transform_uuid(cls, v): return uuid_to_str(v)
 
 class ExamSubjectAreaCreate(SubjectAreaBase):
-    name: str
-    area_code: str
     exam_subject_id: UUID
 
-class ExamSubjectArea(BaseModel):
+class ExamSubjectArea(SubjectAreaBase):
     id: Any
-    name: str
-    area_code: str
     exam_subject_id: Any
     model_config = ConfigDict(from_attributes=True)
     @field_validator("id", "exam_subject_id", mode="before")
