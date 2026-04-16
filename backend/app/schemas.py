@@ -7,23 +7,6 @@ def uuid_to_str(value: Any) -> str:
         return str(value)
     return str(value) if value is not None else None
 
-# --- Course ---
-class CourseBase(BaseModel):
-    title: str
-    description: Optional[str] = None
-
-class CourseCreate(CourseBase):
-    pass
-
-class Course(CourseBase):
-    id: Any
-    model_config = ConfigDict(from_attributes=True)
-    
-    @field_validator("id", mode="before")
-    @classmethod
-    def transform_id(cls, v):
-        return uuid_to_str(v)
-
 # --- Organization ---
 class OrganizationBase(BaseModel):
     name: str
@@ -43,14 +26,13 @@ class Organization(OrganizationBase):
 class GradeBase(BaseModel):
     level: str
     name: Optional[str] = None
-    org_id: Optional[UUID] = None # Added Optional UUID for Grade
+    org_id: Optional[UUID] = None # Added to match DB
 
 class GradeCreate(GradeBase):
-    pass
+    org_id: Optional[UUID] = None
 
 class Grade(GradeBase):
     id: Any
-    org_id: Optional[Any] = None # Added to match DB model
     model_config = ConfigDict(from_attributes=True)
     
     @field_validator("id", "org_id", mode="before")
@@ -58,11 +40,11 @@ class Grade(GradeBase):
     def transform_uuids(cls, v): 
         return uuid_to_str(v)
 
-# --- Subject ---
+# --- Subjects ---
 class SubjectBase(BaseModel):
     name: str
     subject_code: str
-    discipline: Optional[str] = "Science"
+    discipline: Optional[str] = "Science" # Added to match curriculum logic
 
 class RegularSubjectCreate(SubjectBase):
     grade_id: UUID
@@ -73,7 +55,7 @@ class RegularSubject(SubjectBase):
     model_config = ConfigDict(from_attributes=True)
     @field_validator("id", "grade_id", mode="before")
     @classmethod
-    def transform_uuids(cls, v): return uuid_to_str(v)
+    def transform_uuid(cls, v): return uuid_to_str(v)
 
 class ExamSubjectCreate(SubjectBase):
     organization_id: UUID
@@ -84,7 +66,7 @@ class ExamSubject(SubjectBase):
     model_config = ConfigDict(from_attributes=True)
     @field_validator("id", "organization_id", mode="before")
     @classmethod
-    def transform_uuids(cls, v): return uuid_to_str(v)
+    def transform_uuid(cls, v): return uuid_to_str(v)
 
 # --- Subject Areas ---
 class SubjectAreaBase(BaseModel):
@@ -100,7 +82,7 @@ class RegularSubjectArea(SubjectAreaBase):
     model_config = ConfigDict(from_attributes=True)
     @field_validator("id", "subject_id", mode="before")
     @classmethod
-    def transform_uuids(cls, v): return uuid_to_str(v)
+    def transform_uuid(cls, v): return uuid_to_str(v)
 
 class ExamSubjectAreaCreate(SubjectAreaBase):
     name: str
@@ -113,4 +95,4 @@ class ExamSubjectArea(SubjectAreaBase):
     model_config = ConfigDict(from_attributes=True)
     @field_validator("id", "exam_subject_id", mode="before")
     @classmethod
-    def transform_uuids(cls, v): return uuid_to_str(v)
+    def transform_uuid(cls, v): return uuid_to_str(v)
