@@ -24,7 +24,7 @@ def create_grade(grade: schemas.GradeCreate, db: Session = Depends(get_db)):
     db.refresh(new_grade)
     return new_grade
 
-# --- REGULAR CURRICULUM ROUTES ---
+# --- REGULAR CURRICULUM ---
 @router.get("/regular/subjects", response_model=List[schemas.RegularSubject])
 def get_regular_subjects(db: Session = Depends(get_db)):
     return db.query(models.RegularSubject).all()
@@ -58,7 +58,7 @@ def create_regular_subject_area(area: schemas.RegularSubjectAreaCreate, db: Sess
     db.refresh(new_area)
     return new_area
 
-# --- EXAM CURRICULUM ROUTES ---
+# --- EXAM CURRICULUM ---
 @router.get("/exam/subjects", response_model=List[schemas.ExamSubject])
 def get_exam_subjects(db: Session = Depends(get_db)):
     return db.query(models.ExamSubject).all()
