@@ -24,15 +24,16 @@ class Organization(OrganizationBase):
 
 # --- Grade ---
 class GradeBase(BaseModel):
-    level: str
+    level: Optional[str] = None # Optional to prevent 500 crashes on nulls
     name: Optional[str] = None
-    org_id: Optional[UUID] = None # Added to match DB
+    org_id: Optional[UUID] = None # Critical for frontend filtering
 
 class GradeCreate(GradeBase):
-    org_id: Optional[UUID] = None
+    pass
 
 class Grade(GradeBase):
     id: Any
+    org_id: Optional[Any] = None # Included in response so UI can filter
     model_config = ConfigDict(from_attributes=True)
     
     @field_validator("id", "org_id", mode="before")
@@ -44,7 +45,7 @@ class Grade(GradeBase):
 class SubjectBase(BaseModel):
     name: str
     subject_code: str
-    discipline: Optional[str] = "Science" # Added to match curriculum logic
+    discipline: Optional[str] = "Science"
 
 class RegularSubjectCreate(SubjectBase):
     grade_id: UUID
