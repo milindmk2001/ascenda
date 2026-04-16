@@ -12,8 +12,10 @@ class Organization(Base):
 class Grade(Base):
     __tablename__ = "grades"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String, nullable=False)
-    level = Column(String, nullable=False, unique=True)
+    level = Column(String, nullable=True) 
+    name = Column(String, nullable=True)
+    # Ensure this exact line exists:
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
 
 class RegularSubject(Base):
     __tablename__ = "regular_subjects"
