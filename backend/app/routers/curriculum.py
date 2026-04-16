@@ -7,11 +7,8 @@ from uuid import UUID
 
 router = APIRouter(prefix="/api/admin/curriculum", tags=["curriculum"])
 
-# --- GRADE ROUTES ---
-
 @router.get("/grades", response_model=List[schemas.Grade])
 def get_grades(db: Session = Depends(get_db)):
-    """Fetch all grade levels. Frontend filters these using org_id."""
     return db.query(models.Grade).all()
 
 @router.post("/grades", response_model=schemas.Grade)
@@ -26,8 +23,6 @@ def create_grade(grade: schemas.GradeCreate, db: Session = Depends(get_db)):
     db.refresh(new_grade)
     return new_grade
 
-# --- REGULAR CURRICULUM ROUTES ---
-
 @router.get("/regular/subjects", response_model=List[schemas.RegularSubject])
 def get_regular_subjects(db: Session = Depends(get_db)):
     return db.query(models.RegularSubject).all()
@@ -38,8 +33,8 @@ def create_regular_subject(sub: schemas.RegularSubjectCreate, db: Session = Depe
         name=sub.name,
         subject_code=sub.subject_code,
         grade_id=sub.grade_id,
-        discipline=sub.discipline
-        video_url=sub.video_url
+        discipline=sub.discipline,
+        video_url=sub.video_url # Comma fixed here
     )
     db.add(new_sub)
     db.commit()
@@ -49,13 +44,3 @@ def create_regular_subject(sub: schemas.RegularSubjectCreate, db: Session = Depe
 @router.get("/regular/subject-areas", response_model=List[schemas.RegularSubjectArea])
 def get_regular_subject_areas(db: Session = Depends(get_db)):
     return db.query(models.RegularSubjectArea).all()
-
-# --- EXAM CURRICULUM ROUTES (Competitive) ---
-
-@router.get("/exam/subjects", response_model=List[schemas.ExamSubject])
-def get_exam_subjects(db: Session = Depends(get_db)):
-    return db.query(models.ExamSubject).all()
-
-@router.get("/exam/subject-areas", response_model=List[schemas.ExamSubjectArea])
-def get_exam_subject_areas(db: Session = Depends(get_db)):
-    return db.query(models.ExamSubjectArea).all()

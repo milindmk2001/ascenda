@@ -24,16 +24,16 @@ class Organization(OrganizationBase):
 
 # --- Grade ---
 class GradeBase(BaseModel):
-    level: Optional[str] = None # Optional to prevent 500 crashes on nulls
+    level: Optional[str] = None
     name: Optional[str] = None
-    org_id: Optional[UUID] = None # Critical for frontend filtering
+    org_id: Optional[UUID] = None
 
 class GradeCreate(GradeBase):
     pass
 
 class Grade(GradeBase):
     id: Any
-    org_id: Optional[Any] = None # Included in response so UI can filter
+    org_id: Optional[Any] = None
     model_config = ConfigDict(from_attributes=True)
     
     @field_validator("id", "org_id", mode="before")
@@ -46,7 +46,7 @@ class SubjectBase(BaseModel):
     name: str
     subject_code: str
     discipline: Optional[str] = "Science"
-    video_url: Optional[str] = "https://www.youtube.com/embed/dQw4w9WgXcQ"
+    video_url: Optional[str] = None # Added for video player
 
 class RegularSubjectCreate(SubjectBase):
     grade_id: UUID
@@ -54,48 +54,9 @@ class RegularSubjectCreate(SubjectBase):
 class RegularSubject(SubjectBase):
     id: Any
     grade_id: Any
-    video_url: Optional[str] = None # Ensure it's included in the response
+    video_url: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+    
     @field_validator("id", "grade_id", mode="before")
-    @classmethod
-    def transform_uuid(cls, v): return uuid_to_str(v)
-
-class ExamSubjectCreate(SubjectBase):
-    organization_id: UUID
-
-class ExamSubject(SubjectBase):
-    id: Any
-    organization_id: Any
-    model_config = ConfigDict(from_attributes=True)
-    @field_validator("id", "organization_id", mode="before")
-    @classmethod
-    def transform_uuid(cls, v): return uuid_to_str(v)
-
-# --- Subject Areas ---
-class SubjectAreaBase(BaseModel):
-    name: str
-    area_code: str
-
-class RegularSubjectAreaCreate(SubjectAreaBase):
-    subject_id: UUID
-
-class RegularSubjectArea(SubjectAreaBase):
-    id: Any
-    subject_id: Any
-    model_config = ConfigDict(from_attributes=True)
-    @field_validator("id", "subject_id", mode="before")
-    @classmethod
-    def transform_uuid(cls, v): return uuid_to_str(v)
-
-class ExamSubjectAreaCreate(SubjectAreaBase):
-    name: str
-    area_code: str
-    exam_subject_id: UUID
-
-class ExamSubjectArea(SubjectAreaBase):
-    id: Any
-    exam_subject_id: Any
-    model_config = ConfigDict(from_attributes=True)
-    @field_validator("id", "exam_subject_id", mode="before")
     @classmethod
     def transform_uuid(cls, v): return uuid_to_str(v)
