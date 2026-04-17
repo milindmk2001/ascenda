@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine
 from . import models
-from .routers import organizations, courses, curriculum
+from .routers import organizations, curriculum, studio, ai_tutor
 
 # Initialize database tables
 models.Base.metadata.create_all(bind=engine)
