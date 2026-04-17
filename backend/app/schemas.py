@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Optional, Any, List
+from typing import Optional, Any, Listfrom typing import Optional, Any, List, Dict  # <--- Ensure Dict is here
 from uuid import UUID
 
 def uuid_to_str(value: Any) -> str:
@@ -93,7 +93,7 @@ class ExamSubjectArea(SubjectAreaBase):
 # --- Studio & AI ---
 class ModularLessonCreate(BaseModel):
     title: str
-    variables: Dict[str, float]
+    variables: dict[str, float] # Works natively in Python 3.9+
     formula: str
     videoAssetId: Optional[str]
 
