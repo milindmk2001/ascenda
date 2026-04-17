@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Optional, Any, Listfrom typing import Optional, Any, List, Dict  # <--- Ensure Dict is here
+from typing import Optional, Any, List, Dict # <--- Ensure Dict is here
 from uuid import UUID
 
 def uuid_to_str(value: Any) -> str:
