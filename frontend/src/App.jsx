@@ -1,101 +1,85 @@
 import React, { useState, useEffect } from 'react';
 import UserLearningHub from './UserLearningHub';
-import VideoLesson from './VideoLesson';
 import AdminDashboard from './components/AdminDashboard';
 
-// Verified Production URL
 export const API_BASE = "https://ascenda-production.up.railway.app"; 
 
 function App() {
   const [view, setView] = useState('landing');
   const [subjects, setSubjects] = useState([]);
+  const [grades, setGrades] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Filter States
+  const [selectedGradeId, setSelectedGradeId] = useState("");
 
-  // 1. NEW: Fetch subjects from backend on load
   useEffect(() => {
-    const fetchSubjects = async () => {
+    const fetchData = async () => {
       try {
-        console.log("🚀 Fetching subjects from:", `${API_BASE}/api/admin/curriculum/regular/subjects`);
-        const response = await fetch(`${API_BASE}/api/admin/curriculum/regular/subjects`);
-        if (!response.ok) throw new Error("Failed to fetch");
-        const data = await response.json();
-        setSubjects(data);
+        setLoading(true);
+        // Fetch both grades and subjects
+        const [subRes, gradeRes] = await Promise.all([
+          fetch(`${API_BASE}/api/admin/curriculum/regular/subjects`),
+          fetch(`${API_BASE}/api/admin/curriculum/grades`)
+        ]);
+        
+        const subData = await subRes.json();
+        const gradeData = await gradeRes.json();
+        
+        setSubjects(subData);
+        setGrades(gradeData);
+        
+        // Default to first grade if available
+        if (gradeData.length > 0) setSelectedGradeId(gradeData[0].id);
+        
       } catch (error) {
-        console.error("❌ Error loading subjects:", error);
+        console.error("❌ Fetch error:", error);
       } finally {
         setLoading(false);
       }
     };
-
-    fetchSubjects();
+    fetchData();
   }, []);
 
-  // Navigation Handlers
-  const startLesson = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setView('lesson');
-  };
+  const openAdmin = () => setView('admin');
+  const goBackHome = () => setView('landing');
 
-  const goBackHome = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setView('landing');
-  };
-
-  const openAdmin = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setView('admin');
-  };
+  // Filter subjects based on the dropdown selection
+  const filteredSubjects = subjects.filter(s => s.grade_id === selectedGradeId);
 
   return (
-    <div className="min-h-screen bg-slate-950 font-sans selection:bg-indigo-500/30 text-white">
-      
-      {/* 1. ADMIN PANEL VIEW */}
+    <div className="min-h-screen bg-slate-950 text-white">
       {view === 'admin' ? (
-        <div className="relative animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <button 
-            onClick={goBackHome}
-            className="fixed top-6 left-6 z-50 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg transition-all"
-          >
-            ← Exit Admin
-          </button>
-          <AdminDashboard apiBase={API_BASE} />
-        </div>
-      ) : view === 'lesson' ? (
-        
-        /* 2. VIDEO LESSON VIEW */
-        <div className="max-w-6xl mx-auto pt-24 px-6">
-          <button 
-            onClick={goBackHome}
-            className="mb-8 flex items-center gap-2 bg-slate-800/80 hover:bg-slate-700 text-white px-5 py-2 rounded-full backdrop-blur-md border border-slate-700 transition-all font-bold shadow-xl hover:scale-105"
-          >
-            <span className="text-xl">←</span> <span>Back to Courses</span>
-          </button>
-          
-          <VideoLesson />
-          
-          <footer className="py-10 text-center text-slate-600 text-sm border-t border-slate-900">
-            © 2026 Ascenda Pro — Modular Learning Systems
-          </footer>
-        </div>
+        <AdminDashboard apiBase={API_BASE} onExit={goBackHome} />
       ) : (
+        <>
+          {/* Navigation with WORKING Filters */}
+          <nav className="p-4 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-950/80 backdrop-blur-md z-50">
+            <div className="text-2xl font-black tracking-tighter">
+              ASCENDA<span className="text-indigo-500">PRO</span>
+            </div>
+            <div className="flex gap-4 items-center">
+              <select 
+                className="bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-sm"
+                value={selectedGradeId}
+                onChange={(e) => setSelectedGradeId(e.target.value)}
+              >
+                {grades.map(g => (
+                  <option key={g.id} value={g.id}>{g.name || `Grade ${g.level}`}</option>
+                ))}
+              </select>
+            </div>
+          </nav>
 
-        /* 3. LEARNING HUB VIEW (The Primary User View) */
-        <div className="animate-in fade-in duration-700">
           <UserLearningHub 
-            subjects={subjects} 
+            subjects={filteredSubjects} 
             loading={loading} 
-            onStartLesson={startLesson} 
           />
           
-          <footer className="py-12 text-center bg-[#05070a] border-t border-slate-900/50">
-            <button 
-              onClick={openAdmin}
-              className="text-slate-800 hover:text-indigo-400 text-[10px] transition-all tracking-[0.2em] uppercase font-medium group"
-            >
-              <span className="opacity-50 group-hover:opacity-100">Access</span> Admin Portal
-            </button>
+          <footer className="py-10 text-center opacity-20">
+            <button onClick={openAdmin} className="text-[10px] uppercase tracking-widest">Admin</button>
           </footer>
-        </div>
+        </>
       )}
     </div>
   );
