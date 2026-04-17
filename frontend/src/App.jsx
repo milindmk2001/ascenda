@@ -1,20 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import UserLearningHub from './UserLearningHub'; // Updated Import
+import UserLearningHub from './UserLearningHub';
 import VideoLesson from './VideoLesson';
 import AdminDashboard from './components/AdminDashboard';
 
-// Verified Production URL from your Railway settings
+// Verified Production URL
 export const API_BASE = "https://ascenda-production.up.railway.app"; 
 
 function App() {
   const [view, setView] = useState('landing');
+  const [subjects, setSubjects] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Logs to browser console to confirm the endpoint connection
+  // 1. NEW: Fetch subjects from backend on load
   useEffect(() => {
-    console.log("🚀 Ascenda is connecting to:", API_BASE);
+    const fetchSubjects = async () => {
+      try {
+        console.log("🚀 Fetching subjects from:", `${API_BASE}/api/admin/curriculum/regular/subjects`);
+        const response = await fetch(`${API_BASE}/api/admin/curriculum/regular/subjects`);
+        if (!response.ok) throw new Error("Failed to fetch");
+        const data = await response.json();
+        setSubjects(data);
+      } catch (error) {
+        console.error("❌ Error loading subjects:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSubjects();
   }, []);
 
-  // Navigation Handlers with Scroll Reset
+  // Navigation Handlers
   const startLesson = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setView('lesson');
@@ -31,29 +47,26 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 font-sans selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-slate-950 font-sans selection:bg-indigo-500/30 text-white">
       
       {/* 1. ADMIN PANEL VIEW */}
       {view === 'admin' ? (
         <div className="relative animate-in fade-in slide-in-from-bottom-2 duration-500">
           <button 
             onClick={goBackHome}
-            className="fixed top-6 left-6 z-[100] flex items-center gap-2 bg-slate-800/80 hover:bg-slate-700 text-white px-5 py-2 rounded-full backdrop-blur-md border border-slate-700 transition-all font-bold shadow-2xl hover:scale-105 active:scale-95"
+            className="fixed top-6 left-6 z-50 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg transition-all"
           >
-            <span className="text-lg">←</span> <span>Exit Admin</span>
+            ← Exit Admin
           </button>
-          
-          {/* Passing the correct API_BASE to the dashboard */}
           <AdminDashboard apiBase={API_BASE} />
         </div>
-      ) : 
-      
-      /* 2. LESSON PLAYER VIEW */
-      view === 'lesson' ? (
-        <div className="relative animate-in fade-in zoom-in-95 duration-500">
+      ) : view === 'lesson' ? (
+        
+        /* 2. VIDEO LESSON VIEW */
+        <div className="max-w-6xl mx-auto pt-24 px-6">
           <button 
             onClick={goBackHome}
-            className="absolute top-6 left-6 z-[100] flex items-center gap-2 bg-slate-800/80 hover:bg-slate-700 text-white px-5 py-2 rounded-full backdrop-blur-md border border-slate-700 transition-all font-bold shadow-xl hover:scale-105"
+            className="mb-8 flex items-center gap-2 bg-slate-800/80 hover:bg-slate-700 text-white px-5 py-2 rounded-full backdrop-blur-md border border-slate-700 transition-all font-bold shadow-xl hover:scale-105"
           >
             <span className="text-xl">←</span> <span>Back to Courses</span>
           </button>
@@ -66,10 +79,13 @@ function App() {
         </div>
       ) : (
 
-        /* 3. LEARNING HUB VIEW (Dynamic User UI) */
+        /* 3. LEARNING HUB VIEW (The Primary User View) */
         <div className="animate-in fade-in duration-700">
-          {/* Replacing LandingPage with UserLearningHub for dynamic data fetching */}
-          <UserLearningHub apiBase={API_BASE} onStartLesson={startLesson} />
+          <UserLearningHub 
+            subjects={subjects} 
+            loading={loading} 
+            onStartLesson={startLesson} 
+          />
           
           <footer className="py-12 text-center bg-[#05070a] border-t border-slate-900/50">
             <button 
@@ -78,9 +94,6 @@ function App() {
             >
               <span className="opacity-50 group-hover:opacity-100">Access</span> Admin Portal
             </button>
-            <p className="mt-4 text-slate-900 text-[9px] uppercase tracking-widest">
-              Build Version 1.0.5-Stable
-            </p>
           </footer>
         </div>
       )}
