@@ -23,6 +23,8 @@ app.add_middleware(
 app.include_router(organizations.router)
 app.include_router(courses.router)
 app.include_router(curriculum.router)
+app.include_router(studio.router)   # For Content Studio
+app.include_router(ai_tutor.router) # For AI Tutor Chat
 
 @app.get("/")
 def health():

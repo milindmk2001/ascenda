@@ -89,3 +89,16 @@ class ExamSubjectArea(SubjectAreaBase):
     @field_validator("id", "exam_subject_id", mode="before")
     @classmethod
     def transform_uuid(cls, v): return uuid_to_str(v)
+
+# --- Studio & AI ---
+class ModularLessonCreate(BaseModel):
+    title: str
+    variables: Dict[str, float]
+    formula: str
+    videoAssetId: Optional[str]
+
+class AIQueryRequest(BaseModel):
+    subject_id: UUID
+    user_query: str
+    board: str
+    grade: str

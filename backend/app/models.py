@@ -1,24 +1,23 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, TEXT
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, ForeignKey, TEXT, Float, DateTime, func
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from .database import Base
 
-# --- Organization Model ---
+# --- Organization & Grade ---
 class Organization(Base):
     __tablename__ = "organizations"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
-    org_type = Column(String, nullable=False) # e.g., "School", "Coaching", "Board"
+    org_type = Column(String, nullable=False)
 
-# --- Grade Model ---
 class Grade(Base):
     __tablename__ = "grades"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    level = Column(String, nullable=True) # e.g., "10", "12"
-    name = Column(String, nullable=True)  # e.g., "Grade 10"
+    level = Column(String, nullable=True)
+    name = Column(String, nullable=True)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
 
-# --- Regular Curriculum Models ---
+# --- Curriculum ---
 class RegularSubject(Base):
     __tablename__ = "regular_subjects"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -26,7 +25,6 @@ class RegularSubject(Base):
     subject_code = Column(String, nullable=False)
     discipline = Column(String, default="Science")
     grade_id = Column(UUID(as_uuid=True), ForeignKey("grades.id"))
-    # video_url stores the embed link for the Udemy-style player
     video_url = Column(String, nullable=True) 
 
 class RegularSubjectArea(Base):
@@ -36,18 +34,20 @@ class RegularSubjectArea(Base):
     area_code = Column(String, nullable=False)
     subject_id = Column(UUID(as_uuid=True), ForeignKey("regular_subjects.id"))
 
-# --- Competitive Exam Models ---
-class ExamSubject(Base):
-    __tablename__ = "exam_subjects"
+# --- NEW: AI Tutor & Content Studio ---
+class PromptTemplate(Base):
+    __tablename__ = "prompt_templates"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String, nullable=False)
-    subject_code = Column(String, nullable=False)
-    discipline = Column(String, default="Competitive")
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    subject_id = Column(UUID(as_uuid=True), ForeignKey("regular_subjects.id"), nullable=False)
+    system_instruction = Column(TEXT, nullable=False)
+    model_name = Column(String, default="gemini-1.5-flash")
+    temperature = Column(Float, default=0.7)
 
-class ExamSubjectArea(Base):
-    __tablename__ = "exam_subject_areas"
+class ModularLesson(Base):
+    __tablename__ = "modular_lessons"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String, nullable=False)
-    area_code = Column(String, nullable=False)
-    exam_subject_id = Column(UUID(as_uuid=True), ForeignKey("exam_subjects.id"))
+    title = Column(String, nullable=False)
+    physics_params = Column(JSONB, nullable=False) # Stores {u, a, t, s}
+    latex_formula = Column(String)
+    video_asset_id = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
