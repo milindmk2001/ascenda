@@ -91,6 +91,20 @@ class ExamSubjectArea(SubjectAreaBase):
     def transform_uuid(cls, v): return uuid_to_str(v)
 
 # --- Studio & AI ---
+class ModularLesson(BaseModel):
+    id: Any
+    title: str
+    physics_params: dict[str, float]
+    latex_formula: Optional[str] = None
+    video_asset_id: Optional[str] = None
+    created_at: Any
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("id", "created_at", mode="before")
+    @classmethod
+    def transform_metadata(cls, v):
+        return str(v) if v is not None else None
 class ModularLessonCreate(BaseModel):
     title: str
     variables: dict[str, float] # Works natively in Python 3.9+
