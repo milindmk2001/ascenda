@@ -46,7 +46,7 @@ class SubjectBase(BaseModel):
     name: str
     subject_code: str
     discipline: Optional[str] = "Science"
-    video_url: Optional[str] = None # Added for video player
+    video_url: Optional[str] = None
 
 class RegularSubjectCreate(SubjectBase):
     grade_id: UUID
@@ -54,9 +54,38 @@ class RegularSubjectCreate(SubjectBase):
 class RegularSubject(SubjectBase):
     id: Any
     grade_id: Any
-    video_url: Optional[str] = None
+    video_url: Optional[Any] = None
     model_config = ConfigDict(from_attributes=True)
     
     @field_validator("id", "grade_id", mode="before")
+    @classmethod
+    def transform_uuid(cls, v): return uuid_to_str(v)
+
+# --- Subject Areas (FIXED: Added missing classes) ---
+class SubjectAreaBase(BaseModel):
+    name: str
+    area_code: str
+
+class RegularSubjectAreaCreate(SubjectAreaBase):
+    subject_id: UUID
+
+class RegularSubjectArea(SubjectAreaBase):
+    id: Any
+    subject_id: Any
+    model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator("id", "subject_id", mode="before")
+    @classmethod
+    def transform_uuid(cls, v): return uuid_to_str(v)
+
+class ExamSubjectAreaCreate(SubjectAreaBase):
+    exam_subject_id: UUID
+
+class ExamSubjectArea(SubjectAreaBase):
+    id: Any
+    exam_subject_id: Any
+    model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator("id", "exam_subject_id", mode="before")
     @classmethod
     def transform_uuid(cls, v): return uuid_to_str(v)
