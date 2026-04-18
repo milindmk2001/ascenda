@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import UserLearningHub from './UserLearningHub';
 import ContentStudio from './ContentStudio'; 
 import AdminDashboard from './components/AdminDashboard';
-// Assuming you will create this component next for your text-based learning
-// import AcademicArchitect from './AcademicArchitect'; 
+import AcademicArchitect from './AcademicArchitect'; // Import the new component
 
 export const API_BASE = "https://ascenda-production.up.railway.app"; 
 
@@ -34,9 +33,19 @@ function App() {
         setGrades(gradeData);
         setSubjects(subData);
         
-        if (orgData.length > 0) setSelectedOrgId(orgData[0].id);
-      } catch (e) { console.error("Data fetch error", e); } 
-      finally { setLoading(false); }
+        // Default to first organization and its first grade if available
+        if (orgData.length > 0) {
+          setSelectedOrgId(orgData[0].id);
+          const firstOrgGrades = gradeData.filter(g => g.org_id === orgData[0].id);
+          if (firstOrgGrades.length > 0) {
+            setSelectedGradeId(firstOrgGrades[0].id);
+          }
+        }
+      } catch (e) { 
+        console.error("Data fetch error", e); 
+      } finally { 
+        setLoading(false); 
+      }
     };
     fetchData();
   }, []);
@@ -51,22 +60,24 @@ function App() {
       ) : view === 'studio' ? (
         <ContentStudio apiBase={API_BASE} onBack={() => setView('landing')} />
       ) : view === 'architect' ? (
-        /* This is where your new text-based learning builder will go */
-        <div className="p-10 text-center">
-          <h2 className="text-2xl font-bold mb-4">Academic Architect</h2>
-          <p className="text-slate-400 mb-6">Text-based course editor coming soon.</p>
-          <button onClick={() => setView('landing')} className="text-indigo-500 underline">Go Back</button>
-        </div>
+        /* The Architect view reuses the same filters as the homepage */
+        <AcademicArchitect 
+          subjects={filteredSubjects} 
+          loading={loading} 
+          onBack={() => setView('landing')} 
+        />
       ) : (
         <>
           <nav className="p-4 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-950/90 backdrop-blur-md z-50">
             <div className="flex items-center gap-6">
-              <div className="text-2xl font-black tracking-tighter cursor-pointer" onClick={() => setView('landing')}>
+              <div 
+                className="text-2xl font-black tracking-tighter cursor-pointer" 
+                onClick={() => setView('landing')}
+              >
                 ASCENDA<span className="text-indigo-500">PRO</span>
               </div>
               
               <div className="flex gap-2">
-                {/* Content Studio Link */}
                 <button 
                   onClick={() => setView('studio')}
                   className="hidden md:block text-[10px] font-bold uppercase tracking-widest border border-slate-700 px-4 py-2 rounded-lg hover:border-indigo-500 transition-all"
@@ -74,7 +85,6 @@ function App() {
                   🎬 Content Studio
                 </button>
 
-                {/* NEW: Academic Architect Link */}
                 <button 
                   onClick={() => setView('architect')}
                   className="hidden md:block text-[10px] font-bold uppercase tracking-widest border border-slate-700 px-4 py-2 rounded-lg hover:border-emerald-500 transition-all"
@@ -85,11 +95,21 @@ function App() {
             </div>
             
             <div className="flex gap-4 items-center">
-              <select className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs outline-none" value={selectedOrgId} onChange={(e) => setSelectedOrgId(e.target.value)}>
+              <select 
+                className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs outline-none" 
+                value={selectedOrgId} 
+                onChange={(e) => setSelectedOrgId(e.target.value)}
+              >
                 {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
               </select>
-              <select className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs outline-none" value={selectedGradeId} onChange={(e) => setSelectedGradeId(e.target.value)}>
-                {filteredGrades.map(g => <option key={g.id} value={g.id}>{g.name || `Grade ${g.level}`}</option>)}
+              <select 
+                className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs outline-none" 
+                value={selectedGradeId} 
+                onChange={(e) => setSelectedGradeId(e.target.value)}
+              >
+                {filteredGrades.map(g => (
+                  <option key={g.id} value={g.id}>{g.name || `Grade ${g.level}`}</option>
+                ))}
               </select>
             </div>
           </nav>
@@ -103,7 +123,6 @@ function App() {
             />
           </main>
 
-          {/* NEW: Admin Link Footer */}
           <footer className="p-8 border-t border-slate-900 text-center">
             <button 
               onClick={() => setView('admin')}
