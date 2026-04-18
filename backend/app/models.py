@@ -1,15 +1,16 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, TEXT, Float, DateTime, func,Integer
+from sqlalchemy import uuid
+from sqlalchemy import Column, String, ForeignKey, TEXT, Float, DateTime, func, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship, remote, foreign
-from .database import Base
+from sqlalchemy.orm import relationship, backref
+from app.database import Base
 
-# --- Organization & Grade ---
 class Organization(Base):
     __tablename__ = "organizations"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     org_type = Column(String, nullable=False)
+    grades = relationship("Grade", back_populates="organization")
 
 class Grade(Base):
     __tablename__ = "grades"
@@ -17,8 +18,10 @@ class Grade(Base):
     level = Column(String, nullable=True)
     name = Column(String, nullable=True)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
+    
+    organization = relationship("Organization", back_populates="grades")
+    subjects = relationship("RegularSubject", back_populates="grade")
 
-# --- Curriculum ---
 class RegularSubject(Base):
     __tablename__ = "regular_subjects"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -28,9 +31,8 @@ class RegularSubject(Base):
     grade_id = Column(UUID(as_uuid=True), ForeignKey("grades.id"))
     video_url = Column(String, nullable=True) 
     
-    # New relationship for the tree
+    grade = relationship("Grade", back_populates="subjects")
     curriculum_nodes = relationship("CurriculumTree", back_populates="subject")
-
 class RegularSubjectArea(Base):
     __tablename__ = "regular_subject_areas"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -67,21 +69,17 @@ class LessonArticle(Base):
 # Add this to models.py
 class CurriculumTree(Base):
     __tablename__ = "curriculum_tree"
-    
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     subject_id = Column(UUID(as_uuid=True), ForeignKey("regular_subjects.id"), nullable=False)
-    course_id = Column(UUID(as_uuid=True), nullable=True)
     parent_id = Column(UUID(as_uuid=True), ForeignKey("curriculum_tree.id"), nullable=True)
     title = Column(TEXT, nullable=False)
     level = Column(Integer, nullable=True) 
     content_type = Column(TEXT, default="text")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationships
     subject = relationship("RegularSubject", back_populates="curriculum_nodes")
-    # This allows chapter.children to work in the API
+    # Corrected self-referential relationship
     children = relationship(
-        "CurriculumTree", 
-        backref=relationship("CurriculumTree", remote_side=[id]), # Fixed self-referential
-        cascade="all, delete-orphan"
+        "CurriculumTree",
+        backref=backref('parent', remote_side=[id]),
+        lazy="joined" # This is better for the W3Schools sidebar fetch
     )
