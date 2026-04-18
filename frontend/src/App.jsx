@@ -3,6 +3,7 @@ import UserLearningHub from './UserLearningHub';
 import ContentStudio from './ContentStudio'; 
 import AdminDashboard from './components/AdminDashboard';
 import AcademicArchitect from './AcademicArchitect'; 
+import CourseReader from './CourseReader'; // Import the new component
 
 export const API_BASE = "https://ascenda-production.up.railway.app"; 
 
@@ -12,6 +13,9 @@ function App() {
   const [grades, setGrades] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Track the current subject for the CourseReader
+  const [activeSubject, setActiveSubject] = useState(null);
   
   const [selectedOrgId, setSelectedOrgId] = useState("");
   const [selectedGradeId, setSelectedGradeId] = useState("");
@@ -45,8 +49,8 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white selection:bg-indigo-500/30 flex flex-col">
-      {/* GLOBAL NAVIGATION: Visible on all views except Admin */}
-      {view !== 'admin' && (
+      {/* GLOBAL NAVIGATION: Hidden in Admin and Reader views for focus */}
+      {view !== 'admin' && view !== 'reader' && (
         <nav className="p-4 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-950/90 backdrop-blur-md z-50">
           <div className="flex items-center gap-6">
             <div className="text-2xl font-black tracking-tighter cursor-pointer" onClick={() => setView('landing')}>
@@ -86,12 +90,21 @@ function App() {
           <AdminDashboard apiBase={API_BASE} onExit={() => setView('landing')} />
         ) : view === 'studio' ? (
           <ContentStudio apiBase={API_BASE} onBack={() => setView('landing')} />
+        ) : view === 'reader' ? (
+          <CourseReader 
+            subject={activeSubject} 
+            onBack={() => setView('architect')} 
+          />
         ) : view === 'architect' ? (
           <AcademicArchitect 
             subjects={filteredSubjects} 
             loading={loading} 
             selectedBoard={organizations.find(o => o.id === selectedOrgId)?.name}
             selectedGrade={grades.find(g => g.id === selectedGradeId)?.name}
+            onCourseSelect={(sub) => {
+              setActiveSubject(sub);
+              setView('reader');
+            }}
             onBack={() => setView('landing')} 
           />
         ) : (
@@ -104,8 +117,8 @@ function App() {
         )}
       </main>
 
-      {/* FOOTER: Hidden in Admin view */}
-      {view !== 'admin' && (
+      {/* FOOTER */}
+      {view !== 'admin' && view !== 'reader' && (
         <footer className="p-8 border-t border-slate-900 text-center">
           <button 
             onClick={() => setView('admin')}
