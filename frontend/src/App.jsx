@@ -64,6 +64,8 @@ function App() {
         <AcademicArchitect 
           subjects={filteredSubjects} 
           loading={loading} 
+          selectedBoard={organizations.find(o => o.id === selectedOrgId)?.name}
+          selectedGrade={grades.find(g => g.id === selectedGradeId)?.name}
           onBack={() => setView('landing')} 
         />
       ) : (
