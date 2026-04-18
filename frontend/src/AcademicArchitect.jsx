@@ -2,14 +2,16 @@ import React from 'react';
 
 /**
  * Academic Architect Component
- * Mirrors the homepage layout but for text-based content drafting.
- * @param {Array} subjects - The filtered subjects based on selected grade/org.
- * @param {boolean} loading - Loading state from App.jsx.
- * @param {string} selectedBoard - Name of the selected board for the header.
- * @param {string} selectedGrade - Name of the selected grade for the header.
- * @param {function} onBack - Navigation back to the main hub.
+ * Fixed version: Now triggers onCourseSelect when a card is clicked.
  */
-function AcademicArchitect({ subjects, loading, selectedBoard, selectedGrade, onBack }) {
+function AcademicArchitect({ 
+  subjects, 
+  loading, 
+  selectedBoard, 
+  selectedGrade, 
+  onBack,
+  onCourseSelect // Added missing prop to handle navigation
+}) {
   return (
     <div className="p-8 max-w-7xl mx-auto flex-grow">
       {/* Header Section mirrored from homepage style */}
@@ -28,7 +30,7 @@ function AcademicArchitect({ subjects, loading, selectedBoard, selectedGrade, on
         </button>
       </div>
 
-      {/* Subjects Grid - Mirrored logic from homepage */}
+      {/* Subjects Grid */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-500"></div>
@@ -39,6 +41,7 @@ function AcademicArchitect({ subjects, loading, selectedBoard, selectedGrade, on
           {subjects.map((subject) => (
             <div 
               key={subject.id} 
+              onClick={() => onCourseSelect(subject)} // Fixed: Triggers view change in App.jsx
               className="group relative bg-slate-900/40 border border-slate-800/50 rounded-2xl p-6 hover:border-emerald-500/50 transition-all cursor-pointer backdrop-blur-sm"
             >
               <div className="flex justify-between items-start mb-6">
@@ -47,7 +50,7 @@ function AcademicArchitect({ subjects, loading, selectedBoard, selectedGrade, on
                 </div>
                 <div className="text-right">
                   <span className="block text-[10px] font-mono text-slate-500 uppercase tracking-tighter">
-                    {subject.code || 'DOC-GEN'}
+                    {subject.subject_code || 'DOC-GEN'} {/* Updated to match backend field 'subject_code' */}
                   </span>
                 </div>
               </div>
