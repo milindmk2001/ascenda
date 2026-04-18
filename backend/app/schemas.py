@@ -147,7 +147,7 @@ class CurriculumNodeBase(BaseModel):
 
 class CurriculumNode(CurriculumNodeBase):
     id: Any
-    children: List['CurriculumNode'] = [] # Recursive definition for the tree
+    children: List['CurriculumNode'] = [] # This handles the nesting
 
     model_config = ConfigDict(from_attributes=True)
     
@@ -156,5 +156,5 @@ class CurriculumNode(CurriculumNodeBase):
     def transform_uuids(cls, v):
         return str(v) if v is not None else None
 
-# Required for recursive models in Pydantic
+# This is CRITICAL for recursive models in Pydantic V2
 CurriculumNode.model_rebuild()

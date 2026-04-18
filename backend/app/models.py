@@ -1,7 +1,7 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, TEXT, Float, DateTime, func
+from sqlalchemy import Column, String, ForeignKey, TEXT, Float, DateTime, func,Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, remote, foreign
 from .database import Base
 
 # --- Organization & Grade ---
@@ -27,6 +27,9 @@ class RegularSubject(Base):
     discipline = Column(String, default="Science")
     grade_id = Column(UUID(as_uuid=True), ForeignKey("grades.id"))
     video_url = Column(String, nullable=True) 
+    
+    # New relationship for the tree
+    curriculum_nodes = relationship("CurriculumTree", back_populates="subject")
 
 class RegularSubjectArea(Base):
     __tablename__ = "regular_subject_areas"
@@ -67,13 +70,18 @@ class CurriculumTree(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     subject_id = Column(UUID(as_uuid=True), ForeignKey("regular_subjects.id"), nullable=False)
-    course_id = Column(UUID(as_uuid=True), nullable=True) # Optional link to a specific course
+    course_id = Column(UUID(as_uuid=True), nullable=True)
     parent_id = Column(UUID(as_uuid=True), ForeignKey("curriculum_tree.id"), nullable=True)
     title = Column(TEXT, nullable=False)
-    level = Column(Integer, nullable=True) # 0 for Chapter, 1 for Topic, 2 for Subtopic
+    level = Column(Integer, nullable=True) 
     content_type = Column(TEXT, default="text")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     subject = relationship("RegularSubject", back_populates="curriculum_nodes")
-    children = relationship("CurriculumTree", backref=remote(parent_id))
+    # This allows chapter.children to work in the API
+    children = relationship(
+        "CurriculumTree", 
+        backref=relationship("CurriculumTree", remote_side=[id]), # Fixed self-referential
+        cascade="all, delete-orphan"
+    )
