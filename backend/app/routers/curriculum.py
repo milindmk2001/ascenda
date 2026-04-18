@@ -5,6 +5,9 @@ from ..database import get_db
 from typing import List
 from uuid import UUID
 
+# This router handles the standard user-facing API
+router = APIRouter(prefix="/api/curriculum", tags=["curriculum"])
+
 # Prefix matches the admin management scope
 router = APIRouter(prefix="/api/admin/curriculum", tags=["curriculum"])
 
@@ -70,3 +73,14 @@ def get_curriculum_tree(subject_id: UUID, db: Session = Depends(get_db)):
         models.CurriculumTree.subject_id == subject_id,
         models.CurriculumTree.parent_id == None
     ).all()
+
+@router.get("/subjects/{subject_id}/tree", response_model=List[schemas.CurriculumNode])
+def get_curriculum_tree(subject_id: UUID, db: Session = Depends(get_db)):
+    # Query only top-level nodes; 'children' will be nested automatically
+    nodes = db.query(models.CurriculumTree).filter(
+        models.CurriculumTree.subject_id == subject_id,
+        models.CurriculumTree.parent_id == None
+    ).all()
+    
+    # Return empty list if no data to prevent frontend .map() crash
+    return nodes if nodes else []

@@ -45,7 +45,7 @@ class CurriculumTree(Base):
     level = Column(Integer, nullable=True) 
     content_type = Column(TEXT, default="text")
 
-    subject = relationship("RegularSubject", back_populates="curriculum_nodes")
+    # This allows automatic nesting in the API response
     children = relationship(
         "CurriculumTree",
         backref=backref('parent', remote_side=[id]),

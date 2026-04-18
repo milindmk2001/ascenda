@@ -24,6 +24,7 @@ app.add_middleware(
 # Register Routers
 # These map your modular files to actual URL endpoints
 app.include_router(organizations.router)
+app.include_router(curriculum.admin_router)
 app.include_router(curriculum.router)
 app.include_router(studio.router)
 app.include_router(ai_tutor.router)
