@@ -61,3 +61,12 @@ def create_regular_subject_area(area: schemas.RegularSubjectAreaCreate, db: Sess
     db.commit()
     db.refresh(new_area)
     return new_area
+
+@router.get("/subjects/{subject_id}/tree", response_model=List[schemas.CurriculumNode])
+def get_curriculum_tree(subject_id: UUID, db: Session = Depends(get_db)):
+    # Fetch only top-level nodes (parent_id is None)
+    # SQLAlchemy relationships will automatically nest the children
+    return db.query(models.CurriculumTree).filter(
+        models.CurriculumTree.subject_id == subject_id,
+        models.CurriculumTree.parent_id == None
+    ).all()

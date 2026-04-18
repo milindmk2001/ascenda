@@ -3,7 +3,7 @@ import UserLearningHub from './UserLearningHub';
 import ContentStudio from './ContentStudio'; 
 import AdminDashboard from './components/AdminDashboard';
 import AcademicArchitect from './AcademicArchitect'; 
-import CourseReader from './CourseReader'; // Import the new component
+import CourseReader from './CourseReader'; 
 
 export const API_BASE = "https://ascenda-production.up.railway.app"; 
 
@@ -14,7 +14,7 @@ function App() {
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Track the current subject for the CourseReader
+  // State for the W3Schools-style reader
   const [activeSubject, setActiveSubject] = useState(null);
   
   const [selectedOrgId, setSelectedOrgId] = useState("");
@@ -38,8 +38,11 @@ function App() {
         setSubjects(subData);
         
         if (orgData.length > 0) setSelectedOrgId(orgData[0].id);
-      } catch (e) { console.error("Data fetch error", e); } 
-      finally { setLoading(false); }
+      } catch (e) { 
+        console.error("Data fetch error", e); 
+      } finally { 
+        setLoading(false); 
+      }
     };
     fetchData();
   }, []);
@@ -48,26 +51,19 @@ function App() {
   const filteredSubjects = subjects.filter(s => s.grade_id === selectedGradeId);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white selection:bg-indigo-500/30 flex flex-col">
-      {/* GLOBAL NAVIGATION: Hidden in Admin and Reader views for focus */}
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+      {/* Global Nav hidden in Reader for maximum focus */}
       {view !== 'admin' && view !== 'reader' && (
         <nav className="p-4 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-950/90 backdrop-blur-md z-50">
           <div className="flex items-center gap-6">
             <div className="text-2xl font-black tracking-tighter cursor-pointer" onClick={() => setView('landing')}>
               ASCENDA<span className="text-indigo-500">PRO</span>
             </div>
-            
             <div className="flex gap-2">
-              <button 
-                onClick={() => setView('studio')}
-                className={`hidden md:block text-[10px] font-bold uppercase tracking-widest border px-4 py-2 rounded-lg transition-all ${view === 'studio' ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-700 hover:border-indigo-500'}`}
-              >
+              <button onClick={() => setView('studio')} className="hidden md:block text-[10px] font-bold uppercase tracking-widest border border-slate-700 px-4 py-2 rounded-lg hover:border-indigo-500 transition-all">
                 🎬 Content Studio
               </button>
-              <button 
-                onClick={() => setView('architect')}
-                className={`hidden md:block text-[10px] font-bold uppercase tracking-widest border px-4 py-2 rounded-lg transition-all ${view === 'architect' ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-700 hover:border-emerald-500'}`}
-              >
+              <button onClick={() => setView('architect')} className={`hidden md:block text-[10px] font-bold uppercase tracking-widest border px-4 py-2 rounded-lg transition-all ${view === 'architect' ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-700 hover:border-emerald-500'}`}>
                 ✍️ Academic Architect
               </button>
             </div>
@@ -84,7 +80,6 @@ function App() {
         </nav>
       )}
 
-      {/* MAIN CONTENT AREA */}
       <main className="flex-grow">
         {view === 'admin' ? (
           <AdminDashboard apiBase={API_BASE} onExit={() => setView('landing')} />
@@ -99,8 +94,6 @@ function App() {
           <AcademicArchitect 
             subjects={filteredSubjects} 
             loading={loading} 
-            selectedBoard={organizations.find(o => o.id === selectedOrgId)?.name}
-            selectedGrade={grades.find(g => g.id === selectedGradeId)?.name}
             onCourseSelect={(sub) => {
               setActiveSubject(sub);
               setView('reader');
@@ -111,23 +104,9 @@ function App() {
           <UserLearningHub 
             subjects={filteredSubjects} 
             loading={loading}
-            selectedBoard={organizations.find(o => o.id === selectedOrgId)?.name}
-            selectedGrade={grades.find(g => g.id === selectedGradeId)?.name}
           />
         )}
       </main>
-
-      {/* FOOTER */}
-      {view !== 'admin' && view !== 'reader' && (
-        <footer className="p-8 border-t border-slate-900 text-center">
-          <button 
-            onClick={() => setView('admin')}
-            className="text-[9px] uppercase tracking-[0.4em] text-slate-600 hover:text-slate-400 transition-colors"
-          >
-            Systems Management
-          </button>
-        </footer>
-      )}
     </div>
   );
 }

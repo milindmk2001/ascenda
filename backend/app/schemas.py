@@ -135,3 +135,26 @@ class Article(ArticleBase):
     @field_validator("id", "subject_id", mode="before")
     @classmethod
     def transform_uuid(cls, v): return uuid_to_str(v)
+
+# Add these to schemas.py
+
+class CurriculumNodeBase(BaseModel):
+    title: str
+    level: Optional[int] = None
+    content_type: Optional[str] = "text"
+    subject_id: UUID
+    parent_id: Optional[UUID] = None
+
+class CurriculumNode(CurriculumNodeBase):
+    id: Any
+    children: List['CurriculumNode'] = [] # Recursive definition for the tree
+
+    model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator("id", "subject_id", "parent_id", mode="before")
+    @classmethod
+    def transform_uuids(cls, v):
+        return str(v) if v is not None else None
+
+# Required for recursive models in Pydantic
+CurriculumNode.model_rebuild()

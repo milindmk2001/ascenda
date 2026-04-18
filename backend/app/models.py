@@ -1,6 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, ForeignKey, TEXT, Float, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.orm import relationship
 from .database import Base
 
 # --- Organization & Grade ---
@@ -59,3 +60,20 @@ class LessonArticle(Base):
     content = Column(TEXT) # Stores the W3Schools-style Markdown/HTML
     subject_id = Column(UUID(as_uuid=True), ForeignKey("regular_subjects.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# Add this to models.py
+class CurriculumTree(Base):
+    __tablename__ = "curriculum_tree"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    subject_id = Column(UUID(as_uuid=True), ForeignKey("regular_subjects.id"), nullable=False)
+    course_id = Column(UUID(as_uuid=True), nullable=True) # Optional link to a specific course
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("curriculum_tree.id"), nullable=True)
+    title = Column(TEXT, nullable=False)
+    level = Column(Integer, nullable=True) # 0 for Chapter, 1 for Topic, 2 for Subtopic
+    content_type = Column(TEXT, default="text")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    subject = relationship("RegularSubject", back_populates="curriculum_nodes")
+    children = relationship("CurriculumTree", backref=remote(parent_id))
