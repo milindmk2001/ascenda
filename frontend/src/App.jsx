@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import UserLearningHub from './UserLearningHub';
 import ContentStudio from './ContentStudio'; 
-import AcademicArchitect from './AcademicArchitect'; // The new component
 import AdminDashboard from './components/AdminDashboard';
+// Assuming you will create this component next for your text-based learning
+// import AcademicArchitect from './AcademicArchitect'; 
 
 export const API_BASE = "https://ascenda-production.up.railway.app"; 
 
@@ -50,7 +51,12 @@ function App() {
       ) : view === 'studio' ? (
         <ContentStudio apiBase={API_BASE} onBack={() => setView('landing')} />
       ) : view === 'architect' ? (
-        <AcademicArchitect apiBase={API_BASE} onBack={() => setView('landing')} />
+        /* This is where your new text-based learning builder will go */
+        <div className="p-10 text-center">
+          <h2 className="text-2xl font-bold mb-4">Academic Architect</h2>
+          <p className="text-slate-400 mb-6">Text-based course editor coming soon.</p>
+          <button onClick={() => setView('landing')} className="text-indigo-500 underline">Go Back</button>
+        </div>
       ) : (
         <>
           <nav className="p-4 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-950/90 backdrop-blur-md z-50">
@@ -59,14 +65,16 @@ function App() {
                 ASCENDA<span className="text-indigo-500">PRO</span>
               </div>
               
-              {/* Production Links */}
               <div className="flex gap-2">
+                {/* Content Studio Link */}
                 <button 
                   onClick={() => setView('studio')}
                   className="hidden md:block text-[10px] font-bold uppercase tracking-widest border border-slate-700 px-4 py-2 rounded-lg hover:border-indigo-500 transition-all"
                 >
-                  🎬 Video Studio
+                  🎬 Content Studio
                 </button>
+
+                {/* NEW: Academic Architect Link */}
                 <button 
                   onClick={() => setView('architect')}
                   className="hidden md:block text-[10px] font-bold uppercase tracking-widest border border-slate-700 px-4 py-2 rounded-lg hover:border-emerald-500 transition-all"
@@ -95,7 +103,7 @@ function App() {
             />
           </main>
 
-          {/* Restored Admin Link */}
+          {/* NEW: Admin Link Footer */}
           <footer className="p-8 border-t border-slate-900 text-center">
             <button 
               onClick={() => setView('admin')}
