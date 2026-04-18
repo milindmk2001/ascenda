@@ -1,12 +1,12 @@
 import uuid
-from sqlalchemy import uuid
 from sqlalchemy import Column, String, ForeignKey, TEXT, Float, DateTime, func, Integer
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, backref
 from app.database import Base
 
 class Organization(Base):
     __tablename__ = "organizations"
+    # Use uuid.uuid4 for the default value, but UUID for the Column type
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     org_type = Column(String, nullable=False)
