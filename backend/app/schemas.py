@@ -116,3 +116,22 @@ class AIQueryRequest(BaseModel):
     user_query: str
     board: str
     grade: str
+
+# Add to schemas.py
+
+class ArticleBase(BaseModel):
+    title: str
+    content_markdown: str
+    subject_id: UUID
+
+class ArticleCreate(ArticleBase):
+    pass
+
+class Article(ArticleBase):
+    id: Any
+    created_at: Any
+    model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator("id", "subject_id", mode="before")
+    @classmethod
+    def transform_uuid(cls, v): return uuid_to_str(v)

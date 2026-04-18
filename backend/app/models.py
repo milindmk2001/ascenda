@@ -51,3 +51,11 @@ class ModularLesson(Base):
     latex_formula = Column(String)
     video_asset_id = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class LessonArticle(Base):
+    __tablename__ = "lesson_articles"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String)
+    content = Column(TEXT) # Stores the W3Schools-style Markdown/HTML
+    subject_id = Column(UUID(as_uuid=True), ForeignKey("regular_subjects.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
