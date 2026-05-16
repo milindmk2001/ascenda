@@ -7,7 +7,7 @@ export default function AdminDashboard({ apiBase, onExit }) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Form Fields
+  // Form Input States
   const [examName, setExamName] = useState('');
   const [examCode, setExamCode] = useState('');
   const [selectedExamId, setSelectedExamId] = useState('');
@@ -15,7 +15,7 @@ export default function AdminDashboard({ apiBase, onExit }) {
   const [subjectCode, setSubjectCode] = useState('');
   const [discipline, setDiscipline] = useState('Competitive Exam');
 
-  // Load context structures safely
+  // Trigger safe operational data loads when switching tabs
   useEffect(() => {
     fetchData();
   }, [activeTab]);
@@ -25,27 +25,29 @@ export default function AdminDashboard({ apiBase, onExit }) {
     setErrorMsg(null);
     try {
       if (activeTab === 'exams') {
+        // Targets: @admin_router.get("/exams")
         const res = await fetch(`${apiBase}/api/admin/curriculum/exams`).catch(() => {
-          throw new Error("Unable to establish communication channel to Exams infrastructure service mapping.");
+          throw new Error("Unable to establish communication with the competitive tracking data engine.");
         });
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(`Server execution variance (${res.status}): ${text}`);
+          throw new Error(`Server Response Discrepancy (${res.status}): ${text}`);
         }
         const data = await res.json();
         setExams(Array.isArray(data) ? data : []);
       } else {
+        // Corrected Route Target: @admin_router.get("/exam/subjects")
         const res = await fetch(`${apiBase}/api/admin/curriculum/exam/subjects`).catch(() => {
-          throw new Error("Unable to settle connection path with Exam Subjects database partition.");
+          throw new Error("Unable to resolve data layer communication with Exam Subjects partition.");
         });
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(`Server execution variance (${res.status}): ${text}`);
+          throw new Error(`Server Response Discrepancy (${res.status}): ${text}`);
         }
         const data = await res.json();
         setExamSubjects(Array.isArray(data) ? data : []);
 
-        // Also refresh selection keys dropdown cleanly
+        // Populate your form's assignment dropdown with active tracks
         const examRes = await fetch(`${apiBase}/api/admin/curriculum/exams`).catch(() => null);
         if (examRes && examRes.ok) {
           const examData = await examRes.json();
@@ -57,8 +59,8 @@ export default function AdminDashboard({ apiBase, onExit }) {
         }
       }
     } catch (err) {
-      console.error("Administrative Fetch Core Failure:", err);
-      setErrorMsg(err.message || "Failed to cleanly synchronize administrative asset matrix entries.");
+      console.error("Administrative Sync Routine Blocked:", err);
+      setErrorMsg(err.message || "Failed to align asset data mapping matrices.");
     } finally {
       setLoading(false);
     }
@@ -68,12 +70,13 @@ export default function AdminDashboard({ apiBase, onExit }) {
     e.preventDefault();
     if (!examName || !examCode) return;
     try {
+      // Targets: @admin_router.post("/exams")
       const res = await fetch(`${apiBase}/api/admin/curriculum/exams`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: examName, code: examCode })
       });
-      if (!res.ok) throw new Error("Could not register unique core target assessment system profile model tracking data.");
+      if (!res.ok) throw new Error("Could not register unique testing track footprint profile.");
       setExamName('');
       setExamCode('');
       fetchData();
@@ -85,10 +88,11 @@ export default function AdminDashboard({ apiBase, onExit }) {
   const handleCreateExamSubject = async (e) => {
     e.preventDefault();
     if (!selectedExamId || !subjectName || !subjectCode) {
-      alert("Please ensure an explicit target testing schema track mapping association parameter is bounded.");
+      alert("Please ensure an explicit target testing track link profile is specified.");
       return;
     }
     try {
+      // Corrected Route Target: @admin_router.post("/exam/subjects")
       const res = await fetch(`${apiBase}/api/admin/curriculum/exam/subjects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -100,7 +104,7 @@ export default function AdminDashboard({ apiBase, onExit }) {
           video_url: ""
         })
       });
-      if (!res.ok) throw new Error("Could not associate custom examination content node onto target data repository structural array.");
+      if (!res.ok) throw new Error("Failed to register structural subject profile context map object.");
       setSubjectName('');
       setSubjectCode('');
       fetchData();
@@ -152,7 +156,7 @@ export default function AdminDashboard({ apiBase, onExit }) {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-grow items-start">
           
-          {/* Form Action Management Cards */}
+          {/* Action Formulation Forms Card */}
           <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 shadow-2xl">
             <h2 className="text-sm font-bold tracking-wide uppercase mb-4 text-slate-300">
               {activeTab === 'exams' ? 'Provision Testing Track' : 'Inject Subject Module Node'}
@@ -196,13 +200,13 @@ export default function AdminDashboard({ apiBase, onExit }) {
             )}
           </div>
 
-          {/* Operational Verification Display Stream Grid tables */}
+          {/* Operational Verification Display Streams List */}
           <div className="lg:col-span-2 bg-slate-950 p-5 rounded-xl border border-slate-800 shadow-2xl self-stretch overflow-y-auto max-h-[68vh]">
             <h2 className="text-sm font-bold tracking-wide uppercase mb-4 text-slate-300">Live Active Node Streams</h2>
             {activeTab === 'exams' ? (
               <div className="space-y-2">
                 {exams.length === 0 ? (
-                  <p className="text-slate-600 text-xs italic font-mono p-4 bg-slate-900 rounded-lg border border-slate-900">No active operational target testing frameworks returned.</p>
+                  <p className="text-slate-600 text-xs italic font-mono p-4 bg-slate-900 rounded-lg border border-slate-900/60">No active operational target testing frameworks returned.</p>
                 ) : (
                   exams.map(ex => (
                     <div key={ex.id} className="p-3 bg-slate-900 border border-slate-800/60 rounded-lg flex justify-between items-center hover:border-slate-700 transition">
@@ -215,7 +219,7 @@ export default function AdminDashboard({ apiBase, onExit }) {
             ) : (
               <div className="space-y-2">
                 {examSubjects.length === 0 ? (
-                  <p className="text-slate-600 text-xs italic font-mono p-4 bg-slate-900 rounded-lg border border-slate-900">No content structure nodes currently bound onto tracking routes.</p>
+                  <p className="text-slate-600 text-xs italic font-mono p-4 bg-slate-900 rounded-lg border border-slate-900/60">No content structure nodes currently bound onto tracking routes.</p>
                 ) : (
                   examSubjects.map(sub => (
                     <div key={sub.id} className="p-3 bg-slate-900 border border-slate-800/60 rounded-lg flex flex-col sm:flex-row justify-between sm:items-center gap-2 hover:border-slate-700 transition">
