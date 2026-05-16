@@ -129,29 +129,29 @@ def create_exam_stream(payload: schemas.ExamCreate, db: Session = Depends(get_db
 
 
 # =====================================================================
-# --- ADMIN: COMPETITIVE EXAM SUBJECTS (FIXED ROUTING) ---
+# --- ADMIN: COMPETITIVE EXAM SUBJECTS ---
 # =====================================================================
 
 @admin_router.get("/exam/subjects", response_model=List[schemas.ExamSubjectResponse])
 def get_exam_subjects(db: Session = Depends(get_db)):
-    """
-    FIXED: Query ONLY from the dedicated exam_subjects database matrix table.
-    Eliminated collision mappings with standard K-12 parameters.
-    """
+    """Query exclusively from the dedicated exam_subjects database matrix table."""
     return db.query(models.ExamSubject).all()
 
 @admin_router.post("/exam/subjects", response_model=schemas.ExamSubjectResponse, status_code=201)
 def create_exam_subject(payload: schemas.ExamSubjectCreate, db: Session = Depends(get_db)):
     """Commit a pristine record tracking entry directly into the exam_subjects matrix table."""
+    if not payload.exam_id:
+        raise HTTPException(status_code=400, detail="Missing parameter payload constraint: exam_id required.")
+
     exam_exists = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
     if not exam_exists:
-        raise HTTPException(status_code=404, detail="Target tracking parent Exam entry reference missing.")
+        raise HTTPException(status_code=404, detail="Target tracking parent Exam entity reference missing.")
         
     new_sub = models.ExamSubject(
         name=payload.name,
         subject_code=payload.subject_code.upper(),
         exam_id=payload.exam_id,
-        discipline=payload.discipline,
+        discipline=payload.discipline if payload.discipline else "Competitive Exam",
         video_url=payload.video_url
     )
     db.add(new_sub)

@@ -38,30 +38,33 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         examAreas: '/api/admin/curriculum/exam/subject-areas'
       };
 
-      // 1. Load active view context data layer
+      // 1. Fetch active view data layer
       const res = await fetch(`${apiBase}${endpoints[activeTab]}`);
       const result = await res.json();
-      setData(prev => ({ ...prev, [activeTab]: Array.isArray(result) ? result : [] }));
 
-      // 2. Pre-emptively lazy load master dropdown collections
-      const [exRes, grRes] = await Promise.all([
+      // 2. Multi-tenant drop-down collection synchronization
+      const [exRes, grRes, brRes] = await Promise.all([
         fetch(`${apiBase}/api/admin/curriculum/exams`),
-        fetch(`${apiBase}/api/admin/curriculum/grades`)
+        fetch(`${apiBase}/api/admin/curriculum/grades`),
+        fetch(`${apiBase}/api/admin/organizations/`)
       ]);
       const exData = await exRes.json();
       const grData = await grRes.json();
+      const brData = await brRes.json();
 
-      setData(prev => ({
-        ...prev,
-        exams: Array.isArray(exData) ? exData : [],
+      setData({
+        boards: Array.isArray(brData) ? brData : [],
         grades: Array.isArray(grData) ? grData : [],
-        // Update active content array snapshot if it matches what was loaded
+        exams: Array.isArray(exData) ? exData : [],
+        regSubjects: activeTab === 'regSubjects' ? (Array.isArray(result) ? result : []) : [],
+        regAreas: activeTab === 'regAreas' ? (Array.isArray(result) ? result : []) : [],
+        examSubjects: activeTab === 'examSubjects' ? (Array.isArray(result) ? result : []) : [],
+        examAreas: activeTab === 'examAreas' ? (Array.isArray(result) ? result : []) : [],
         [activeTab]: Array.isArray(result) ? result : []
-      }));
+      });
 
     } catch (err) {
-      console.error("Pipeline pipeline query cluster failure:", err);
-      setData(prev => ({ ...prev, [activeTab]: [] }));
+      console.error("Cluster context synchronization failure:", err);
     } finally {
       setLoading(false);
     }
@@ -77,9 +80,13 @@ const AdminDashboard = ({ apiBase, onExit }) => {
       if (res.ok) {
         resetForm();
         fetchData();
+      } else {
+        const errorDetails = await res.json();
+        console.error("Ingestion server rejection payload:", errorDetails);
+        alert(`Failed to save record: ${JSON.stringify(errorDetails.detail || "Validation Error")}`);
       }
     } catch (err) {
-      console.error("Ingestion channel failure:", err);
+      console.error("Ingestion channel transmission issue:", err);
     }
   };
 
@@ -105,12 +112,12 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         fetchData();
       }
     } catch (err) {
-      console.error("Patch update update pipeline failure:", err);
+      console.error("Pipeline target mutation patch issue:", err);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Confirm mutation removal actions against target context?")) return;
+    if (!window.confirm("Confirm permanent removal action against selected configuration row node?")) return;
     try {
       const endpoints = {
         regSubjects: `/api/admin/curriculum/regular/subjects/${id}`,
@@ -120,7 +127,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
       const res = await fetch(`${apiBase}${targetUrl}`, { method: 'DELETE' });
       if (res.ok) fetchData();
     } catch (err) {
-      console.error("Deletion lifecycle failure:", err);
+      console.error("Destruction runtime execution crash:", err);
     }
   };
 
@@ -219,12 +226,13 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                     const selectedExam = data.exams.find(ex => ex.id === subjectForm.grade_id);
                     const examCode = selectedExam ? selectedExam.code : 'EXAM';
                     
+                    // FIXED: Ensure strict mapping to exam_id to satisfy Pydantic Schema validations
                     parsedPayload = {
                       name: subjectForm.name,
                       exam_id: subjectForm.grade_id, 
                       subject_code: `${examCode}_${subjectForm.name.toUpperCase()}`,
                       discipline: 'Competitive Exam',
-                      video_url: subjectForm.video_url
+                      video_url: subjectForm.video_url || ""
                     };
                     targetUrl = '/api/admin/curriculum/exam/subjects';
                   } else {
@@ -233,7 +241,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                       grade_id: subjectForm.grade_id,
                       subject_code: subjectForm.subject_code,
                       discipline: subjectForm.discipline || 'General',
-                      video_url: subjectForm.video_url
+                      video_url: subjectForm.video_url || ""
                     };
                     targetUrl = '/api/admin/curriculum/regular/subjects';
                   }
@@ -241,6 +249,8 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                   handleCreate(targetUrl, parsedPayload, () => 
                     setSubjectForm({ name: '', subject_code: '', grade_id: '', discipline: 'Competitive Exam', video_url: '' })
                   ); 
+                } else {
+                  alert("Please complete the required form fields before saving.");
                 }
               }} 
               className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end"
