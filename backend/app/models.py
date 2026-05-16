@@ -66,3 +66,9 @@ class ModularLesson(Base):
     latex_formula = Column(String)
     video_asset_id = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class Exam(Base):
+    __tablename__ = "exams"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    code = Column(String, unique=True, nullable=False)

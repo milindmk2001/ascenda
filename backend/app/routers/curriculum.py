@@ -74,3 +74,64 @@ def create_regular_subject_area(area: schemas.RegularSubjectAreaCreate, db: Sess
     db.commit()
     db.refresh(new_area)
     return new_area
+
+# --- NEW: EXAMS TABLE ROUTE ---
+@admin_router.post("/exams", response_model=schemas.ExamResponse, status_code=201)
+def create_exam_node(payload: schemas.ExamCreate, db: Session = Depends(get_db)):
+    # Check if the exam code identifier is unique
+    existing = db.query(models.Exam).filter(models.Exam.code == payload.code.upper()).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="An exam with this system code identifier already exists.")
+        
+    db_exam = models.Exam(name=payload.name, code=payload.code.upper())
+    db.add(db_exam)
+    db.commit()
+    db.refresh(db_exam)
+    return db_exam
+
+# --- FIXED: GRADES MANAGEMENT ROUTE ---
+@admin_router.post("/curriculum/grades", response_model=schemas.Grade, status_code=201)
+def create_grade_node(payload: schemas.AdminGradeCreate, db: Session = Depends(get_db)):
+    # Verify the target organization structure element is accurate
+    org = db.query(models.Organization).filter(models.Organization.id == payload.org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Target tracking organization border entry not found.")
+        
+    new_grade = models.Grade(
+        level=str(payload.level), # Explicit string cast matching models.py string tracking format
+        name=payload.name if payload.name else f"Grade {payload.level}",
+        org_id=payload.org_id
+    )
+    db.add(new_grade)
+    db.commit()
+    db.refresh(new_grade)
+    return new_grade
+
+# --- FIXED: SUBJECTS LINK ROUTE ---
+@admin_router.post("/curriculum/subjects", response_model=schemas.RegularSubject, status_code=201)
+def create_subject_node(payload: schemas.AdminSubjectCreate, db: Session = Depends(get_db)):
+    # Enforce parent structural tree boundary validation checks
+    grade = db.query(models.Grade).filter(models.Grade.id == payload.grade_id).first()
+    if not grade:
+        raise HTTPException(status_code=404, detail="Target container Grade level identifier missing.")
+
+    new_sub = models.RegularSubject(
+        name=payload.name,
+        subject_code=payload.subject_code.upper(),
+        grade_id=payload.grade_id,
+        discipline=payload.discipline,
+        video_url=payload.video_url
+    )
+    db.add(new_sub)
+    db.commit()
+    db.refresh(new_sub)
+    return new_sub
+
+# Retain original matching fetch arrays down here for the architecture layout trees
+@admin_router.get("/curriculum/grades", response_model=List[schemas.Grade])
+def get_grades(db: Session = Depends(get_db)):
+    return db.query(models.Grade).all()
+
+@admin_router.get("/curriculum/regular/subjects", response_model=List[schemas.RegularSubject])
+def get_regular_subjects(db: Session = Depends(get_db)):
+    return db.query(models.RegularSubject).all()

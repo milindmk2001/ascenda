@@ -156,5 +156,27 @@ class CurriculumNode(CurriculumNodeBase):
     def transform_uuids(cls, v):
         return str(v) if v is not None else None
 
+# --- Admin Panel Ingestion Schema Layouts ---
+class ExamCreate(BaseModel):
+    name: str
+    code: str
+
+class ExamResponse(ExamCreate):
+    id: UUID
+    model_config = ConfigDict(from_attributes=True)
+
+class AdminGradeCreate(BaseModel):
+    org_id: UUID
+    level: str  # Kept as string to align directly with your models.py Grade table
+    name: Optional[str] = None
+
+class AdminSubjectCreate(BaseModel):
+    grade_id: UUID
+    name: str
+    subject_code: str
+    discipline: Optional[str] = "General"
+    video_url: Optional[str] = ""
+
+
 # This is CRITICAL for recursive models in Pydantic V2
 CurriculumNode.model_rebuild()
