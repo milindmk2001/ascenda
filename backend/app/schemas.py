@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Optional, Any, List, Dict # <--- Ensure Dict is here
+from typing import Optional, Any, List, Dict, Union
 from uuid import UUID
 
 def uuid_to_str(value: Any) -> str:
@@ -24,19 +24,19 @@ class Organization(OrganizationBase):
 
 # --- Grade ---
 class GradeBase(BaseModel):
-    level: Optional[Union[int, str]] = None  # Accepts either integer from form or string
+    level: Optional[Union[int, str]] = None  # Flexible validation handling form integers and database strings
     name: Optional[str] = None
     org_id: Optional[UUID] = None
 
 class GradeCreate(GradeBase):
-    org_id: UUID  # Enforce it's present on creation
+    org_id: UUID  # Enforced on form submissions
 
 class Grade(GradeBase):
     id: Any
     org_id: Optional[Any] = None
     model_config = ConfigDict(from_attributes=True)
     
-    @field_validator("id", "org_id", mode=\"before\")
+    @field_validator("id", "org_id", mode="before")
     @classmethod
     def transform_uuids(cls, v): 
         return uuid_to_str(v)
@@ -56,61 +56,84 @@ class RegularSubject(RegularSubjectBase):
     id: Any
     model_config = ConfigDict(from_attributes=True)
     
-    @field_validator("id", "grade_id", mode=\"before\")
+    @field_validator("id", "grade_id", mode="before")
     @classmethod
     def transform_uuids(cls, v): 
         return uuid_to_str(v)
-        
 
-# --- Subject Areas (FIXED: Added missing classes) ---
-class SubjectAreaBase(BaseModel):
-    name: str
-    area_code: str
-
-class RegularSubjectAreaCreate(SubjectAreaBase):
+# --- Subject Areas (Units) ---
+class RegularSubjectAreaBase(BaseModel):
+    title: str
+    sequence_order: int
     subject_id: UUID
 
-class RegularSubjectArea(SubjectAreaBase):
+class RegularSubjectAreaCreate(RegularSubjectAreaBase):
+    pass
+
+class RegularSubjectArea(RegularSubjectAreaBase):
     id: Any
-    subject_id: Any
     model_config = ConfigDict(from_attributes=True)
     
     @field_validator("id", "subject_id", mode="before")
     @classmethod
-    def transform_uuid(cls, v): return uuid_to_str(v)
+    def transform_uuids(cls, v): return uuid_to_str(v)
 
-class ExamSubjectAreaCreate(SubjectAreaBase):
-    exam_subject_id: UUID
+# --- Chapters ---
+class RegularChapterBase(BaseModel):
+    title: str
+    sequence_order: int
+    subject_area_id: UUID
 
-class ExamSubjectArea(SubjectAreaBase):
+class RegularChapterCreate(RegularChapterBase):
+    pass
+
+class RegularChapter(RegularChapterBase):
     id: Any
-    exam_subject_id: Any
     model_config = ConfigDict(from_attributes=True)
     
-    @field_validator("id", "exam_subject_id", mode="before")
+    @field_validator("id", "subject_area_id", mode="before")
     @classmethod
-    def transform_uuid(cls, v): return uuid_to_str(v)
+    def transform_uuids(cls, v): return uuid_to_str(v)
 
-# --- Studio & AI ---
-class ModularLesson(BaseModel):
+# --- Prompt Templates ---
+class PromptTemplateBase(BaseModel):
+    subject_id: UUID
+    model_name: str
+    system_instruction: str
+
+class PromptTemplateCreate(PromptTemplateBase):
+    pass
+
+class PromptTemplate(PromptTemplateBase):
     id: Any
-    title: str
-    physics_params: dict[str, float]
-    latex_formula: Optional[str] = None
-    video_asset_id: Optional[str] = None
-    created_at: Any
-
     model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator("id", "subject_id", mode="before")
+    @classmethod
+    def transform_uuids(cls, v): return uuid_to_str(v)
 
+# --- AI Tutor & Studio ---
+class ModularLessonBase(BaseModel):
+    title: str
+    physics_params: Dict[str, Any]
+    latex_formula: str
+    video_asset_id: Optional[str] = None
+
+class ModularLesson(ModularLessonBase):
+    id: Any
+    created_at: Any
+    model_config = ConfigDict(from_attributes=True)
+    
     @field_validator("id", "created_at", mode="before")
     @classmethod
     def transform_metadata(cls, v):
         return str(v) if v is not None else None
+
 class ModularLessonCreate(BaseModel):
     title: str
-    variables: dict[str, float] # Works natively in Python 3.9+
+    variables: dict[str, float]
     formula: str
-    videoAssetId: Optional[str]
+    videoAssetId: Optional[str] = None
 
 class AIQueryRequest(BaseModel):
     subject_id: UUID
@@ -118,8 +141,7 @@ class AIQueryRequest(BaseModel):
     board: str
     grade: str
 
-# Add to schemas.py
-
+# --- Lesson Articles ---
 class ArticleBase(BaseModel):
     title: str
     content_markdown: str
@@ -137,8 +159,7 @@ class Article(ArticleBase):
     @classmethod
     def transform_uuid(cls, v): return uuid_to_str(v)
 
-# Add these to schemas.py
-
+# --- W3Schools Style Navigation Tree ---
 class CurriculumNodeBase(BaseModel):
     title: str
     level: Optional[int] = None
@@ -148,8 +169,7 @@ class CurriculumNodeBase(BaseModel):
 
 class CurriculumNode(CurriculumNodeBase):
     id: Any
-    children: List['CurriculumNode'] = [] # This handles the nesting
-
+    children: List['CurriculumNode'] = []
     model_config = ConfigDict(from_attributes=True)
     
     @field_validator("id", "subject_id", "parent_id", mode="before")
@@ -157,7 +177,7 @@ class CurriculumNode(CurriculumNodeBase):
     def transform_uuids(cls, v):
         return str(v) if v is not None else None
 
-# --- Admin Panel Ingestion Schema Layouts ---
+# --- Explicit Form Ingestion Data Mappings ---
 class ExamCreate(BaseModel):
     name: str
     code: str
@@ -168,7 +188,7 @@ class ExamResponse(ExamCreate):
 
 class AdminGradeCreate(BaseModel):
     org_id: UUID
-    level: str  # Kept as string to align directly with your models.py Grade table
+    level: Union[int, str]
     name: Optional[str] = None
 
 class AdminSubjectCreate(BaseModel):
@@ -177,7 +197,3 @@ class AdminSubjectCreate(BaseModel):
     subject_code: str
     discipline: Optional[str] = "General"
     video_url: Optional[str] = ""
-
-
-# This is CRITICAL for recursive models in Pydantic V2
-CurriculumNode.model_rebuild()
