@@ -107,6 +107,17 @@ function App() {
           />
         )}
       </main>
+      {/* RESTORED: Admin Link Footer */}
+      {view !== 'admin' && (
+        <footer className="p-8 border-t border-slate-900 text-center bg-slate-950">
+          <button 
+            onClick={() => setView('admin')}
+            className="text-[9px] uppercase tracking-[0.4em] text-slate-600 hover:text-indigo-400 font-bold transition-colors"
+          >
+            Systems Management Portal
+          </button>
+        </footer>
+      )}
     </div>
   );
 }
