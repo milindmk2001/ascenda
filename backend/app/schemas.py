@@ -155,7 +155,6 @@ class ModularLessonBase(BaseModel):
     latex_formula: Optional[str] = None
     video_asset_id: Optional[str] = None
 
-# 🚀 ADDED THIS SPECIFIC CLASS TO FIX THE CRASH ON LINE 11 IN STUDIO.PY
 class ModularLessonCreate(ModularLessonBase):
     pass
 
@@ -163,3 +162,9 @@ class ModularLesson(ModularLessonBase):
     id: UUID
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+# --- AI Tutor System Ingestion Payloads ---
+class AIQueryRequest(BaseModel):
+    query: str
+    context_node_id: Optional[UUID] = None
+    chat_history: List[Dict[str, str]] = []
