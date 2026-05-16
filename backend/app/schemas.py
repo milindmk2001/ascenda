@@ -24,42 +24,43 @@ class Organization(OrganizationBase):
 
 # --- Grade ---
 class GradeBase(BaseModel):
-    level: Optional[str] = None
+    level: Optional[Union[int, str]] = None  # Accepts either integer from form or string
     name: Optional[str] = None
     org_id: Optional[UUID] = None
 
 class GradeCreate(GradeBase):
-    pass
+    org_id: UUID  # Enforce it's present on creation
 
 class Grade(GradeBase):
     id: Any
     org_id: Optional[Any] = None
     model_config = ConfigDict(from_attributes=True)
     
-    @field_validator("id", "org_id", mode="before")
+    @field_validator("id", "org_id", mode=\"before\")
     @classmethod
     def transform_uuids(cls, v): 
         return uuid_to_str(v)
 
 # --- Subjects ---
-class SubjectBase(BaseModel):
+class RegularSubjectBase(BaseModel):
     name: str
     subject_code: str
-    discipline: Optional[str] = "Science"
-    video_url: Optional[str] = None
-
-class RegularSubjectCreate(SubjectBase):
     grade_id: UUID
+    discipline: Optional[str] = "General"
+    video_url: Optional[str] = ""
 
-class RegularSubject(SubjectBase):
+class RegularSubjectCreate(RegularSubjectBase):
+    pass
+
+class RegularSubject(RegularSubjectBase):
     id: Any
-    grade_id: Any
-    video_url: Optional[Any] = None
     model_config = ConfigDict(from_attributes=True)
     
-    @field_validator("id", "grade_id", mode="before")
+    @field_validator("id", "grade_id", mode=\"before\")
     @classmethod
-    def transform_uuid(cls, v): return uuid_to_str(v)
+    def transform_uuids(cls, v): 
+        return uuid_to_str(v)
+        
 
 # --- Subject Areas (FIXED: Added missing classes) ---
 class SubjectAreaBase(BaseModel):

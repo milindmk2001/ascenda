@@ -27,11 +27,14 @@ def get_curriculum_tree(subject_id: UUID, db: Session = Depends(get_db)):
 def get_grades(db: Session = Depends(get_db)):
     return db.query(models.Grade).all()
 
-@admin_router.post("/grades", response_model=schemas.Grade)
+@admin_router.post("/grades", response_model=schemas.Grade, status_code=201)
 def create_grade(grade: schemas.GradeCreate, db: Session = Depends(get_db)):
+    # Safely convert integer levels to string to match models.Grade schema definition
+    string_level = str(grade.level) if grade.level is not None else None
+    
     new_grade = models.Grade(
-        level=grade.level,
-        name=grade.name or f"Grade {grade.level}",
+        level=string_level,
+        name=grade.name if grade.name else f"Grade {string_level}",
         org_id=grade.org_id
     )
     db.add(new_grade)
@@ -44,20 +47,20 @@ def create_grade(grade: schemas.GradeCreate, db: Session = Depends(get_db)):
 def get_regular_subjects(db: Session = Depends(get_db)):
     return db.query(models.RegularSubject).all()
 
-@admin_router.post("/regular/subjects", response_model=schemas.RegularSubject)
+# Change route path here to match what the dashboard hits exactly: /api/admin/curriculum/subjects
+@admin_router.post("/subjects", response_model=schemas.RegularSubject, status_code=201)
 def create_regular_subject(sub: schemas.RegularSubjectCreate, db: Session = Depends(get_db)):
     new_sub = models.RegularSubject(
         name=sub.name,
-        subject_code=sub.subject_code,
+        subject_code=sub.subject_code.upper(),
         grade_id=sub.grade_id,
-        discipline=sub.discipline,
-        video_url=sub.video_url
+        discipline=sub.discipline if sub.discipline else "General",
+        video_url=sub.video_url if sub.video_url else ""
     )
     db.add(new_sub)
     db.commit()
     db.refresh(new_sub)
     return new_sub
-
 # --- ADMIN: SUBJECT AREAS (Units) ---
 @admin_router.get("/regular/subject-areas", response_model=List[schemas.RegularSubjectArea])
 def get_regular_subject_areas(db: Session = Depends(get_db)):
