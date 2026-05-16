@@ -25,14 +25,14 @@ const AdminDashboard = ({ apiBase, onExit }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-     const endpoints = {
-            boards: '/api/admin/organizations/',
-            grades: '/api/admin/curriculum/grades',
-            regSubjects: '/api/admin/curriculum/regular/subjects',
-            regAreas: '/api/admin/curriculum/regular/subject-areas',
-            examSubjects: '/api/admin/curriculum/exam/subjects',      // Now pointing safely to the new endpoints
-            examAreas: '/api/admin/curriculum/exam/subject-areas'     // Now pointing safely to the new endpoints
-          };
+      const endpoints = {
+        boards: '/api/admin/organizations/',
+        grades: '/api/admin/curriculum/grades',
+        regSubjects: '/api/admin/curriculum/regular/subjects',
+        regAreas: '/api/admin/curriculum/regular/subject-areas',
+        examSubjects: '/api/admin/curriculum/exam/subjects',
+        examAreas: '/api/admin/curriculum/exam/subject-areas'
+      };
       
       const res = await fetch(`${apiBase}${endpoints[activeTab]}`);
       
@@ -42,7 +42,6 @@ const AdminDashboard = ({ apiBase, onExit }) => {
       
       const result = await res.json();
       
-      // Safe state updates to prevent undefined mapping crashes
       setData(prev => ({
         ...prev,
         [activeTab]: Array.isArray(result) ? result : []
@@ -51,14 +50,13 @@ const AdminDashboard = ({ apiBase, onExit }) => {
       console.error("Layout engine database sync crash prevented:", err);
       setData(prev => ({
         ...prev,
-        [activeTab]: [] // Safe fallback mapping
+        [activeTab]: []
       }));
     } finally {
       setLoading(false);
     }
   };
 
-  // Create Handlers
   const handleCreateBoard = async (e) => {
     e.preventDefault();
     if (!boardForm.name) return;
@@ -116,7 +114,6 @@ const AdminDashboard = ({ apiBase, onExit }) => {
     }
   };
 
-  // Helper safely gathering current tab elements
   const currentItems = data[activeTab] || [];
 
   return (
@@ -191,47 +188,4 @@ const AdminDashboard = ({ apiBase, onExit }) => {
             </form>
           )}
 
-          {(activeTab === 'regSubjects' || activeTab === 'examSubjects') && (
-            <form onSubmit={handleCreateSubject} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Container Grade</label>
-                <select className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white" value={subjectForm.grade_id} onChange={e => setSubjectForm({...subjectForm, grade_id: e.target.value})}>
-                  <option value="">Select Target Grade</option>
-                  {data.grades?.map(g => <option key={g.id} value={g.id}>Grade {g.level} ({g.name})</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Name</label>
-                <input type="text" placeholder="e.g., Quantum Mechanics" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white" value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Code</label>
-                <input type="text" placeholder="e.g., PHY-QM" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white" value={subjectForm.subject_code} onChange={e => setSubjectForm({...subjectForm, subject_code: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Video Asset URL</label>
-                <input type="text" placeholder="https://..." className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white" value={subjectForm.video_url} onChange={e => setSubjectForm({...subjectForm, video_url: e.target.value})} />
-              </div>
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Subject</button>
-            </form>
-          )}
-        </div>
-
-        {/* DATA CONTAINER ELEMENT VIEW TABLE */}
-        <div className="flex-grow bg-slate-900/10 border border-slate-900 rounded-2xl overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-800/80 bg-slate-900/40">
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Node Properties</th>
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">System Entity Key</th>
-                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentItems.map((item) => (
-                <tr key={item.id} className="border-b border-slate-900/60 hover:bg-slate-900/20 transition-all">
-                  <td className="p-4">
-                    <span className="font-bold text-sm text-slate-200">{item.name || `Level ${item.level}`}</span>
-                  </td>
-                  <td className="p-4 font-mono text-xs text-slate-500">{item.id}</td>
-                  <td className
+          {(activeTab === 'regSubjects' || activeTab
