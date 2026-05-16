@@ -25,14 +25,14 @@ const AdminDashboard = ({ apiBase, onExit }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const endpoints = {
-        boards: '/api/admin/organizations/',
-        grades: '/api/admin/curriculum/grades',
-        regSubjects: '/api/admin/curriculum/regular/subjects',
-        regAreas: '/api/admin/curriculum/regular/subject-areas',
-        examSubjects: '/api/admin/curriculum/regular/subjects', // Shared or fallback endpoint if exam routes aren't isolated
-        examAreas: '/api/admin/curriculum/regular/subject-areas'
-      };
+     const endpoints = {
+            boards: '/api/admin/organizations/',
+            grades: '/api/admin/curriculum/grades',
+            regSubjects: '/api/admin/curriculum/regular/subjects',
+            regAreas: '/api/admin/curriculum/regular/subject-areas',
+            examSubjects: '/api/admin/curriculum/exam/subjects',      // Now pointing safely to the new endpoints
+            examAreas: '/api/admin/curriculum/exam/subject-areas'     // Now pointing safely to the new endpoints
+          };
       
       const res = await fetch(`${apiBase}${endpoints[activeTab]}`);
       

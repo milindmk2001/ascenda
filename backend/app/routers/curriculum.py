@@ -119,3 +119,40 @@ def create_prompt_template(template: schemas.PromptTemplateCreate, db: Session =
     db.commit()
     db.refresh(new_template)
     return new_template
+
+# --- ADMIN: EXAM SUBJECTS ---
+@admin_router.get("/exam/subjects", response_model=List[schemas.RegularSubject])
+def get_exam_subjects(db: Session = Depends(get_db)):
+    # You can filter by discipline/type later if you want to isolate them!
+    return db.query(models.RegularSubject).all()
+
+@admin_router.post("/exam/subjects", response_model=schemas.RegularSubject, status_code=201)
+def create_exam_subject(payload: schemas.AdminSubjectCreate, db: Session = Depends(get_db)):
+    new_sub = models.RegularSubject(
+        name=payload.name,
+        subject_code=payload.subject_code.upper(),
+        grade_id=payload.grade_id,
+        discipline="Exam Stream", # Explicitly tagging it as an exam resource
+        video_url=payload.video_url
+    )
+    db.add(new_sub)
+    db.commit()
+    db.refresh(new_sub)
+    return new_sub
+
+# --- ADMIN: EXAM SPECIALTIES (Subject Areas / Units) ---
+@admin_router.get("/exam/subject-areas", response_model=List[schemas.RegularSubjectArea])
+def get_exam_subject_areas(db: Session = Depends(get_db)):
+    return db.query(models.RegularSubjectArea).all()
+
+@admin_router.post("/exam/subject-areas", response_model=schemas.RegularSubjectArea, status_code=201)
+def create_exam_subject_area(area: schemas.RegularSubjectAreaCreate, db: Session = Depends(get_db)):
+    new_area = models.RegularSubjectArea(
+        name=area.name,
+        sequence_order=area.sequence_order,
+        subject_id=area.subject_id
+    )
+    db.add(new_area)
+    db.commit()
+    db.refresh(new_area)
+    return new_area
