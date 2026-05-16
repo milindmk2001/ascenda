@@ -23,10 +23,12 @@ def get_curriculum_tree(subject_id: UUID, db: Session = Depends(get_db)):
     return nodes if nodes else []
 
 # --- ADMIN: GRADES ---
+# Frontend fetches from: GET /api/admin/curriculum/grades
 @admin_router.get("/grades", response_model=List[schemas.Grade])
 def get_grades(db: Session = Depends(get_db)):
     return db.query(models.Grade).all()
 
+# Frontend posts to: POST /api/admin/curriculum/grades
 @admin_router.post("/grades", response_model=schemas.Grade, status_code=201)
 def create_grade(payload: schemas.AdminGradeCreate, db: Session = Depends(get_db)):
     string_level = str(payload.level)
@@ -42,13 +44,15 @@ def create_grade(payload: schemas.AdminGradeCreate, db: Session = Depends(get_db
     return new_grade
 
 # --- ADMIN: SUBJECTS ---
+# FIXED: Frontend fetches from: GET /api/admin/curriculum/regular/subjects
 @admin_router.get("/regular/subjects", response_model=List[schemas.RegularSubject])
 def get_regular_subjects(db: Session = Depends(get_db)):
     return db.query(models.RegularSubject).all()
 
-# FIXED PATH: Matches frontend POSTing to /api/admin/curriculum/subjects without path doubling
+# FIXED: Frontend posts to: POST /api/admin/curriculum/subjects
 @admin_router.post("/subjects", response_model=schemas.RegularSubject, status_code=201)
 def create_regular_subject(payload: schemas.AdminSubjectCreate, db: Session = Depends(get_db)):
+    # Enforce parent structural tree boundary validation checks
     grade = db.query(models.Grade).filter(models.Grade.id == payload.grade_id).first()
     if not grade:
         raise HTTPException(status_code=404, detail="Target container Grade level identifier missing.")
