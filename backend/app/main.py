@@ -1,9 +1,9 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import engine  # Changed from .database
-from app import models           # Changed from .
-from app.routers import organizations, curriculum, studio, ai_tutor 
+from app.database import engine  
+from app import models           
+from app.routers import curriculum, organizations, studio, ai_tutor 
 
 # Initialize database tables
 # This creates tables in your Railway PostgreSQL instance based on models.py

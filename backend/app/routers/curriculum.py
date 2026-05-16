@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from .. import models, schemas
-from ..database import get_db
 from typing import List
 from uuid import UUID
+
+# Use absolute imports aligned with app.main execution scope
+from app import models, schemas
+from app.database import get_db
 
 # 1. Standard Router for the User/Reader view layout
 router = APIRouter(prefix="/api/curriculum", tags=["curriculum"])

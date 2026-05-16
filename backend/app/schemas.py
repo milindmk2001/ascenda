@@ -18,9 +18,11 @@ class OrganizationCreate(OrganizationBase):
 class Organization(OrganizationBase):
     id: Any 
     model_config = ConfigDict(from_attributes=True)
-    @field_validator("id", mode=\"before\")
+    
+    @field_validator("id", mode="before")
     @classmethod
-    def transform_id(cls, v): return uuid_to_str(v)
+    def transform_id(cls, v): 
+        return uuid_to_str(v)
 
 # --- Grade ---
 class GradeBase(BaseModel):
@@ -36,7 +38,7 @@ class Grade(GradeBase):
     org_id: Optional[Any] = None
     model_config = ConfigDict(from_attributes=True)
     
-    @field_validator("id", "org_id", mode=\"before\")
+    @field_validator("id", "org_id", mode="before")
     @classmethod
     def transform_uuids(cls, v):
         return str(v) if v is not None else None
@@ -53,7 +55,7 @@ class RegularSubject(RegularSubjectBase):
     id: Any
     model_config = ConfigDict(from_attributes=True)
     
-    @field_validator("id", "grade_id", mode=\"before\")
+    @field_validator("id", "grade_id", mode="before")
     @classmethod
     def transform_uuids(cls, v):
         return str(v) if v is not None else None
@@ -124,7 +126,7 @@ class CurriculumNode(CurriculumNodeBase):
     children: List['CurriculumNode'] = []
     model_config = ConfigDict(from_attributes=True)
     
-    @field_validator("id", "subject_id", "parent_id", mode=\"before\")
+    @field_validator("id", "subject_id", "parent_id", mode="before")
     @classmethod
     def transform_uuids(cls, v):
         return str(v) if v is not None else None
