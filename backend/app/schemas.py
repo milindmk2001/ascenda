@@ -70,7 +70,6 @@ class ExamResponse(ExamCreate):
     id: UUID
     model_config = ConfigDict(from_attributes=True)
 
-# Helper nested scheme to prevent circular validation crashes
 class ExamNestedResponse(BaseModel):
     id: UUID
     name: str
@@ -163,7 +162,7 @@ class ModularLesson(ModularLessonBase):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# --- AI Tutor System Ingestion Payloads ---
+# --- AI Tutor System Payloads ---
 class AIQueryRequest(BaseModel):
     query: str
     context_node_id: Optional[UUID] = None

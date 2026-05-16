@@ -1,432 +1,262 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Database, BookOpen, Trash2, Layers, GraduationCap, Microscope, Book, Edit3, Check, X } from 'lucide-react';
 
-const AdminDashboard = ({ apiBase, onExit }) => {
-  const [activeTab, setActiveTab] = useState('boards');
-  const [loading, setLoading] = useState(true);
-  
-  // Master unified structural app context mapping
-  const [data, setData] = useState({ 
-    boards: [], grades: [], exams: [], regSubjects: [], regAreas: [], examSubjects: [], examAreas: [] 
-  });
+interface ExamSubject {
+  id: string;
+  exam_id: string;
+  name: string;
+  subject_code: string;
+  discipline: string;
+  video_url?: string;
+  exam?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+}
 
-  // Inline table entry mutation fields
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({ name: '', subject_code: '', video_url: '' });
+interface Exam {
+  id: string;
+  name: string;
+  code: string;
+}
 
-  // Input ingestion forms state structures
-  const [boardForm, setBoardForm] = useState({ name: '', org_type: 'Exam Board' });
-  const [gradeForm, setGradeForm] = useState({ level: '', name: '', org_id: '' });
-  const [subjectForm, setSubjectForm] = useState({ 
-    name: '', subject_code: '', grade_id: '', discipline: 'Competitive Exam', video_url: '' 
-  });
+interface AdminDashboardProps {
+  apiBase: string;
+  onExit: () => void;
+}
 
+export default function AdminDashboard({ apiBase, onExit }: AdminDashboardProps) {
+  const [activeTab, setActiveTab] = useState<'exams' | 'subjects'>('exams');
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [examSubjects, setExamSubjects] = useState<ExamSubject[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Form Fields
+  const [examName, setExamName] = useState('');
+  const [examCode, setExamCode] = useState('');
+  const [selectedExamId, setSelectedExamId] = useState('');
+  const [subjectName, setSubjectName] = useState('');
+  const [subjectCode, setSubjectCode] = useState('');
+  const [discipline, setDiscipline] = useState('Competitive Exam');
+
+  // Load configuration options cleanly
   useEffect(() => {
     fetchData();
   }, [activeTab]);
 
   const fetchData = async () => {
     setLoading(true);
+    setErrorMsg(null);
     try {
-      const endpoints = {
-        boards: '/api/admin/organizations/',
-        grades: '/api/admin/curriculum/grades',
-        exams: '/api/admin/curriculum/exams',
-        regSubjects: '/api/admin/curriculum/regular/subjects',
-        regAreas: '/api/admin/curriculum/regular/subject-areas',
-        examSubjects: '/api/admin/curriculum/exam/subjects',
-        examAreas: '/api/admin/curriculum/exam/subjects' // Fallback to matching valid layout matrix context
-      };
-
-      // 1. Fetch targeted operational segment view data
-      const activeUrl = `${apiBase}${endpoints[activeTab] || endpoints.boards}`;
-      const res = await fetch(activeUrl);
-      const result = res.ok ? await res.json() : [];
-
-      // 2. Safely sync dropdown vectors independently without bringing down the runtime
-      const safeFetch = async (path) => {
-        try {
-          const r = await fetch(`${apiBase}${path}`);
-          return r.ok ? await r.json() : [];
-        } catch {
-          return [];
+      if (activeTab === 'exams') {
+        const res = await fetch(`${apiBase}/api/admin/curriculum/exams`);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Server returned ${res.status}: ${text}`);
         }
-      };
+        const data = await res.json();
+        setExams(Array.isArray(data) ? data : []);
+      } else {
+        const res = await fetch(`${apiBase}/api/admin/curriculum/exam/subjects`);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Server returned ${res.status}: ${text}`);
+        }
+        const data = await res.json();
+        setExamSubjects(Array.isArray(data) ? data : []);
 
-      const [exData, grData, brData] = await Promise.all([
-        safeFetch('/api/admin/curriculum/exams'),
-        safeFetch('/api/admin/curriculum/grades'),
-        safeFetch('/api/admin/organizations/')
-      ]);
-
-      setData({
-        boards: brData,
-        grades: grData,
-        exams: exData,
-        regSubjects: activeTab === 'regSubjects' ? result : [],
-        regAreas: activeTab === 'regAreas' ? result : [],
-        examSubjects: activeTab === 'examSubjects' ? result : [],
-        examAreas: activeTab === 'examAreas' ? result : [],
-        [activeTab]: result
-      });
-
-    } catch (err) {
-      console.error("Cluster schema visualization pipeline failure:", err);
+        // Populate selection dropdown and set initial default selection configuration binding
+        const examRes = await fetch(`${apiBase}/api/admin/curriculum/exams`);
+        if (examRes.ok) {
+          const examData = await examRes.json();
+          const safeExams = Array.isArray(examData) ? examData : [];
+          setExams(safeExams);
+          if (safeExams.length > 0 && !selectedExamId) {
+            setSelectedExamId(safeExams[0].id);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("Administrative Ingestion Engine Fetch Failure:", err);
+      setErrorMsg(err.message || "An error occurred while loading content.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreate = async (url, body, resetForm) => {
+  const handleCreateExam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!examName || !examCode) return;
     try {
-      const res = await fetch(`${apiBase}${url}`, {
+      const res = await fetch(`${apiBase}/api/admin/curriculum/exams`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ name: examName, code: examCode })
       });
-      if (res.ok) {
-        resetForm();
-        fetchData();
-      } else {
-        const errDetails = await res.json();
-        alert(`Validation Ingestion Rejection: ${JSON.stringify(errDetails.detail || "Structure Field Failure")}`);
-      }
-    } catch (err) {
-      console.error("Form compilation transmission exception:", err);
+      if (!res.ok) throw new Error("Could not construct standard exam model framework reference.");
+      setExamName('');
+      setExamCode('');
+      fetchData();
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
-  const handleUpdate = async (id, updatedFields) => {
+  const handleCreateExamSubject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedExamId || !subjectName || !subjectCode) {
+      alert("Please ensure a core target exam track track association link is specified.");
+      return;
+    }
     try {
-      let targetUrl = '';
-      let bodyPayload = {};
-
-      if (activeTab === 'examSubjects') {
-        const selectedItem = data.examSubjects.find(item => item.id === id);
-        if (!selectedItem) return;
-        
-        targetUrl = `/api/admin/curriculum/exam/subjects/${id}`;
-        bodyPayload = {
-          name: updatedFields.name,
-          subject_code: updatedFields.subject_code.toUpperCase(),
-          exam_id: selectedItem.exam_id,
-          discipline: selectedItem.discipline || 'Competitive Exam',
-          video_url: updatedFields.video_url || ""
-        };
-      } else {
-        const selectedItem = data.regSubjects.find(item => item.id === id);
-        if (!selectedItem) return;
-
-        targetUrl = `/api/admin/curriculum/regular/subjects/${id}`;
-        bodyPayload = {
-          grade_id: selectedItem.grade_id,
-          name: updatedFields.name,
-          subject_code: updatedFields.subject_code.toUpperCase(),
-          discipline: selectedItem.discipline || 'General',
-          video_url: updatedFields.video_url || ""
-        };
-      }
-
-      const res = await fetch(`${apiBase}${targetUrl}`, {
-        method: 'PUT',
+      const res = await fetch(`${apiBase}/api/admin/curriculum/exam/subjects`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyPayload)
+        body: JSON.stringify({
+          exam_id: selectedExamId,
+          name: subjectName,
+          subject_code: subjectCode,
+          discipline: discipline,
+          video_url: ""
+        })
       });
-      
-      if (res.ok) {
-        setEditingId(null);
-        fetchData();
-      } else {
-        const errJson = await res.json();
-        alert(`Failed patching entity row attributes: ${JSON.stringify(errJson.detail)}`);
-      }
-    } catch (err) {
-      console.error("Transmission state alteration break:", err);
+      if (!res.ok) throw new Error("Failed to register structural subject profile context mapping object.");
+      setSubjectName('');
+      setSubjectCode('');
+      fetchData();
+    } catch (err: any) {
+      alert(err.message);
     }
   };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm("Confirm permanent removal action against selected row configuration element?")) return;
-    try {
-      const endpoints = {
-        regSubjects: `/api/admin/curriculum/regular/subjects/${id}`,
-        examSubjects: `/api/admin/curriculum/exam/subjects/${id}`,
-        boards: `/api/admin/organizations/${id}`,
-        grades: `/api/admin/curriculum/grades/${id}`,
-        exams: `/api/admin/curriculum/exams/${id}`
-      };
-      
-      const targetUrl = endpoints[activeTab];
-      if (!targetUrl) return;
-
-      const res = await fetch(`${apiBase}${targetUrl}`, { method: 'DELETE' });
-      if (res.ok) fetchData();
-    } catch (err) {
-      console.error("Destruction request parsing crash:", err);
-    }
-  };
-
-  const startInlineEditing = (item) => {
-    setEditingId(item.id);
-    setEditForm({
-      name: item.name,
-      subject_code: item.subject_code || '',
-      video_url: item.video_url || ''
-    });
-  };
-
-  const currentItems = Array.isArray(data[activeTab]) ? data[activeTab] : [];
 
   return (
-    <div className="flex h-screen bg-slate-950 text-white font-sans overflow-hidden">
-      {/* SIDEBAR NAVIGATION CONTROL UNIT */}
-      <aside className="w-72 bg-slate-900 border-r border-slate-800/60 flex flex-col justify-between">
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="p-2 bg-indigo-600/10 rounded-xl border border-indigo-500/20 text-indigo-400">
-              <Layout size={20} />
-            </div>
-            <div>
-              <h2 className="font-black text-sm tracking-wider uppercase">Ascenda Central</h2>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Architect Cluster Terminal</p>
-            </div>
+    <div className="flex-grow p-6 bg-slate-900 text-white flex flex-col font-sans">
+      <header className="flex justify-between items-center border-b border-slate-700 pb-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-emerald-400">Ascenda Curriculum Content Studio</h1>
+          <p className="text-sm text-slate-400">Administrative Target Mapping & Strategy Ingestion Portal</p>
+        </div>
+        <button 
+          onClick={onExit}
+          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded transition"
+        >
+          Exit Dashboard
+        </button>
+      </header>
+
+      <div className="flex gap-4 mb-6">
+        <button
+          onClick={() => setActiveTab('exams')}
+          className={`px-4 py-2 font-medium rounded transition ${activeTab === 'exams' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+        >
+          Competitive Exams
+        </button>
+        <button
+          onClick={() => setActiveTab('subjects')}
+          className={`px-4 py-2 font-medium rounded transition ${activeTab === 'subjects' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+        >
+          Exam Content Subjects
+        </button>
+      </div>
+
+      {errorMsg && (
+        <div className="p-4 mb-6 bg-red-900/40 border border-red-700 text-red-200 rounded text-sm">
+          <strong>Initialization Notice:</strong> {errorMsg}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex-grow flex items-center justify-center text-slate-400 text-sm tracking-widest animate-pulse">
+          SYNCHRONIZING CURRICULUM ASSETS ENGINE...
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-grow items-start">
+          
+          {/* Action Formulation Panel Form entries */}
+          <div className="bg-slate-800 p-5 rounded-lg border border-slate-700 shadow-xl">
+            <h2 className="text-lg font-semibold mb-4 text-slate-200">
+              {activeTab === 'exams' ? 'Register Competitive Core Track' : 'Append Subject Matrix Area'}
+            </h2>
+            
+            {activeTab === 'exams' ? (
+              <form onSubmit={handleCreateExam} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Exam Track Name</label>
+                  <input type="text" value={examName} onChange={e => setExamName(e.target.value)} placeholder="e.g., IIT JEE Advanced" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-emerald-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Unique Identifier Code</label>
+                  <input type="text" value={examCode} onChange={e => setExamCode(e.target.value)} placeholder="e.g., IITJEE" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-emerald-500" />
+                </div>
+                <button type="submit" className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 font-medium rounded text-white transition shadow-lg shadow-emerald-900/20">Commit Entry Asset</button>
+              </form>
+            ) : (
+              <form onSubmit={handleCreateExamSubject} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Target Assessment Track</label>
+                  <select value={selectedExamId} onChange={e => setSelectedExamId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-emerald-500">
+                    <option value="">-- Connect Core Target Track --</option>
+                    {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.name} ({ex.code})</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Subject Nomenclature Title</label>
+                  <input type="text" value={subjectName} onChange={e => setSubjectName(e.target.value)} placeholder="e.g., Advanced Physical Chemistry" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-emerald-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Subject Tracking Code</label>
+                  <input type="text" value={subjectCode} onChange={e => setSubjectCode(e.target.value)} placeholder="e.g., JEE_CHEM" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-emerald-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Discipline Segment Category</label>
+                  <input type="text" value={discipline} onChange={e => setDiscipline(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-emerald-500" />
+                </div>
+                <button type="submit" className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 font-medium rounded text-white transition shadow-lg shadow-emerald-900/20">Commit Subject Asset</button>
+              </form>
+            )}
           </div>
 
-          <div className="space-y-1">
-            <TabButton id="boards" icon={<Database size={16} />} label="Exam Boards" active={activeTab} onClick={setActiveTab} />
-            <TabButton id="grades" icon={<GraduationCap size={16} />} label="Grade Containers" active={activeTab} onClick={setActiveTab} />
-            <TabButton id="exams" icon={<Layers size={16} />} label="Exam Streams (Root)" active={activeTab} onClick={setActiveTab} />
-            <div className="pt-4 pb-1 px-3 text-[10px] font-black text-slate-500 tracking-widest uppercase">Regular Core</div>
-            <TabButton id="regSubjects" icon={<BookOpen size={16} />} label="Core Subjects" active={activeTab} onClick={setActiveTab} />
-            <TabButton id="regAreas" icon={<Layers size={16} />} label="Subject Units" active={activeTab} onClick={setActiveTab} />
-            <div className="pt-4 pb-1 px-3 text-[10px] font-black text-slate-500 tracking-widest uppercase">Competitive Core</div>
-            <TabButton id="examSubjects" icon={<Microscope size={16} />} label="Exam Subjects" active={activeTab} onClick={setActiveTab} />
+          {/* Active Structural Assets Real-Time Verification Tables */}
+          <div className="lg:col-span-2 bg-slate-800 p-5 rounded-lg border border-slate-700 shadow-xl self-stretch overflow-y-auto max-h-[70vh]">
+            <h2 className="text-lg font-semibold mb-4 text-slate-200">Active Live Ingestions Monitor</h2>
+            {activeTab === 'exams' ? (
+              <div className="space-y-2">
+                {exams.length === 0 ? (
+                  <p className="text-slate-500 text-sm italic">No core exam tracks discovered in operational context data store links.</p>
+                ) : (
+                  exams.map(ex => (
+                    <div key={ex.id} className="p-3 bg-slate-900 border border-slate-700 rounded flex justify-between items-center hover:border-slate-500 transition">
+                      <span className="font-medium text-slate-100">{ex.name}</span>
+                      <span className="px-2 py-0.5 bg-slate-800 border border-slate-600 text-emerald-400 font-mono text-xs rounded uppercase tracking-wider">{ex.code}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {examSubjects.length === 0 ? (
+                  <p className="text-slate-500 text-sm italic">No active specialized test matrix modules discovered.</p>
+                ) : (
+                  examSubjects.map(sub => (
+                    <div key={sub.id} className="p-3 bg-slate-900 border border-slate-700 rounded flex flex-col sm:flex-row justify-between sm:items-center gap-2 hover:border-slate-500 transition">
+                      <div>
+                        <div className="font-medium text-slate-100">{sub.name}</div>
+                        <div className="text-xs text-slate-400 mt-0.5">Parent Association: <span className="text-slate-300 font-semibold">{sub.exam?.name || "Global / Base Track Pool"}</span></div>
+                      </div>
+                      <div className="flex gap-2 items-center self-start sm:self-center">
+                        <span className="text-xs px-2 py-0.5 bg-emerald-950/50 text-emerald-400 border border-emerald-800/40 rounded-full font-medium">{sub.discipline}</span>
+                        <span className="px-2 py-0.5 bg-slate-800 border border-slate-600 text-slate-300 font-mono text-xs rounded uppercase tracking-wider">{sub.subject_code}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
+
         </div>
-
-        <div className="p-4 border-t border-slate-800/40">
-          <button onClick={onExit} className="w-full py-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-            ← Exit System Shell
-          </button>
-        </div>
-      </aside>
-
-      {/* WORKSPACE OPERATIONS DASHBOARD */}
-      <main className="flex-grow p-8 overflow-y-auto flex flex-col gap-6">
-        <div className="bg-slate-900/30 p-6 rounded-2xl border border-slate-900">
-          <h2 className="text-xl font-bold flex items-center gap-2 mb-4">
-            <span className="text-indigo-500">⊕</span> Core Row Ingestion Framework
-          </h2>
-
-          {activeTab === 'boards' && (
-            <form onSubmit={(e) => { e.preventDefault(); if(boardForm.name) handleCreate('/api/admin/organizations/', boardForm, () => setBoardForm({ name: '', org_type: 'Exam Board' })); }} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Board Registration Label</label>
-                <input type="text" placeholder="e.g., CBSE, State Board" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={boardForm.name} onChange={e => setBoardForm({...boardForm, name: e.target.value})} />
-              </div>
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Board Row</button>
-            </form>
-          )}
-
-          {activeTab === 'exams' && (
-            <form onSubmit={(e) => { e.preventDefault(); if(subjectForm.name && subjectForm.subject_code) handleCreate('/api/admin/curriculum/exams', { name: subjectForm.name, code: subjectForm.subject_code }, () => setSubjectForm({ name: '', subject_code: '', grade_id: '', discipline: '', video_url: '' })); }} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Exam Stream Name</label>
-                <input type="text" placeholder="e.g., IIT JEE Advanced" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Stream Unique Index Key Code</label>
-                <input type="text" placeholder="e.g., IITJEE" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-indigo-500" value={subjectForm.subject_code} onChange={e => setSubjectForm({...subjectForm, subject_code: e.target.value})} />
-              </div>
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Root Exam</button>
-            </form>
-          )}
-
-          {activeTab === 'grades' && (
-            <form onSubmit={(e) => { e.preventDefault(); if(gradeForm.level && gradeForm.org_id) handleCreate('/api/admin/curriculum/grades', { ...gradeForm, name: gradeForm.name || `Grade ${gradeForm.level}` }, () => setGradeForm({ level: '', name: '', org_id: '' })); }} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Target Parent Organization Link</label>
-                <select className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={gradeForm.org_id} onChange={e => setGradeForm({...gradeForm, org_id: e.target.value})}>
-                  <option value="">Select Target Board Connection</option>
-                  {data.boards?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Internal Level Metric</label>
-                <input type="text" placeholder="e.g., 11" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={gradeForm.level} onChange={e => setGradeForm({...gradeForm, level: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Grade Level Clean Title</label>
-                <input type="text" placeholder="e.g., Class 11 Core" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={gradeForm.name} onChange={e => setGradeForm({...gradeForm, name: e.target.value})} />
-              </div>
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Grade Asset</button>
-            </form>
-          )}
-
-          {(activeTab === 'regSubjects' || activeTab === 'examSubjects') && (
-            <form 
-              onSubmit={(e) => { 
-                e.preventDefault(); 
-                if (subjectForm.name && subjectForm.grade_id) {
-                  let parsedPayload = {};
-                  let targetUrl = '';
-
-                  if (activeTab === 'examSubjects') {
-                    const selectedExam = data.exams.find(ex => ex.id === subjectForm.grade_id);
-                    const examCode = selectedExam ? selectedExam.code : 'EXAM';
-                    
-                    parsedPayload = {
-                      name: subjectForm.name,
-                      exam_id: subjectForm.grade_id, 
-                      subject_code: `${examCode}_${subjectForm.name.toUpperCase()}`,
-                      discipline: 'Competitive Exam',
-                      video_url: subjectForm.video_url || ""
-                    };
-                    targetUrl = '/api/admin/curriculum/exam/subjects';
-                  } else {
-                    parsedPayload = {
-                      name: subjectForm.name,
-                      grade_id: subjectForm.grade_id,
-                      subject_code: subjectForm.subject_code,
-                      discipline: 'General',
-                      video_url: subjectForm.video_url || ""
-                    };
-                    targetUrl = '/api/admin/curriculum/regular/subjects';
-                  }
-
-                  handleCreate(targetUrl, parsedPayload, () => 
-                    setSubjectForm({ name: '', subject_code: '', grade_id: '', discipline: 'Competitive Exam', video_url: '' })
-                  ); 
-                } else {
-                  alert("Please bind all parent properties required to commit the node row data.");
-                }
-              }} 
-              className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end"
-            >
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                  {activeTab === 'examSubjects' ? 'Target Exam Stream Index' : 'Grade Container Block'}
-                </label>
-                <select 
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" 
-                  value={subjectForm.grade_id} 
-                  onChange={e => setSubjectForm({...subjectForm, grade_id: e.target.value})}
-                >
-                  <option value="">{activeTab === 'examSubjects' ? 'Select Target Exam Row' : 'Select Target Grade Row'}</option>
-                  {activeTab === 'examSubjects' 
-                    ? data.exams?.map(ex => <option key={ex.id} value={ex.id}>{ex.name} ({ex.code})</option>)
-                    : data.grades?.map(g => <option key={g.id} value={g.id}>Grade {g.level} - {g.name}</option>)
-                  }
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Row Label</label>
-                <input type="text" placeholder="e.g., Quantitative Mechanics" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} />
-              </div>
-              
-              {activeTab === 'regSubjects' ? (
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Custom System Code</label>
-                  <input type="text" placeholder="e.g., BIO-CORE" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.subject_code} onChange={e => setSubjectForm({...subjectForm, subject_code: e.target.value})} />
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Calculated String Vector Preview</label>
-                  <div className="w-full bg-slate-900/50 border border-slate-800/40 rounded-xl p-3 text-xs text-slate-500 font-mono select-none h-[42px] flex items-center">
-                    {subjectForm.grade_id && subjectForm.name 
-                      ? `${(data.exams.find(ex => ex.id === subjectForm.grade_id)?.code || 'EXAM')}_${subjectForm.name.toUpperCase()}`
-                      : 'Awaiting parent selection assignments...'}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Video Resource URL Link</label>
-                <input type="text" placeholder="https://..." className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.video_url} onChange={e => setSubjectForm({...subjectForm, video_url: e.target.value})} />
-              </div>
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Subject Record</button>
-            </form>
-          )}
-        </div>
-
-        {/* TRACKING RECORD VIEW SHEET */}
-        <div className="flex-grow bg-slate-900/10 border border-slate-900 rounded-2xl overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-800/80 bg-slate-900/40">
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Subject Component Title / Unique Code</th>
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Database Object Key Sequence</th>
-                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">Actions Control</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentItems.map((item) => (
-                <tr key={item.id} className="border-b border-slate-900/60 hover:bg-slate-900/20 transition-all">
-                  <td className="p-4">
-                    {editingId === item.id ? (
-                      <div className="flex flex-col md:flex-row gap-2">
-                        <input type="text" className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
-                        <input type="text" className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white font-mono outline-none" value={editForm.subject_code} onChange={e => setEditForm({...editForm, subject_code: e.target.value})} />
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-200">{item.name || item.title || `Level Metric ${item.level || item.code}`}</span>
-                        {item.subject_code && (
-                          <span className="px-2 py-0.5 text-[9px] font-bold tracking-wider bg-slate-800 text-indigo-400 rounded border border-slate-700/60 uppercase">
-                            {item.subject_code}
-                          </span>
-                        )}
-                        {item.code && (
-                          <span className="px-2 py-0.5 text-[9px] font-bold tracking-wider bg-indigo-900/40 text-indigo-300 rounded border border-indigo-800/30 uppercase">
-                            {item.code}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-4 font-mono text-xs text-slate-500">{item.id}</td>
-                  <td className="p-4 text-right">
-                    {editingId === item.id ? (
-                      <div className="flex justify-end gap-1">
-                        <button onClick={() => handleUpdate(item.id, editForm)} className="p-2 text-green-400 hover:bg-green-500/10 rounded transition-all"><Check size={14} /></button>
-                        <button onClick={() => setEditingId(null)} className="p-2 text-slate-400 hover:bg-slate-800 rounded transition-all"><X size={14} /></button>
-                      </div>
-                    ) : (
-                      <div className="flex justify-end gap-1">
-                        {(activeTab === 'regSubjects' || activeTab === 'examSubjects') && (
-                          <button onClick={() => startInlineEditing(item)} className="p-2 text-slate-400 hover:text-indigo-400 transition-all"><Edit3 size={14} /></button>
-                        )}
-                        <button onClick={() => handleDelete(item.id)} className="p-2 text-slate-500 hover:text-red-400 transition-all"><Trash2 size={14} /></button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {currentItems.length === 0 && !loading && (
-                <tr>
-                  <td colSpan="3" className="p-20 text-center text-slate-600 font-medium italic text-xs">
-                    No matching records linked in current matrix data state.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </main>
+      )}
     </div>
   );
-};
-
-const TabButton = ({ id, icon, label, active, onClick }) => (
-  <button 
-    onClick={() => onClick(id)} 
-    className={`w-full flex items-center gap-3 p-3.5 rounded-xl font-bold transition-all duration-200 ${
-      active === id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
-    }`}
-  >
-    {icon}
-    <span className="text-xs tracking-wide">{label}</span>
-  </button>
-);
-
-export default AdminDashboard;
+}

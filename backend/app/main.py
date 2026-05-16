@@ -1,16 +1,16 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import engine  
-from app import models           
-from app.routers import curriculum, organizations, studio, ai_tutor 
+from app.database import engine
+from app import models
+from app.routers import organizations, curriculum, studio, ai_tutor 
 
 # Initialize database tables
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Ascenda API")
 
-# CORS Middleware
+# CORS Middleware config
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 

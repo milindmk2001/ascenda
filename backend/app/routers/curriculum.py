@@ -35,22 +35,18 @@ def create_grade(payload: schemas.GradeCreate, db: Session = Depends(get_db)):
     db.refresh(new_grade)
     return new_grade
 
-# --- ADMIN: K-12 REGULAR CORE SUBJECTS ---
+# --- ADMIN: REGULAR K-12 SUBJECTS ---
 @admin_router.get("/regular/subjects", response_model=List[schemas.RegularSubject])
 def get_regular_subjects(db: Session = Depends(get_db)):
     return db.query(models.RegularSubject).all()
 
 @admin_router.post("/regular/subjects", response_model=schemas.RegularSubject, status_code=201)
 def create_regular_subject(payload: schemas.AdminSubjectCreate, db: Session = Depends(get_db)):
-    grade = db.query(models.Grade).filter(models.Grade.id == payload.grade_id).first()
-    if not grade:
-        raise HTTPException(status_code=404, detail="Target container Grade level identifier missing.")
-
     new_sub = models.RegularSubject(
         name=payload.name,
-        subject_code=payload.subject_code.upper(),
+        subject_code=payload.subject_code,
         grade_id=payload.grade_id,
-        discipline=payload.discipline,
+        discipline=payload.discipline if payload.discipline else "General",
         video_url=payload.video_url
     )
     db.add(new_sub)
@@ -58,62 +54,30 @@ def create_regular_subject(payload: schemas.AdminSubjectCreate, db: Session = De
     db.refresh(new_sub)
     return new_sub
 
-@admin_router.put("/regular/subjects/{subject_id}", response_model=schemas.RegularSubject)
-def update_regular_subject(subject_id: UUID, payload: schemas.AdminSubjectCreate, db: Session = Depends(get_db)):
-    db_sub = db.query(models.RegularSubject).filter(models.RegularSubject.id == subject_id).first()
-    if not db_sub:
-        raise HTTPException(status_code=404, detail="Regular subject entity row missing in database.")
-        
-    db_sub.name = payload.name
-    db_sub.subject_code = payload.subject_code.upper()
-    db_sub.grade_id = payload.grade_id
-    db_sub.discipline = payload.discipline
-    db_sub.video_url = payload.video_url
-    
-    db.commit()
-    db.refresh(db_sub)
-    return db_sub
-
-@admin_router.delete("/regular/subjects/{subject_id}", status_code=204)
-def delete_regular_subject(subject_id: UUID, db: Session = Depends(get_db)):
-    db_sub = db.query(models.RegularSubject).filter(models.RegularSubject.id == subject_id).first()
-    if not db_sub:
-        raise HTTPException(status_code=404, detail="Target regular subject node not found.")
-    db.delete(db_sub)
-    db.commit()
-    return None
-
-# --- ADMIN: EXAMS ROOT STREAM ---
+# --- ADMIN: COMPETITIVE EXAMS ---
 @admin_router.get("/exams", response_model=List[schemas.ExamResponse])
-def get_all_exams(db: Session = Depends(get_db)):
+def get_exams(db: Session = Depends(get_db)):
     return db.query(models.Exam).all()
 
 @admin_router.post("/exams", response_model=schemas.ExamResponse, status_code=201)
-def create_exam_stream(payload: schemas.ExamCreate, db: Session = Depends(get_db)):
-    new_exam = models.Exam(
-        name=payload.name,
-        code=payload.code.upper()
-    )
+def create_exam(exam: schemas.ExamCreate, db: Session = Depends(get_db)):
+    new_exam = models.Exam(name=exam.name, code=exam.code)
     db.add(new_exam)
     db.commit()
     db.refresh(new_exam)
     return new_exam
 
-# --- ADMIN: COMPETITIVE EXAM SUBJECTS ---
+# --- ADMIN: COMPETITIVE EXAMS SUBJECTS ---
 @admin_router.get("/exam/subjects", response_model=List[schemas.ExamSubjectResponse])
 def get_exam_subjects(db: Session = Depends(get_db)):
     return db.query(models.ExamSubject).all()
 
 @admin_router.post("/exam/subjects", response_model=schemas.ExamSubjectResponse, status_code=201)
 def create_exam_subject(payload: schemas.ExamSubjectCreate, db: Session = Depends(get_db)):
-    exam_exists = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
-    if not exam_exists:
-        raise HTTPException(status_code=404, detail="Target tracking parent Exam reference missing.")
-        
     new_sub = models.ExamSubject(
-        name=payload.name,
-        subject_code=payload.subject_code.upper(),
         exam_id=payload.exam_id,
+        name=payload.name,
+        subject_code=payload.subject_code,
         discipline=payload.discipline if payload.discipline else "Competitive Exam",
         video_url=payload.video_url
     )
@@ -122,32 +86,7 @@ def create_exam_subject(payload: schemas.ExamSubjectCreate, db: Session = Depend
     db.refresh(new_sub)
     return new_sub
 
-@admin_router.put("/exam/subjects/{subject_id}", response_model=schemas.ExamSubjectResponse)
-def update_exam_subject(subject_id: UUID, payload: schemas.ExamSubjectCreate, db: Session = Depends(get_db)):
-    db_sub = db.query(models.ExamSubject).filter(models.ExamSubject.id == subject_id).first()
-    if not db_sub:
-        raise HTTPException(status_code=404, detail="Exam subject record entry not found in database.")
-        
-    db_sub.name = payload.name
-    db_sub.subject_code = payload.subject_code.upper()
-    db_sub.exam_id = payload.exam_id
-    db_sub.discipline = payload.discipline if payload.discipline else "Competitive Exam"
-    db_sub.video_url = payload.video_url
-    
-    db.commit()
-    db.refresh(db_sub)
-    return db_sub
-
-@admin_router.delete("/exam/subjects/{subject_id}", status_code=204)
-def delete_exam_subject(subject_id: UUID, db: Session = Depends(get_db)):
-    db_sub = db.query(models.ExamSubject).filter(models.ExamSubject.id == subject_id).first()
-    if not db_sub:
-        raise HTTPException(status_code=404, detail="Exam subject record entry not found.")
-    db.delete(db_sub)
-    db.commit()
-    return None
-
-# --- ADMIN: SUBJECT AREAS (UNITS) ---
+# --- ADMIN: K-12 SUBJECT STRUCTURAL AREAS ---
 @admin_router.get("/regular/subject-areas", response_model=List[schemas.RegularSubjectArea])
 def get_regular_subject_areas(db: Session = Depends(get_db)):
     return db.query(models.RegularSubjectArea).all()
