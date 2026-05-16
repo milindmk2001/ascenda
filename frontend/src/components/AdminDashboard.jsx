@@ -1,36 +1,11 @@
 import React, { useState, useEffect } from 'react';
 
-interface ExamSubject {
-  id: string;
-  exam_id: string;
-  name: string;
-  subject_code: string;
-  discipline: string;
-  video_url?: string;
-  exam?: {
-    id: string;
-    name: string;
-    code: string;
-  };
-}
-
-interface Exam {
-  id: string;
-  name: string;
-  code: string;
-}
-
-interface AdminDashboardProps {
-  apiBase: string;
-  onExit: () => void;
-}
-
-export default function AdminDashboard({ apiBase, onExit }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'exams' | 'subjects'>('exams');
-  const [exams, setExams] = useState<Exam[]>([]);
-  const [examSubjects, setExamSubjects] = useState<ExamSubject[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+export default function AdminDashboard({ apiBase, onExit }) {
+  const [activeTab, setActiveTab] = useState('exams');
+  const [exams, setExams] = useState([]);
+  const [examSubjects, setExamSubjects] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   // Form Fields
   const [examName, setExamName] = useState('');
@@ -40,7 +15,7 @@ export default function AdminDashboard({ apiBase, onExit }: AdminDashboardProps)
   const [subjectCode, setSubjectCode] = useState('');
   const [discipline, setDiscipline] = useState('Competitive Exam');
 
-  // Load configuration options cleanly
+  // Load context structures safely
   useEffect(() => {
     fetchData();
   }, [activeTab]);
@@ -50,25 +25,29 @@ export default function AdminDashboard({ apiBase, onExit }: AdminDashboardProps)
     setErrorMsg(null);
     try {
       if (activeTab === 'exams') {
-        const res = await fetch(`${apiBase}/api/admin/curriculum/exams`);
+        const res = await fetch(`${apiBase}/api/admin/curriculum/exams`).catch(() => {
+          throw new Error("Unable to establish communication channel to Exams infrastructure service mapping.");
+        });
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(`Server returned ${res.status}: ${text}`);
+          throw new Error(`Server execution variance (${res.status}): ${text}`);
         }
         const data = await res.json();
         setExams(Array.isArray(data) ? data : []);
       } else {
-        const res = await fetch(`${apiBase}/api/admin/curriculum/exam/subjects`);
+        const res = await fetch(`${apiBase}/api/admin/curriculum/exam/subjects`).catch(() => {
+          throw new Error("Unable to settle connection path with Exam Subjects database partition.");
+        });
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(`Server returned ${res.status}: ${text}`);
+          throw new Error(`Server execution variance (${res.status}): ${text}`);
         }
         const data = await res.json();
         setExamSubjects(Array.isArray(data) ? data : []);
 
-        // Populate selection dropdown and set initial default selection configuration binding
-        const examRes = await fetch(`${apiBase}/api/admin/curriculum/exams`);
-        if (examRes.ok) {
+        // Also refresh selection keys dropdown cleanly
+        const examRes = await fetch(`${apiBase}/api/admin/curriculum/exams`).catch(() => null);
+        if (examRes && examRes.ok) {
           const examData = await examRes.json();
           const safeExams = Array.isArray(examData) ? examData : [];
           setExams(safeExams);
@@ -77,15 +56,15 @@ export default function AdminDashboard({ apiBase, onExit }: AdminDashboardProps)
           }
         }
       }
-    } catch (err: any) {
-      console.error("Administrative Ingestion Engine Fetch Failure:", err);
-      setErrorMsg(err.message || "An error occurred while loading content.");
+    } catch (err) {
+      console.error("Administrative Fetch Core Failure:", err);
+      setErrorMsg(err.message || "Failed to cleanly synchronize administrative asset matrix entries.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateExam = async (e: React.FormEvent) => {
+  const handleCreateExam = async (e) => {
     e.preventDefault();
     if (!examName || !examCode) return;
     try {
@@ -94,19 +73,19 @@ export default function AdminDashboard({ apiBase, onExit }: AdminDashboardProps)
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: examName, code: examCode })
       });
-      if (!res.ok) throw new Error("Could not construct standard exam model framework reference.");
+      if (!res.ok) throw new Error("Could not register unique core target assessment system profile model tracking data.");
       setExamName('');
       setExamCode('');
       fetchData();
-    } catch (err: any) {
+    } catch (err) {
       alert(err.message);
     }
   };
 
-  const handleCreateExamSubject = async (e: React.FormEvent) => {
+  const handleCreateExamSubject = async (e) => {
     e.preventDefault();
     if (!selectedExamId || !subjectName || !subjectCode) {
-      alert("Please ensure a core target exam track track association link is specified.");
+      alert("Please ensure an explicit target testing schema track mapping association parameter is bounded.");
       return;
     }
     try {
@@ -121,114 +100,114 @@ export default function AdminDashboard({ apiBase, onExit }: AdminDashboardProps)
           video_url: ""
         })
       });
-      if (!res.ok) throw new Error("Failed to register structural subject profile context mapping object.");
+      if (!res.ok) throw new Error("Could not associate custom examination content node onto target data repository structural array.");
       setSubjectName('');
       setSubjectCode('');
       fetchData();
-    } catch (err: any) {
+    } catch (err) {
       alert(err.message);
     }
   };
 
   return (
     <div className="flex-grow p-6 bg-slate-900 text-white flex flex-col font-sans">
-      <header className="flex justify-between items-center border-b border-slate-700 pb-4 mb-6">
+      <header className="flex justify-between items-center border-b border-slate-800 pb-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-emerald-400">Ascenda Curriculum Content Studio</h1>
-          <p className="text-sm text-slate-400">Administrative Target Mapping & Strategy Ingestion Portal</p>
+          <h1 className="text-xl font-black tracking-tight text-emerald-400 uppercase">Ascenda Ingestion Console</h1>
+          <p className="text-xs text-slate-400 font-mono">Environment Status Monitor Matrix & Configuration Portal</p>
         </div>
         <button 
           onClick={onExit}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded transition"
+          className="px-4 py-1.5 bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-lg text-xs font-bold transition"
         >
-          Exit Dashboard
+          Return to Hub Engine
         </button>
       </header>
 
-      <div className="flex gap-4 mb-6">
+      <div className="flex gap-2 mb-6 bg-slate-950 p-1 border border-slate-800 rounded-lg max-w-xs">
         <button
           onClick={() => setActiveTab('exams')}
-          className={`px-4 py-2 font-medium rounded transition ${activeTab === 'exams' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+          className={`flex-1 text-center py-1.5 text-xs font-bold rounded-md transition ${activeTab === 'exams' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'}`}
         >
-          Competitive Exams
+          Assessment Tracks
         </button>
         <button
           onClick={() => setActiveTab('subjects')}
-          className={`px-4 py-2 font-medium rounded transition ${activeTab === 'subjects' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+          className={`flex-1 text-center py-1.5 text-xs font-bold rounded-md transition ${activeTab === 'subjects' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'}`}
         >
-          Exam Content Subjects
+          Track Subjects
         </button>
       </div>
 
       {errorMsg && (
-        <div className="p-4 mb-6 bg-red-900/40 border border-red-700 text-red-200 rounded text-sm">
-          <strong>Initialization Notice:</strong> {errorMsg}
+        <div className="p-4 mb-6 bg-red-950/50 border border-red-800 text-red-300 rounded-lg text-xs font-mono">
+          <strong>Initialization Override Alert:</strong> {errorMsg}
         </div>
       )}
 
       {loading ? (
-        <div className="flex-grow flex items-center justify-center text-slate-400 text-sm tracking-widest animate-pulse">
-          SYNCHRONIZING CURRICULUM ASSETS ENGINE...
+        <div className="flex-grow flex items-center justify-center text-slate-500 font-mono text-xs tracking-widest animate-pulse">
+          FETCHING CLUSTER CONTEXT ENTRIES DEPLOYMENT CHANNELS...
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-grow items-start">
           
-          {/* Action Formulation Panel Form entries */}
-          <div className="bg-slate-800 p-5 rounded-lg border border-slate-700 shadow-xl">
-            <h2 className="text-lg font-semibold mb-4 text-slate-200">
-              {activeTab === 'exams' ? 'Register Competitive Core Track' : 'Append Subject Matrix Area'}
+          {/* Form Action Management Cards */}
+          <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 shadow-2xl">
+            <h2 className="text-sm font-bold tracking-wide uppercase mb-4 text-slate-300">
+              {activeTab === 'exams' ? 'Provision Testing Track' : 'Inject Subject Module Node'}
             </h2>
             
             {activeTab === 'exams' ? (
               <form onSubmit={handleCreateExam} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Exam Track Name</label>
-                  <input type="text" value={examName} onChange={e => setExamName(e.target.value)} placeholder="e.g., IIT JEE Advanced" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-emerald-500" />
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 font-mono">Track Nomenclature Title</label>
+                  <input type="text" value={examName} onChange={e => setExamName(e.target.value)} placeholder="e.g., IIT JEE Advanced" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-slate-700" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Unique Identifier Code</label>
-                  <input type="text" value={examCode} onChange={e => setExamCode(e.target.value)} placeholder="e.g., IITJEE" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-emerald-500" />
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 font-mono">System Validation Tracking Code</label>
+                  <input type="text" value={examCode} onChange={e => setExamCode(e.target.value)} placeholder="e.g., IITJEE" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-slate-700" />
                 </div>
-                <button type="submit" className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 font-medium rounded text-white transition shadow-lg shadow-emerald-900/20">Commit Entry Asset</button>
+                <button type="submit" className="w-full py-2 bg-slate-800 hover:bg-slate-700 font-bold rounded-lg text-xs tracking-wide uppercase text-white transition border border-slate-700">Commit Core Track Blueprint</button>
               </form>
             ) : (
               <form onSubmit={handleCreateExamSubject} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Target Assessment Track</label>
-                  <select value={selectedExamId} onChange={e => setSelectedExamId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-emerald-500">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 font-mono">Target Blueprint Association</label>
+                  <select value={selectedExamId} onChange={e => setSelectedExamId(e.target.value)} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-300 focus:outline-none focus:border-slate-700 cursor-pointer">
                     <option value="">-- Connect Core Target Track --</option>
                     {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.name} ({ex.code})</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Subject Nomenclature Title</label>
-                  <input type="text" value={subjectName} onChange={e => setSubjectName(e.target.value)} placeholder="e.g., Advanced Physical Chemistry" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-emerald-500" />
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 font-mono">Module Content Name</label>
+                  <input type="text" value={subjectName} onChange={e => setSubjectName(e.target.value)} placeholder="e.g., Advanced Physical Chemistry" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-slate-700" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Subject Tracking Code</label>
-                  <input type="text" value={subjectCode} onChange={e => setSubjectCode(e.target.value)} placeholder="e.g., JEE_CHEM" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-emerald-500" />
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 font-mono">Operational System Code</label>
+                  <input type="text" value={subjectCode} onChange={e => setSubjectCode(e.target.value)} placeholder="e.g., JEE_CHEM" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-slate-700" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Discipline Segment Category</label>
-                  <input type="text" value={discipline} onChange={e => setDiscipline(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-emerald-500" />
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 font-mono">Discipline Domain Category</label>
+                  <input type="text" value={discipline} onChange={e => setDiscipline(e.target.value)} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-slate-700" />
                 </div>
-                <button type="submit" className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 font-medium rounded text-white transition shadow-lg shadow-emerald-900/20">Commit Subject Asset</button>
+                <button type="submit" className="w-full py-2 bg-slate-800 hover:bg-slate-700 font-bold rounded-lg text-xs tracking-wide uppercase text-white transition border border-slate-700">Commit Subject Track Blueprint</button>
               </form>
             )}
           </div>
 
-          {/* Active Structural Assets Real-Time Verification Tables */}
-          <div className="lg:col-span-2 bg-slate-800 p-5 rounded-lg border border-slate-700 shadow-xl self-stretch overflow-y-auto max-h-[70vh]">
-            <h2 className="text-lg font-semibold mb-4 text-slate-200">Active Live Ingestions Monitor</h2>
+          {/* Operational Verification Display Stream Grid tables */}
+          <div className="lg:col-span-2 bg-slate-950 p-5 rounded-xl border border-slate-800 shadow-2xl self-stretch overflow-y-auto max-h-[68vh]">
+            <h2 className="text-sm font-bold tracking-wide uppercase mb-4 text-slate-300">Live Active Node Streams</h2>
             {activeTab === 'exams' ? (
               <div className="space-y-2">
                 {exams.length === 0 ? (
-                  <p className="text-slate-500 text-sm italic">No core exam tracks discovered in operational context data store links.</p>
+                  <p className="text-slate-600 text-xs italic font-mono p-4 bg-slate-900 rounded-lg border border-slate-900">No active operational target testing frameworks returned.</p>
                 ) : (
                   exams.map(ex => (
-                    <div key={ex.id} className="p-3 bg-slate-900 border border-slate-700 rounded flex justify-between items-center hover:border-slate-500 transition">
-                      <span className="font-medium text-slate-100">{ex.name}</span>
-                      <span className="px-2 py-0.5 bg-slate-800 border border-slate-600 text-emerald-400 font-mono text-xs rounded uppercase tracking-wider">{ex.code}</span>
+                    <div key={ex.id} className="p-3 bg-slate-900 border border-slate-800/60 rounded-lg flex justify-between items-center hover:border-slate-700 transition">
+                      <span className="text-xs font-bold text-slate-200 tracking-wide">{ex.name}</span>
+                      <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 text-emerald-400 font-mono text-[10px] font-bold rounded uppercase tracking-widest">{ex.code}</span>
                     </div>
                   ))
                 )}
@@ -236,17 +215,17 @@ export default function AdminDashboard({ apiBase, onExit }: AdminDashboardProps)
             ) : (
               <div className="space-y-2">
                 {examSubjects.length === 0 ? (
-                  <p className="text-slate-500 text-sm italic">No active specialized test matrix modules discovered.</p>
+                  <p className="text-slate-600 text-xs italic font-mono p-4 bg-slate-900 rounded-lg border border-slate-900">No content structure nodes currently bound onto tracking routes.</p>
                 ) : (
                   examSubjects.map(sub => (
-                    <div key={sub.id} className="p-3 bg-slate-900 border border-slate-700 rounded flex flex-col sm:flex-row justify-between sm:items-center gap-2 hover:border-slate-500 transition">
+                    <div key={sub.id} className="p-3 bg-slate-900 border border-slate-800/60 rounded-lg flex flex-col sm:flex-row justify-between sm:items-center gap-2 hover:border-slate-700 transition">
                       <div>
-                        <div className="font-medium text-slate-100">{sub.name}</div>
-                        <div className="text-xs text-slate-400 mt-0.5">Parent Association: <span className="text-slate-300 font-semibold">{sub.exam?.name || "Global / Base Track Pool"}</span></div>
+                        <div className="text-xs font-bold text-slate-200 tracking-wide">{sub.name}</div>
+                        <div className="text-[10px] font-mono text-slate-500 mt-0.5">Parent Scope: <span className="text-slate-400 font-semibold">{sub.exam?.name || "Global Core Pool Base"}</span></div>
                       </div>
                       <div className="flex gap-2 items-center self-start sm:self-center">
-                        <span className="text-xs px-2 py-0.5 bg-emerald-950/50 text-emerald-400 border border-emerald-800/40 rounded-full font-medium">{sub.discipline}</span>
-                        <span className="px-2 py-0.5 bg-slate-800 border border-slate-600 text-slate-300 font-mono text-xs rounded uppercase tracking-wider">{sub.subject_code}</span>
+                        <span className="text-[10px] px-2 py-0.5 bg-slate-950 text-slate-400 border border-slate-800 rounded-full font-bold uppercase tracking-wider">{sub.discipline}</span>
+                        <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 text-slate-300 font-mono text-[10px] font-bold rounded uppercase tracking-widest">{sub.subject_code}</span>
                       </div>
                     </div>
                   ))
