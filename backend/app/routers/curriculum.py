@@ -156,3 +156,52 @@ def create_exam_subject_area(area: schemas.RegularSubjectAreaCreate, db: Session
     db.commit()
     db.refresh(new_area)
     return new_area
+
+# ==========================================
+# --- ADMIN: EXAM STREAMS MANAGEMENT ---
+# ==========================================
+
+@admin_router.get("/exam/subjects", response_model=List[schemas.RegularSubject])
+def get_exam_subjects(db: Session = Depends(get_db)):
+    """Fetch only subjects belonging to competitive exam streams."""
+    return db.query(models.RegularSubject).filter(models.RegularSubject.discipline == "Exam").all()
+
+@admin_router.post("/exam/subjects", response_model=schemas.RegularSubject, status_code=201)
+def create_exam_subject(payload: schemas.AdminSubjectCreate, db: Session = Depends(get_db)):
+    """Create a subject explicitly tagged for competitive exam architecture."""
+    # Safety boundary validation check
+    grade = db.query(models.Grade).filter(models.Grade.id == payload.grade_id).first()
+    if not grade:
+        raise HTTPException(status_code=404, detail="Target container Grade level identifier missing.")
+
+    new_sub = models.RegularSubject(
+        name=payload.name,
+        subject_code=payload.subject_code.upper(),
+        grade_id=payload.grade_id,
+        discipline="Exam",  # Force set to separate from standard K-12 core classes
+        video_url=payload.video_url
+    )
+    db.add(new_sub)
+    db.commit()
+    db.refresh(new_sub)
+    return new_sub
+
+# --- ADMIN: EXAM SPECIALTIES (Subject Areas) ---
+
+@admin_router.get("/exam/subject-areas", response_model=List[schemas.RegularSubjectArea])
+def get_exam_subject_areas(db: Session = Depends(get_db)):
+    """List out unit modules associated with exam paths."""
+    return db.query(models.RegularSubjectArea).all()
+
+@admin_router.post("/exam/subject-areas", response_model=schemas.RegularSubjectArea, status_code=201)
+def create_exam_subject_area(area: schemas.RegularSubjectAreaCreate, db: Session = Depends(get_db)):
+    """Bind a structural unit/specialty topic area to a subject node."""
+    new_area = models.RegularSubjectArea(
+        name=area.name,
+        sequence_order=area.sequence_order,
+        subject_id=area.subject_id
+    )
+    db.add(new_area)
+    db.commit()
+    db.refresh(new_area)
+    return new_area

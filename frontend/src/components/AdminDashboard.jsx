@@ -130,7 +130,21 @@ const AdminDashboard = ({ apiBase, onExit }) => {
           )}
 
           {(activeTab === 'regSubjects' || activeTab === 'examSubjects') && (
-            <form onSubmit={(e) => { e.preventDefault(); if(subjectForm.name && subjectForm.subject_code && subjectForm.grade_id) handleCreate('/api/admin/curriculum/subjects', subjectForm, () => setSubjectForm({ name: '', subject_code: '', grade_id: '', discipline: 'General', video_url: '' })); }} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+            <form 
+              onSubmit={(e) => { 
+                e.preventDefault(); 
+                if(subjectForm.name && subjectForm.subject_code && subjectForm.grade_id) {
+                  const targetUrl = activeTab === 'examSubjects' 
+                    ? '/api/admin/curriculum/exam/subjects' 
+                    : '/api/admin/curriculum/subjects';
+                    
+                  handleCreate(targetUrl, subjectForm, () => 
+                    setSubjectForm({ name: '', subject_code: '', grade_id: '', discipline: 'General', video_url: '' })
+                  ); 
+                }
+              }} 
+              className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end"
+            >
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Container Grade</label>
                 <select className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={subjectForm.grade_id} onChange={e => setSubjectForm({...subjectForm, grade_id: e.target.value})}>
