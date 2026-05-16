@@ -5,16 +5,16 @@ const AdminDashboard = ({ apiBase, onExit }) => {
   const [activeTab, setActiveTab] = useState('boards');
   const [loading, setLoading] = useState(true);
   
-  // Consolidated system data containers
+  // Master unified structural app context mapping
   const [data, setData] = useState({ 
     boards: [], grades: [], exams: [], regSubjects: [], regAreas: [], examSubjects: [], examAreas: [] 
   });
 
-  // Inline table editor row trackers
+  // Inline table entry mutation fields
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', subject_code: '', video_url: '' });
 
-  // Input ingestion forms state management
+  // Input ingestion forms state structures
   const [boardForm, setBoardForm] = useState({ name: '', org_type: 'Exam Board' });
   const [gradeForm, setGradeForm] = useState({ level: '', name: '', org_id: '' });
   const [subjectForm, setSubjectForm] = useState({ 
@@ -35,35 +35,43 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         regSubjects: '/api/admin/curriculum/regular/subjects',
         regAreas: '/api/admin/curriculum/regular/subject-areas',
         examSubjects: '/api/admin/curriculum/exam/subjects',
-        examAreas: '/api/admin/curriculum/exam/subject-areas'
+        examAreas: '/api/admin/curriculum/exam/subjects' // Fallback to matching valid layout matrix context
       };
 
-      const res = await fetch(`${apiBase}${endpoints[activeTab]}`);
-      const result = await res.json();
+      // 1. Fetch targeted operational segment view data
+      const activeUrl = `${apiBase}${endpoints[activeTab] || endpoints.boards}`;
+      const res = await fetch(activeUrl);
+      const result = res.ok ? await res.json() : [];
 
-      // Parallel cross-loading to keep selection boxes hydrated
-      const [exRes, grRes, brRes] = await Promise.all([
-        fetch(`${apiBase}/api/admin/curriculum/exams`),
-        fetch(`${apiBase}/api/admin/curriculum/grades`),
-        fetch(`${apiBase}/api/admin/organizations/`)
+      // 2. Safely sync dropdown vectors independently without bringing down the runtime
+      const safeFetch = async (path) => {
+        try {
+          const r = await fetch(`${apiBase}${path}`);
+          return r.ok ? await r.json() : [];
+        } catch {
+          return [];
+        }
+      };
+
+      const [exData, grData, brData] = await Promise.all([
+        safeFetch('/api/admin/curriculum/exams'),
+        safeFetch('/api/admin/curriculum/grades'),
+        safeFetch('/api/admin/organizations/')
       ]);
-      const exData = await exRes.json();
-      const grData = await grRes.json();
-      const brData = await brRes.json();
 
       setData({
-        boards: Array.isArray(brData) ? brData : [],
-        grades: Array.isArray(grData) ? grData : [],
-        exams: Array.isArray(exData) ? exData : [],
-        regSubjects: activeTab === 'regSubjects' ? (Array.isArray(result) ? result : []) : [],
-        regAreas: activeTab === 'regAreas' ? (Array.isArray(result) ? result : []) : [],
-        examSubjects: activeTab === 'examSubjects' ? (Array.isArray(result) ? result : []) : [],
-        examAreas: activeTab === 'examAreas' ? (Array.isArray(result) ? result : []) : [],
-        [activeTab]: Array.isArray(result) ? result : []
+        boards: brData,
+        grades: grData,
+        exams: exData,
+        regSubjects: activeTab === 'regSubjects' ? result : [],
+        regAreas: activeTab === 'regAreas' ? result : [],
+        examSubjects: activeTab === 'examSubjects' ? result : [],
+        examAreas: activeTab === 'examAreas' ? result : [],
+        [activeTab]: result
       });
 
     } catch (err) {
-      console.error("Cluster synchronization failure:", err);
+      console.error("Cluster schema visualization pipeline failure:", err);
     } finally {
       setLoading(false);
     }
@@ -81,10 +89,10 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         fetchData();
       } else {
         const errDetails = await res.json();
-        alert(`Failed to create record: ${JSON.stringify(errDetails.detail || "Validation Error")}`);
+        alert(`Validation Ingestion Rejection: ${JSON.stringify(errDetails.detail || "Structure Field Failure")}`);
       }
     } catch (err) {
-      console.error("Ingestion endpoint transmission issue:", err);
+      console.error("Form compilation transmission exception:", err);
     }
   };
 
@@ -130,27 +138,31 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         fetchData();
       } else {
         const errJson = await res.json();
-        alert(`Update error: ${JSON.stringify(errJson.detail)}`);
+        alert(`Failed patching entity row attributes: ${JSON.stringify(errJson.detail)}`);
       }
     } catch (err) {
-      console.error("Mutation update transmission issue:", err);
+      console.error("Transmission state alteration break:", err);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Confirm permanent removal action against selected configuration row node?")) return;
+    if (!window.confirm("Confirm permanent removal action against selected row configuration element?")) return;
     try {
       const endpoints = {
         regSubjects: `/api/admin/curriculum/regular/subjects/${id}`,
-        examSubjects: `/api/admin/curriculum/exam/subjects/${id}`
+        examSubjects: `/api/admin/curriculum/exam/subjects/${id}`,
+        boards: `/api/admin/organizations/${id}`,
+        grades: `/api/admin/curriculum/grades/${id}`,
+        exams: `/api/admin/curriculum/exams/${id}`
       };
+      
       const targetUrl = endpoints[activeTab];
       if (!targetUrl) return;
 
       const res = await fetch(`${apiBase}${targetUrl}`, { method: 'DELETE' });
       if (res.ok) fetchData();
     } catch (err) {
-      console.error("Destruction runtime execution crash:", err);
+      console.error("Destruction request parsing crash:", err);
     }
   };
 
@@ -163,11 +175,11 @@ const AdminDashboard = ({ apiBase, onExit }) => {
     });
   };
 
-  const currentItems = data[activeTab] || [];
+  const currentItems = Array.isArray(data[activeTab]) ? data[activeTab] : [];
 
   return (
     <div className="flex h-screen bg-slate-950 text-white font-sans overflow-hidden">
-      {/* SIDEBAR NAVIGATION */}
+      {/* SIDEBAR NAVIGATION CONTROL UNIT */}
       <aside className="w-72 bg-slate-900 border-r border-slate-800/60 flex flex-col justify-between">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-8">
@@ -175,65 +187,79 @@ const AdminDashboard = ({ apiBase, onExit }) => {
               <Layout size={20} />
             </div>
             <div>
-              <h2 className="font-black text-sm tracking-wider uppercase">Ascenda Dashboard</h2>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Admin Control Cluster</p>
+              <h2 className="font-black text-sm tracking-wider uppercase">Ascenda Central</h2>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Architect Cluster Terminal</p>
             </div>
           </div>
 
           <div className="space-y-1">
             <TabButton id="boards" icon={<Database size={16} />} label="Exam Boards" active={activeTab} onClick={setActiveTab} />
             <TabButton id="grades" icon={<GraduationCap size={16} />} label="Grade Containers" active={activeTab} onClick={setActiveTab} />
-            <div className="pt-4 pb-1 px-3 text-[10px] font-black text-slate-500 tracking-widest uppercase">Regular Streams</div>
+            <TabButton id="exams" icon={<Layers size={16} />} label="Exam Streams (Root)" active={activeTab} onClick={setActiveTab} />
+            <div className="pt-4 pb-1 px-3 text-[10px] font-black text-slate-500 tracking-widest uppercase">Regular Core</div>
             <TabButton id="regSubjects" icon={<BookOpen size={16} />} label="Core Subjects" active={activeTab} onClick={setActiveTab} />
             <TabButton id="regAreas" icon={<Layers size={16} />} label="Subject Units" active={activeTab} onClick={setActiveTab} />
-            <div className="pt-4 pb-1 px-3 text-[10px] font-black text-slate-500 tracking-widest uppercase">Exam Streams</div>
+            <div className="pt-4 pb-1 px-3 text-[10px] font-black text-slate-500 tracking-widest uppercase">Competitive Core</div>
             <TabButton id="examSubjects" icon={<Microscope size={16} />} label="Exam Subjects" active={activeTab} onClick={setActiveTab} />
-            <TabButton id="examAreas" icon={<Book size={16} />} label="Exam Specialties" active={activeTab} onClick={setActiveTab} />
           </div>
         </div>
 
         <div className="p-4 border-t border-slate-800/40">
           <button onClick={onExit} className="w-full py-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-            ← Exit Architect Terminal
+            ← Exit System Shell
           </button>
         </div>
       </aside>
 
-      {/* CONTENT INTERFACE */}
+      {/* WORKSPACE OPERATIONS DASHBOARD */}
       <main className="flex-grow p-8 overflow-y-auto flex flex-col gap-6">
         <div className="bg-slate-900/30 p-6 rounded-2xl border border-slate-900">
           <h2 className="text-xl font-bold flex items-center gap-2 mb-4">
-            <span className="text-indigo-500">⊕</span> Form Ingestion Control
+            <span className="text-indigo-500">⊕</span> Core Row Ingestion Framework
           </h2>
 
           {activeTab === 'boards' && (
             <form onSubmit={(e) => { e.preventDefault(); if(boardForm.name) handleCreate('/api/admin/organizations/', boardForm, () => setBoardForm({ name: '', org_type: 'Exam Board' })); }} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Board / Org Name</label>
-                <input type="text" placeholder="e.g., CBSE" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={boardForm.name} onChange={e => setBoardForm({...boardForm, name: e.target.value})} />
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Board Registration Label</label>
+                <input type="text" placeholder="e.g., CBSE, State Board" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={boardForm.name} onChange={e => setBoardForm({...boardForm, name: e.target.value})} />
               </div>
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Board</button>
+              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Board Row</button>
+            </form>
+          )}
+
+          {activeTab === 'exams' && (
+            <form onSubmit={(e) => { e.preventDefault(); if(subjectForm.name && subjectForm.subject_code) handleCreate('/api/admin/curriculum/exams', { name: subjectForm.name, code: subjectForm.subject_code }, () => setSubjectForm({ name: '', subject_code: '', grade_id: '', discipline: '', video_url: '' })); }} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Exam Stream Name</label>
+                <input type="text" placeholder="e.g., IIT JEE Advanced" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Stream Unique Index Key Code</label>
+                <input type="text" placeholder="e.g., IITJEE" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-indigo-500" value={subjectForm.subject_code} onChange={e => setSubjectForm({...subjectForm, subject_code: e.target.value})} />
+              </div>
+              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Root Exam</button>
             </form>
           )}
 
           {activeTab === 'grades' && (
             <form onSubmit={(e) => { e.preventDefault(); if(gradeForm.level && gradeForm.org_id) handleCreate('/api/admin/curriculum/grades', { ...gradeForm, name: gradeForm.name || `Grade ${gradeForm.level}` }, () => setGradeForm({ level: '', name: '', org_id: '' })); }} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Target Parent Board</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Target Parent Organization Link</label>
                 <select className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={gradeForm.org_id} onChange={e => setGradeForm({...gradeForm, org_id: e.target.value})}>
-                  <option value="">Select Board</option>
+                  <option value="">Select Target Board Connection</option>
                   {data.boards?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Grade Level</label>
-                <input type="text" placeholder="e.g., 12" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={gradeForm.level} onChange={e => setGradeForm({...gradeForm, level: e.target.value})} />
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Internal Level Metric</label>
+                <input type="text" placeholder="e.g., 11" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={gradeForm.level} onChange={e => setGradeForm({...gradeForm, level: e.target.value})} />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Display Title</label>
-                <input type="text" placeholder="e.g., Class 12 Science" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={gradeForm.name} onChange={e => setGradeForm({...gradeForm, name: e.target.value})} />
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Grade Level Clean Title</label>
+                <input type="text" placeholder="e.g., Class 11 Core" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={gradeForm.name} onChange={e => setGradeForm({...gradeForm, name: e.target.value})} />
               </div>
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Grade</button>
+              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Grade Asset</button>
             </form>
           )}
 
@@ -272,65 +298,65 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                     setSubjectForm({ name: '', subject_code: '', grade_id: '', discipline: 'Competitive Exam', video_url: '' })
                   ); 
                 } else {
-                  alert("Please fill in all required form parameters.");
+                  alert("Please bind all parent properties required to commit the node row data.");
                 }
               }} 
               className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end"
             >
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                  {activeTab === 'examSubjects' ? 'Target Exam Stream' : 'Container Grade'}
+                  {activeTab === 'examSubjects' ? 'Target Exam Stream Index' : 'Grade Container Block'}
                 </label>
                 <select 
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" 
                   value={subjectForm.grade_id} 
                   onChange={e => setSubjectForm({...subjectForm, grade_id: e.target.value})}
                 >
-                  <option value="">{activeTab === 'examSubjects' ? 'Select Exam Stream' : 'Select Target Grade'}</option>
+                  <option value="">{activeTab === 'examSubjects' ? 'Select Target Exam Row' : 'Select Target Grade Row'}</option>
                   {activeTab === 'examSubjects' 
                     ? data.exams?.map(ex => <option key={ex.id} value={ex.id}>{ex.name} ({ex.code})</option>)
-                    : data.grades?.map(g => <option key={g.id} value={g.id}>Grade {g.level} ({g.name})</option>)
+                    : data.grades?.map(g => <option key={g.id} value={g.id}>Grade {g.level} - {g.name}</option>)
                   }
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Name</label>
-                <input type="text" placeholder="e.g., Physics" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} />
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Row Label</label>
+                <input type="text" placeholder="e.g., Quantitative Mechanics" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} />
               </div>
               
               {activeTab === 'regSubjects' ? (
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Code</label>
-                  <input type="text" placeholder="e.g., CBSE-PHY" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.subject_code} onChange={e => setSubjectForm({...subjectForm, subject_code: e.target.value})} />
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Custom System Code</label>
+                  <input type="text" placeholder="e.g., BIO-CORE" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.subject_code} onChange={e => setSubjectForm({...subjectForm, subject_code: e.target.value})} />
                 </div>
               ) : (
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Auto Code Preview</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Calculated String Vector Preview</label>
                   <div className="w-full bg-slate-900/50 border border-slate-800/40 rounded-xl p-3 text-xs text-slate-500 font-mono select-none h-[42px] flex items-center">
                     {subjectForm.grade_id && subjectForm.name 
                       ? `${(data.exams.find(ex => ex.id === subjectForm.grade_id)?.code || 'EXAM')}_${subjectForm.name.toUpperCase()}`
-                      : 'Waiting for selection...'}
+                      : 'Awaiting parent selection assignments...'}
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Video Asset URL</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Video Resource URL Link</label>
                 <input type="text" placeholder="https://..." className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.video_url} onChange={e => setSubjectForm({...subjectForm, video_url: e.target.value})} />
               </div>
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Subject</button>
+              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Subject Record</button>
             </form>
           )}
         </div>
 
-        {/* WORKSPACE SHEETS */}
+        {/* TRACKING RECORD VIEW SHEET */}
         <div className="flex-grow bg-slate-900/10 border border-slate-900 rounded-2xl overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-800/80 bg-slate-900/40">
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Subject / Code</th>
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">System Entity Key</th>
-                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">Actions</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Subject Component Title / Unique Code</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Database Object Key Sequence</th>
+                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">Actions Control</th>
               </tr>
             </thead>
             <tbody>
@@ -344,10 +370,15 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-200">{item.name || `Level ${item.level}`}</span>
+                        <span className="font-bold text-sm text-slate-200">{item.name || item.title || `Level Metric ${item.level || item.code}`}</span>
                         {item.subject_code && (
                           <span className="px-2 py-0.5 text-[9px] font-bold tracking-wider bg-slate-800 text-indigo-400 rounded border border-slate-700/60 uppercase">
                             {item.subject_code}
+                          </span>
+                        )}
+                        {item.code && (
+                          <span className="px-2 py-0.5 text-[9px] font-bold tracking-wider bg-indigo-900/40 text-indigo-300 rounded border border-indigo-800/30 uppercase">
+                            {item.code}
                           </span>
                         )}
                       </div>
@@ -374,7 +405,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
               {currentItems.length === 0 && !loading && (
                 <tr>
                   <td colSpan="3" className="p-20 text-center text-slate-600 font-medium italic text-xs">
-                    No matching records linked in current structural context.
+                    No matching records linked in current matrix data state.
                   </td>
                 </tr>
               )}

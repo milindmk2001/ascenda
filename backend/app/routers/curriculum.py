@@ -40,7 +40,7 @@ def get_grades(db: Session = Depends(get_db)):
 def create_grade(payload: schemas.GradeCreate, db: Session = Depends(get_db)):
     """Ingest a standard tier grade tracking row node."""
     new_grade = models.Grade(
-        level=int(payload.level) if str(payload.level).isdigit() else None,
+        level=str(payload.level),
         name=payload.name if payload.name else f"Grade {payload.level}",
         org_id=payload.org_id
     )
@@ -142,7 +142,7 @@ def create_exam_subject(payload: schemas.ExamSubjectCreate, db: Session = Depend
     """Commit a record entry directly into the exam_subjects matrix table."""
     exam_exists = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
     if not exam_exists:
-        raise HTTPException(status_code=404, detail="Target tracking parent Exam entity reference missing.")
+        raise HTTPException(status_code=404, detail="Target tracking parent Exam reference missing.")
         
     new_sub = models.ExamSubject(
         name=payload.name,
@@ -182,73 +182,3 @@ def delete_exam_subject(subject_id: UUID, db: Session = Depends(get_db)):
     db.delete(db_sub)
     db.commit()
     return None
-
-
-# =====================================================================
-# --- ADMIN: SUBJECT AREAS (UNITS) ---
-# =====================================================================
-
-@admin_router.get("/regular/subject-areas", response_model=List[schemas.RegularSubjectArea])
-def get_regular_subject_areas(db: Session = Depends(get_db)):
-    """Fetch structural modules mapping directly to K-12 programs."""
-    return db.query(models.RegularSubjectArea).all()
-
-@admin_router.post("/regular/subject-areas", response_model=schemas.RegularSubjectArea)
-def create_regular_subject_area(area: schemas.RegularSubjectAreaCreate, db: Session = Depends(get_db)):
-    """Build a distinct topic module branch under standard schooling frameworks."""
-    new_area = models.RegularSubjectArea(
-        title=area.title,
-        sequence_order=area.sequence_order,
-        subject_id=area.subject_id
-    )
-    db.add(new_area)
-    db.commit()
-    db.refresh(new_area)
-    return new_area
-
-
-# =====================================================================
-# --- ADMIN: K-12 CHAPTER TRACKS ---
-# =====================================================================
-
-@admin_router.get("/regular/chapters", response_model=List[schemas.RegularChapter])
-def get_regular_chapters(db: Session = Depends(get_db)):
-    """Read the ultimate branch layers mapping information nodes to K-12 paths."""
-    return db.query(models.RegularChapter).all()
-
-@admin_router.post("/regular/chapters", response_model=schemas.RegularChapter)
-def create_regular_chapter(chap: schemas.RegularChapterCreate, db: Session = Depends(get_db)):
-    """Build an information delivery leaf cell block under school tracking lines."""
-    new_chap = models.RegularChapter(
-        title=chap.title,
-        sequence_order=chap.sequence_order,
-        subject_area_id=chap.subject_area_id
-    )
-    db.add(new_chap)
-    db.commit()
-    db.refresh(new_chap)
-    return new_chap
-
-
-# =====================================================================
-# --- ADMIN: GENERATIVE PROMPT AGENTS TEMPLATES ---
-# =====================================================================
-
-@admin_router.get("/prompt-templates", response_model=List[schemas.PromptTemplate])
-def get_prompt_templates(db: Session = Depends(get_db)):
-    """Fetch active instruction payloads context frames for execution tasks."""
-    return db.query(models.PromptTemplate).all()
-
-@admin_router.post("/prompt-templates", response_model=schemas.PromptTemplate)
-def create_prompt_template(template: schemas.PromptTemplateCreate, db: Session = Depends(get_db)):
-    """Commit configuration controls tuning layout generation parameters."""
-    new_template = models.PromptTemplate(
-        name=template.name,
-        system_prompt=template.system_prompt,
-        user_template=template.user_template,
-        description=template.description
-    )
-    db.add(new_template)
-    db.commit()
-    db.refresh(new_template)
-    return new_template
