@@ -5,20 +5,20 @@ const AdminDashboard = ({ apiBase, onExit }) => {
   const [activeTab, setActiveTab] = useState('boards');
   const [loading, setLoading] = useState(true);
   
-  // App state tracking vectors
+  // Data vectors tracking architecture states
   const [data, setData] = useState({ 
     boards: [], grades: [], exams: [], regSubjects: [], regAreas: [], examSubjects: [], examAreas: [] 
   });
 
-  // Inline table entry edit index trackers
+  // Inline editor states
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', subject_code: '', video_url: '' });
 
-  // Ingestion control state variables
+  // Input ingestion forms state management
   const [boardForm, setBoardForm] = useState({ name: '', org_type: 'Exam Board' });
   const [gradeForm, setGradeForm] = useState({ level: '', name: '', org_id: '' });
   const [subjectForm, setSubjectForm] = useState({ 
-    name: '', subject_code: '', grade_id: '', discipline: 'General', video_url: '' 
+    name: '', subject_code: '', grade_id: '', discipline: 'Competitive Exam', video_url: '' 
   });
 
   useEffect(() => {
@@ -38,26 +38,29 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         examAreas: '/api/admin/curriculum/exam/subject-areas'
       };
 
+      // 1. Load active view context data layer
       const res = await fetch(`${apiBase}${endpoints[activeTab]}`);
       const result = await res.json();
       setData(prev => ({ ...prev, [activeTab]: Array.isArray(result) ? result : [] }));
 
-      // Enforce lazy dependency fetching for drop-down controls
-      if (activeTab === 'examSubjects' || activeTab === 'grades' || activeTab === 'regSubjects') {
-        const [exRes, grRes] = await Promise.all([
-          fetch(`${apiBase}/api/admin/curriculum/exams`),
-          fetch(`${apiBase}/api/admin/curriculum/grades`)
-        ]);
-        const exData = await exRes.json();
-        const grData = await grRes.json();
-        setData(prev => ({
-          ...prev,
-          exams: Array.isArray(exData) ? exData : [],
-          grades: Array.isArray(grData) ? grData : []
-        }));
-      }
+      // 2. Pre-emptively lazy load master dropdown collections
+      const [exRes, grRes] = await Promise.all([
+        fetch(`${apiBase}/api/admin/curriculum/exams`),
+        fetch(`${apiBase}/api/admin/curriculum/grades`)
+      ]);
+      const exData = await exRes.json();
+      const grData = await grRes.json();
+
+      setData(prev => ({
+        ...prev,
+        exams: Array.isArray(exData) ? exData : [],
+        grades: Array.isArray(grData) ? grData : [],
+        // Update active content array snapshot if it matches what was loaded
+        [activeTab]: Array.isArray(result) ? result : []
+      }));
+
     } catch (err) {
-      console.error("Cluster context synchronization broke down:", err);
+      console.error("Pipeline pipeline query cluster failure:", err);
       setData(prev => ({ ...prev, [activeTab]: [] }));
     } finally {
       setLoading(false);
@@ -76,7 +79,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         fetchData();
       }
     } catch (err) {
-      console.error("Pipeline target post ingestion issue:", err);
+      console.error("Ingestion channel failure:", err);
     }
   };
 
@@ -102,12 +105,12 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         fetchData();
       }
     } catch (err) {
-      console.error("Pipeline patch layout transmission error:", err);
+      console.error("Patch update update pipeline failure:", err);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Confirm permanent removal constraint on target entity entity record row node?")) return;
+    if (!window.confirm("Confirm mutation removal actions against target context?")) return;
     try {
       const endpoints = {
         regSubjects: `/api/admin/curriculum/regular/subjects/${id}`,
@@ -117,7 +120,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
       const res = await fetch(`${apiBase}${targetUrl}`, { method: 'DELETE' });
       if (res.ok) fetchData();
     } catch (err) {
-      console.error("Entity target deletion cleanup failed:", err);
+      console.error("Deletion lifecycle failure:", err);
     }
   };
 
@@ -218,7 +221,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                     
                     parsedPayload = {
                       name: subjectForm.name,
-                      exam_id: subjectForm.grade_id, // Map selected item id cleanly to database foreign reference column
+                      exam_id: subjectForm.grade_id, 
                       subject_code: `${examCode}_${subjectForm.name.toUpperCase()}`,
                       discipline: 'Competitive Exam',
                       video_url: subjectForm.video_url
@@ -236,7 +239,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                   }
 
                   handleCreate(targetUrl, parsedPayload, () => 
-                    setSubjectForm({ name: '', subject_code: '', grade_id: '', discipline: 'General', video_url: '' })
+                    setSubjectForm({ name: '', subject_code: '', grade_id: '', discipline: 'Competitive Exam', video_url: '' })
                   ); 
                 }
               }} 
@@ -251,7 +254,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                   value={subjectForm.grade_id} 
                   onChange={e => setSubjectForm({...subjectForm, grade_id: e.target.value})}
                 >
-                  <option value="">{activeTab === 'examSubjects' ? 'Select Exam (IIT, NEET...)' : 'Select Target Grade'}</option>
+                  <option value="">{activeTab === 'examSubjects' ? 'Select Exam Stream' : 'Select Target Grade'}</option>
                   {activeTab === 'examSubjects' 
                     ? data.exams?.map(ex => <option key={ex.id} value={ex.id}>{ex.name} ({ex.code})</option>)
                     : data.grades?.map(g => <option key={g.id} value={g.id}>Grade {g.level} ({g.name})</option>)
@@ -274,7 +277,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                   <div className="w-full bg-slate-900/50 border border-slate-800/40 rounded-xl p-3 text-xs text-slate-500 font-mono select-none h-[42px] flex items-center">
                     {subjectForm.grade_id && subjectForm.name 
                       ? `${(data.exams.find(ex => ex.id === subjectForm.grade_id)?.code || 'EXAM')}_${subjectForm.name.toUpperCase()}`
-                      : 'Waiting for fields...'}
+                      : 'Waiting for stream allocation...'}
                   </div>
                 </div>
               )}
@@ -288,12 +291,12 @@ const AdminDashboard = ({ apiBase, onExit }) => {
           )}
         </div>
 
-        {/* DATA CONTAINER VIEW TABLE LAYER */}
+        {/* WORKSPACE DATA RECORDING SHEETS */}
         <div className="flex-grow bg-slate-900/10 border border-slate-900 rounded-2xl overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-800/80 bg-slate-900/40">
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Subject / Entity Node</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Subject / Code</th>
                 <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">System Entity Key</th>
                 <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">Actions</th>
               </tr>

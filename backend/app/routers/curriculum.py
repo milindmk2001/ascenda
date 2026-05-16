@@ -257,3 +257,23 @@ def delete_exam_subject(subject_id: UUID, db: Session = Depends(get_db)):
     db.delete(db_sub)
     db.commit()
     return None
+
+# --- ADMIN: EXAMS ROOT STREAM ---
+
+@admin_router.get("/exams", response_model=List[schemas.ExamResponse])
+def get_all_exams(db: Session = Depends(get_db)):
+    """Fetch all top-level exam streams (IITJEE, NEET, CET)."""
+    return db.query(models.Exam).all()
+
+@admin_router.post("/exams", response_model=schemas.ExamResponse, status_code=201)
+def create_exam_stream(payload: schemas.ExamCreate, db: Session = Depends(get_db)):
+    """Create a new exam stream tier."""
+    new_exam = models.Exam(
+        name=payload.name,
+        code=payload.code.upper(),
+        organisation_id=payload.organisation_id
+    )
+    db.add(new_exam)
+    db.commit()
+    db.refresh(new_exam)
+    return new_exam
