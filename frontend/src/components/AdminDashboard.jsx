@@ -4,14 +4,30 @@ import { Layout, Database, BookOpen, Trash2, Layers, GraduationCap, Microscope, 
 const AdminDashboard = ({ apiBase, onExit }) => {
   const [activeTab, setActiveTab] = useState('boards');
   const [loading, setLoading] = useState(true);
+  
+  // App state tracks
   const [data, setData] = useState({ 
-    boards: [], grades: [], regSubjects: [], regAreas: [], examSubjects: [], examAreas: [] 
+    boards: [], 
+    grades: [], 
+    exams: [], // Populated from /api/admin/curriculum/exams or direct endpoint
+    regSubjects: [], 
+    regAreas: [], 
+    examSubjects: [], 
+    examAreas: [] 
   });
 
-  // Forms management grouped up to save space and clear logic
+  // Consolidated form models
   const [boardForm, setBoardForm] = useState({ name: '', org_type: 'Exam Board' });
   const [gradeForm, setGradeForm] = useState({ level: '', name: '', org_id: '' });
-  const [subjectForm, setSubjectForm] = useState({ name: '', subject_code: '', grade_id: '', discipline: 'General', video_url: '' });
+  
+  // subject_code will be calculated automatically on submit for exams!
+  const [subjectForm, setSubjectForm] = useState({ 
+    name: '', 
+    subject_code: '', 
+    grade_id: '', // Used as exam_id when creating exam subjects
+    discipline: 'General', 
+    video_url: '' 
+  });
 
   useEffect(() => {
     fetchData();
@@ -23,16 +39,36 @@ const AdminDashboard = ({ apiBase, onExit }) => {
       const endpoints = {
         boards: '/api/admin/organizations/',
         grades: '/api/admin/curriculum/grades',
+        exams: '/api/admin/curriculum/exams', // Your endpoint tracking the structural exams table
         regSubjects: '/api/admin/curriculum/regular/subjects',
         regAreas: '/api/admin/curriculum/regular/subject-areas',
         examSubjects: '/api/admin/curriculum/exam/subjects',
         examAreas: '/api/admin/curriculum/exam/subject-areas'
       };
-      const res = await fetch(`${apiBase}${endpoints[activeTab]}`);
+
+      // Always fetch standard container entities to populate form select boxes dynamically
+      const activeEndpoint = endpoints[activeTab];
+      const res = await fetch(`${apiBase}${activeEndpoint}`);
       const result = await res.json();
+      
       setData(prev => ({ ...prev, [activeTab]: Array.isArray(result) ? result : [] }));
+
+      // Lazy load dependencies for form selection inputs if missing
+      if (activeTab === 'examSubjects' || activeTab === 'grades') {
+        const examRes = await fetch(`${apiBase}/api/admin/curriculum/exams`);
+        const examData = await examRes.json();
+        const gradeRes = await fetch(`${apiBase}/api/admin/curriculum/grades`);
+        const gradeData = await gradeRes.json();
+        
+        setData(prev => ({ 
+          ...prev, 
+          exams: Array.isArray(examData) ? examData : [],
+          grades: Array.isArray(gradeData) ? gradeData : []
+        }));
+      }
+
     } catch (err) {
-      console.error("Cluster synchronization fault prevented:", err);
+      console.error("Cluster synchronization fault architecture link broken:", err);
       setData(prev => ({ ...prev, [activeTab]: [] }));
     } finally {
       setLoading(false);
@@ -133,12 +169,22 @@ const AdminDashboard = ({ apiBase, onExit }) => {
             <form 
               onSubmit={(e) => { 
                 e.preventDefault(); 
-                if(subjectForm.name && subjectForm.subject_code && subjectForm.grade_id) {
-                  const targetUrl = activeTab === 'examSubjects' 
-                    ? '/api/admin/curriculum/exam/subjects' 
-                    : '/api/admin/curriculum/subjects';
+                if (subjectForm.name && subjectForm.grade_id) {
+                  let parsedPayload = { ...subjectForm };
+                  let targetUrl = '/api/admin/curriculum/subjects';
+
+                  if (activeTab === 'examSubjects') {
+                    // Match selected exam object wrapper key
+                    const selectedExam = data.exams.find(ex => ex.id === subjectForm.grade_id);
+                    const examCode = selectedExam ? selectedExam.code : 'EXAM';
                     
-                  handleCreate(targetUrl, subjectForm, () => 
+                    // Enforce structured naming scheme pattern: <examcode>_<subject>
+                    parsedPayload.subject_code = `${examCode}_${subjectForm.name.toUpperCase()}`;
+                    parsedPayload.discipline = 'Competitive Exam';
+                    targetUrl = '/api/admin/curriculum/exam/subjects';
+                  }
+
+                  handleCreate(targetUrl, parsedPayload, () => 
                     setSubjectForm({ name: '', subject_code: '', grade_id: '', discipline: 'General', video_url: '' })
                   ); 
                 }
@@ -146,23 +192,45 @@ const AdminDashboard = ({ apiBase, onExit }) => {
               className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end"
             >
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Container Grade</label>
-                <select className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={subjectForm.grade_id} onChange={e => setSubjectForm({...subjectForm, grade_id: e.target.value})}>
-                  <option value="">Select Target Grade</option>
-                  {data.grades?.map(g => <option key={g.id} value={g.id}>Grade {g.level} ({g.name})</option>)}
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  {activeTab === 'examSubjects' ? 'Target Exam Stream' : 'Container Grade'}
+                </label>
+                <select 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" 
+                  value={subjectForm.grade_id} 
+                  onChange={e => setSubjectForm({...subjectForm, grade_id: e.target.value})}
+                >
+                  <option value="">{activeTab === 'examSubjects' ? 'Select Exam (IIT, NEET...)' : 'Select Target Grade'}</option>
+                  {activeTab === 'examSubjects' 
+                    ? data.exams?.map(ex => <option key={ex.id} value={ex.id}>{ex.name} ({ex.code})</option>)
+                    : data.grades?.map(g => <option key={g.id} value={g.id}>Grade {g.level} ({g.name})</option>)
+                  }
                 </select>
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Name</label>
-                <input type="text" placeholder="e.g., Quantum Mechanics" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} />
+                <input type="text" placeholder="e.g., Physics, Chemistry, Maths" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} />
               </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Code</label>
-                <input type="text" placeholder="e.g., PHY-QM" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={subjectForm.subject_code} onChange={e => setSubjectForm({...subjectForm, subject_code: e.target.value})} />
-              </div>
+              
+              {activeTab === 'regSubjects' ? (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Code</label>
+                  <input type="text" placeholder="e.g., PHY-QM" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.subject_code} onChange={e => setSubjectForm({...subjectForm, subject_code: e.target.value})} />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Auto-Generated Code Preview</label>
+                  <div className="w-full bg-slate-900/50 border border-slate-800/40 rounded-xl p-3 text-xs text-slate-500 font-mono select-none h-[42px] flex items-center">
+                    {subjectForm.grade_id && subjectForm.name 
+                      ? `${(data.exams.find(ex => ex.id === subjectForm.grade_id)?.code || 'EXAM')}_${subjectForm.name.toUpperCase()}`
+                      : 'Waiting for entries...'}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Video Asset URL</label>
-                <input type="text" placeholder="https://..." className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={subjectForm.video_url} onChange={e => setSubjectForm({...subjectForm, video_url: e.target.value})} />
+                <input type="text" placeholder="https://..." className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.video_url} onChange={e => setSubjectForm({...subjectForm, video_url: e.target.value})} />
               </div>
               <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Subject</button>
             </form>
@@ -182,7 +250,16 @@ const AdminDashboard = ({ apiBase, onExit }) => {
             <tbody>
               {currentItems.map((item) => (
                 <tr key={item.id} className="border-b border-slate-900/60 hover:bg-slate-900/20 transition-all">
-                  <td className="p-4"><span className="font-bold text-sm text-slate-200">{item.name || `Level ${item.level}`}</span></td>
+                  <td className="p-4">
+                    <span className="font-bold text-sm text-slate-200">
+                      {item.name || `Level ${item.level}`}
+                    </span>
+                    {item.subject_code && (
+                      <span className="ml-2 px-2 py-0.5 text-[9px] font-bold tracking-wider bg-slate-800 text-indigo-400 rounded border border-slate-700/60 uppercase">
+                        {item.subject_code}
+                      </span>
+                    )}
+                  </td>
                   <td className="p-4 font-mono text-xs text-slate-500">{item.id}</td>
                   <td className="p-4 text-right">
                     <button className="p-2 text-slate-500 hover:text-red-400 transition-all"><Trash2 size={14} /></button>
