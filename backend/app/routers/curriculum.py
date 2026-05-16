@@ -205,3 +205,55 @@ def create_exam_subject_area(area: schemas.RegularSubjectAreaCreate, db: Session
     db.commit()
     db.refresh(new_area)
     return new_area
+# --- ADMIN: COMPETITIVE EXAM SUBJECT ROUTING ---
+
+@admin_router.get("/exam/subjects", response_model=List[schemas.ExamSubjectResponse])
+def get_exam_subjects(db: Session = Depends(get_db)):
+    """Fetch everything inside the exam_subjects matrix table layer."""
+    return db.query(models.ExamSubject).all()
+
+@admin_router.post("/exam/subjects", response_model=schemas.ExamSubjectResponse, status_code=201)
+def create_exam_subject(payload: schemas.ExamSubjectCreate, db: Session = Depends(get_db)):
+    """Create a pristine record inside the dedicated exam_subjects table layer."""
+    # Verify the target parent exam exist boundary
+    exam_exists = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
+    if not exam_exists:
+        raise HTTPException(status_code=404, detail="Target tracking parent Exam entity reference missing.")
+        
+    new_sub = models.ExamSubject(
+        name=payload.name,
+        subject_code=payload.subject_code.upper(), # Auto standardize normalization checks
+        exam_id=payload.exam_id,
+        discipline=payload.discipline,
+        video_url=payload.video_url
+    )
+    db.add(new_sub)
+    db.commit()
+    db.refresh(new_sub)
+    return new_sub
+
+@admin_router.put("/exam/subjects/{subject_id}", response_model=schemas.ExamSubjectResponse)
+def update_exam_subject(subject_id: UUID, payload: schemas.ExamSubjectCreate, db: Session = Depends(get_db)):
+    """Update properties on an existing exam subject record."""
+    db_sub = db.query(models.ExamSubject).filter(models.ExamSubject.id == subject_id).first()
+    if not db_sub:
+        raise HTTPException(status_code=404, detail="Exam subject record entry not found.")
+        
+    db_sub.name = payload.name
+    db_sub.subject_code = payload.subject_code.upper()
+    db_sub.exam_id = payload.exam_id
+    db_sub.video_url = payload.video_url
+    
+    db.commit()
+    db.refresh(db_sub)
+    return db_sub
+
+@admin_router.delete("/exam/subjects/{subject_id}", status_code=204)
+def delete_exam_subject(subject_id: UUID, db: Session = Depends(get_db)):
+    """Evict an existing record entry from the system cluster layout."""
+    db_sub = db.query(models.ExamSubject).filter(models.ExamSubject.id == subject_id).first()
+    if not db_sub:
+        raise HTTPException(status_code=404, detail="Exam subject record entry not found.")
+    db.delete(db_sub)
+    db.commit()
+    return None

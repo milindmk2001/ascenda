@@ -197,3 +197,17 @@ class AdminSubjectCreate(BaseModel):
     subject_code: str
     discipline: Optional[str] = "General"
     video_url: Optional[str] = ""
+
+class ExamSubjectBase(BaseModel):
+    name: str
+    subject_code: str
+    exam_id: UUID
+    discipline: str = "Competitive Exam"
+    video_url: Optional[str] = None
+
+class ExamSubjectCreate(ExamSubjectBase):
+    pass
+
+class ExamSubjectResponse(ExamSubjectBase):
+    id: UUID
+    model_config = ConfigDict(from_attributes=True)

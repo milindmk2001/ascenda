@@ -1,32 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Database, BookOpen, Trash2, Layers, GraduationCap, Microscope, Book } from 'lucide-react';
+import { Layout, Database, BookOpen, Trash2, Layers, GraduationCap, Microscope, Book, Edit3, Check, X } from 'lucide-react';
 
 const AdminDashboard = ({ apiBase, onExit }) => {
   const [activeTab, setActiveTab] = useState('boards');
   const [loading, setLoading] = useState(true);
   
-  // App state tracks
+  // App state tracking vectors
   const [data, setData] = useState({ 
-    boards: [], 
-    grades: [], 
-    exams: [], // Populated from /api/admin/curriculum/exams or direct endpoint
-    regSubjects: [], 
-    regAreas: [], 
-    examSubjects: [], 
-    examAreas: [] 
+    boards: [], grades: [], exams: [], regSubjects: [], regAreas: [], examSubjects: [], examAreas: [] 
   });
 
-  // Consolidated form models
+  // Inline table entry edit index trackers
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', subject_code: '', video_url: '' });
+
+  // Ingestion control state variables
   const [boardForm, setBoardForm] = useState({ name: '', org_type: 'Exam Board' });
   const [gradeForm, setGradeForm] = useState({ level: '', name: '', org_id: '' });
-  
-  // subject_code will be calculated automatically on submit for exams!
   const [subjectForm, setSubjectForm] = useState({ 
-    name: '', 
-    subject_code: '', 
-    grade_id: '', // Used as exam_id when creating exam subjects
-    discipline: 'General', 
-    video_url: '' 
+    name: '', subject_code: '', grade_id: '', discipline: 'General', video_url: '' 
   });
 
   useEffect(() => {
@@ -39,36 +31,33 @@ const AdminDashboard = ({ apiBase, onExit }) => {
       const endpoints = {
         boards: '/api/admin/organizations/',
         grades: '/api/admin/curriculum/grades',
-        exams: '/api/admin/curriculum/exams', // Your endpoint tracking the structural exams table
+        exams: '/api/admin/curriculum/exams',
         regSubjects: '/api/admin/curriculum/regular/subjects',
         regAreas: '/api/admin/curriculum/regular/subject-areas',
         examSubjects: '/api/admin/curriculum/exam/subjects',
         examAreas: '/api/admin/curriculum/exam/subject-areas'
       };
 
-      // Always fetch standard container entities to populate form select boxes dynamically
-      const activeEndpoint = endpoints[activeTab];
-      const res = await fetch(`${apiBase}${activeEndpoint}`);
+      const res = await fetch(`${apiBase}${endpoints[activeTab]}`);
       const result = await res.json();
-      
       setData(prev => ({ ...prev, [activeTab]: Array.isArray(result) ? result : [] }));
 
-      // Lazy load dependencies for form selection inputs if missing
-      if (activeTab === 'examSubjects' || activeTab === 'grades') {
-        const examRes = await fetch(`${apiBase}/api/admin/curriculum/exams`);
-        const examData = await examRes.json();
-        const gradeRes = await fetch(`${apiBase}/api/admin/curriculum/grades`);
-        const gradeData = await gradeRes.json();
-        
-        setData(prev => ({ 
-          ...prev, 
-          exams: Array.isArray(examData) ? examData : [],
-          grades: Array.isArray(gradeData) ? gradeData : []
+      // Enforce lazy dependency fetching for drop-down controls
+      if (activeTab === 'examSubjects' || activeTab === 'grades' || activeTab === 'regSubjects') {
+        const [exRes, grRes] = await Promise.all([
+          fetch(`${apiBase}/api/admin/curriculum/exams`),
+          fetch(`${apiBase}/api/admin/curriculum/grades`)
+        ]);
+        const exData = await exRes.json();
+        const grData = await grRes.json();
+        setData(prev => ({
+          ...prev,
+          exams: Array.isArray(exData) ? exData : [],
+          grades: Array.isArray(grData) ? grData : []
         }));
       }
-
     } catch (err) {
-      console.error("Cluster synchronization fault architecture link broken:", err);
+      console.error("Cluster context synchronization broke down:", err);
       setData(prev => ({ ...prev, [activeTab]: [] }));
     } finally {
       setLoading(false);
@@ -87,8 +76,58 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         fetchData();
       }
     } catch (err) {
-      console.error("Ingestion fault:", err);
+      console.error("Pipeline target post ingestion issue:", err);
     }
+  };
+
+  const handleUpdate = async (id, updatedFields) => {
+    try {
+      let targetUrl = `/api/admin/curriculum/regular/subjects/${id}`;
+      let bodyPayload = { ...updatedFields };
+
+      if (activeTab === 'examSubjects') {
+        targetUrl = `/api/admin/curriculum/exam/subjects/${id}`;
+        const selectedItem = data.examSubjects.find(item => item.id === id);
+        bodyPayload.exam_id = selectedItem.exam_id; 
+        bodyPayload.discipline = selectedItem.discipline || 'Competitive Exam';
+      }
+
+      const res = await fetch(`${apiBase}${targetUrl}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyPayload)
+      });
+      if (res.ok) {
+        setEditingId(null);
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Pipeline patch layout transmission error:", err);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Confirm permanent removal constraint on target entity entity record row node?")) return;
+    try {
+      const endpoints = {
+        regSubjects: `/api/admin/curriculum/regular/subjects/${id}`,
+        examSubjects: `/api/admin/curriculum/exam/subjects/${id}`
+      };
+      const targetUrl = endpoints[activeTab] || `/api/admin/curriculum/${activeTab}/${id}`;
+      const res = await fetch(`${apiBase}${targetUrl}`, { method: 'DELETE' });
+      if (res.ok) fetchData();
+    } catch (err) {
+      console.error("Entity target deletion cleanup failed:", err);
+    }
+  };
+
+  const startInlineEditing = (item) => {
+    setEditingId(item.id);
+    setEditForm({
+      name: item.name,
+      subject_code: item.subject_code || '',
+      video_url: item.video_url || ''
+    });
   };
 
   const currentItems = data[activeTab] || [];
@@ -170,18 +209,30 @@ const AdminDashboard = ({ apiBase, onExit }) => {
               onSubmit={(e) => { 
                 e.preventDefault(); 
                 if (subjectForm.name && subjectForm.grade_id) {
-                  let parsedPayload = { ...subjectForm };
-                  let targetUrl = '/api/admin/curriculum/subjects';
+                  let parsedPayload = {};
+                  let targetUrl = '';
 
                   if (activeTab === 'examSubjects') {
-                    // Match selected exam object wrapper key
                     const selectedExam = data.exams.find(ex => ex.id === subjectForm.grade_id);
                     const examCode = selectedExam ? selectedExam.code : 'EXAM';
                     
-                    // Enforce structured naming scheme pattern: <examcode>_<subject>
-                    parsedPayload.subject_code = `${examCode}_${subjectForm.name.toUpperCase()}`;
-                    parsedPayload.discipline = 'Competitive Exam';
+                    parsedPayload = {
+                      name: subjectForm.name,
+                      exam_id: subjectForm.grade_id, // Map selected item id cleanly to database foreign reference column
+                      subject_code: `${examCode}_${subjectForm.name.toUpperCase()}`,
+                      discipline: 'Competitive Exam',
+                      video_url: subjectForm.video_url
+                    };
                     targetUrl = '/api/admin/curriculum/exam/subjects';
+                  } else {
+                    parsedPayload = {
+                      name: subjectForm.name,
+                      grade_id: subjectForm.grade_id,
+                      subject_code: subjectForm.subject_code,
+                      discipline: subjectForm.discipline || 'General',
+                      video_url: subjectForm.video_url
+                    };
+                    targetUrl = '/api/admin/curriculum/regular/subjects';
                   }
 
                   handleCreate(targetUrl, parsedPayload, () => 
@@ -219,11 +270,11 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                 </div>
               ) : (
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Auto-Generated Code Preview</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Auto Code Preview</label>
                   <div className="w-full bg-slate-900/50 border border-slate-800/40 rounded-xl p-3 text-xs text-slate-500 font-mono select-none h-[42px] flex items-center">
                     {subjectForm.grade_id && subjectForm.name 
                       ? `${(data.exams.find(ex => ex.id === subjectForm.grade_id)?.code || 'EXAM')}_${subjectForm.name.toUpperCase()}`
-                      : 'Waiting for entries...'}
+                      : 'Waiting for fields...'}
                   </div>
                 </div>
               )}
@@ -237,12 +288,12 @@ const AdminDashboard = ({ apiBase, onExit }) => {
           )}
         </div>
 
-        {/* DATA CONTAINER VIEW TABLE */}
+        {/* DATA CONTAINER VIEW TABLE LAYER */}
         <div className="flex-grow bg-slate-900/10 border border-slate-900 rounded-2xl overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-800/80 bg-slate-900/40">
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Node Properties</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Subject / Entity Node</th>
                 <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">System Entity Key</th>
                 <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">Actions</th>
               </tr>
@@ -251,18 +302,37 @@ const AdminDashboard = ({ apiBase, onExit }) => {
               {currentItems.map((item) => (
                 <tr key={item.id} className="border-b border-slate-900/60 hover:bg-slate-900/20 transition-all">
                   <td className="p-4">
-                    <span className="font-bold text-sm text-slate-200">
-                      {item.name || `Level ${item.level}`}
-                    </span>
-                    {item.subject_code && (
-                      <span className="ml-2 px-2 py-0.5 text-[9px] font-bold tracking-wider bg-slate-800 text-indigo-400 rounded border border-slate-700/60 uppercase">
-                        {item.subject_code}
-                      </span>
+                    {editingId === item.id ? (
+                      <div className="flex flex-col md:flex-row gap-2">
+                        <input type="text" className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                        <input type="text" className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white font-mono outline-none" value={editForm.subject_code} onChange={e => setEditForm({...editForm, subject_code: e.target.value})} />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-200">{item.name || `Level ${item.level}`}</span>
+                        {item.subject_code && (
+                          <span className="px-2 py-0.5 text-[9px] font-bold tracking-wider bg-slate-800 text-indigo-400 rounded border border-slate-700/60 uppercase">
+                            {item.subject_code}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </td>
                   <td className="p-4 font-mono text-xs text-slate-500">{item.id}</td>
                   <td className="p-4 text-right">
-                    <button className="p-2 text-slate-500 hover:text-red-400 transition-all"><Trash2 size={14} /></button>
+                    {editingId === item.id ? (
+                      <div className="flex justify-end gap-1">
+                        <button onClick={() => handleUpdate(item.id, editForm)} className="p-2 text-green-400 hover:bg-green-500/10 rounded transition-all"><Check size={14} /></button>
+                        <button onClick={() => setEditingId(null)} className="p-2 text-slate-400 hover:bg-slate-800 rounded transition-all"><X size={14} /></button>
+                      </div>
+                    ) : (
+                      <div className="flex justify-end gap-1">
+                        {(activeTab === 'regSubjects' || activeTab === 'examSubjects') && (
+                          <button onClick={() => startInlineEditing(item)} className="p-2 text-slate-400 hover:text-indigo-400 transition-all"><Edit3 size={14} /></button>
+                        )}
+                        <button onClick={() => handleDelete(item.id)} className="p-2 text-slate-500 hover:text-red-400 transition-all"><Trash2 size={14} /></button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
