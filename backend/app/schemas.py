@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, Any, List, Dict, Union
 from uuid import UUID
+from datetime import datetime
 
 def uuid_to_str(value: Any) -> str:
     if isinstance(value, UUID): 
@@ -90,7 +91,6 @@ class ExamSubjectResponse(BaseModel):
     subject_code: str
     discipline: str
     video_url: Optional[str] = ""
-    # Explicitly include the nested relation layout or map it safely
     exam: Optional[ExamNestedResponse] = None
     
     model_config = ConfigDict(from_attributes=True)
@@ -146,4 +146,16 @@ class PromptTemplateCreate(BaseModel):
 
 class PromptTemplate(PromptTemplateCreate):
     id: UUID
+    model_config = ConfigDict(from_attributes=True)
+
+# --- AI Content Studio / Remotion Anim Engine ---
+class ModularLessonBase(BaseModel):
+    title: str
+    physics_params: Dict[str, Any] = {}
+    latex_formula: Optional[str] = None
+    video_asset_id: Optional[str] = None
+
+class ModularLesson(ModularLessonBase):
+    id: UUID
+    created_at: datetime
     model_config = ConfigDict(from_attributes=True)
