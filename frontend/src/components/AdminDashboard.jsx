@@ -5,12 +5,12 @@ const AdminDashboard = ({ apiBase, onExit }) => {
   const [activeTab, setActiveTab] = useState('boards');
   const [loading, setLoading] = useState(true);
   
-  // Data vectors tracking architecture states
+  // Consolidated system data containers
   const [data, setData] = useState({ 
     boards: [], grades: [], exams: [], regSubjects: [], regAreas: [], examSubjects: [], examAreas: [] 
   });
 
-  // Inline editor states
+  // Inline table editor row trackers
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', subject_code: '', video_url: '' });
 
@@ -38,11 +38,10 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         examAreas: '/api/admin/curriculum/exam/subject-areas'
       };
 
-      // 1. Fetch active view data layer
       const res = await fetch(`${apiBase}${endpoints[activeTab]}`);
       const result = await res.json();
 
-      // 2. Multi-tenant drop-down collection synchronization
+      // Parallel cross-loading to keep selection boxes hydrated
       const [exRes, grRes, brRes] = await Promise.all([
         fetch(`${apiBase}/api/admin/curriculum/exams`),
         fetch(`${apiBase}/api/admin/curriculum/grades`),
@@ -64,7 +63,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
       });
 
     } catch (err) {
-      console.error("Cluster context synchronization failure:", err);
+      console.error("Cluster synchronization failure:", err);
     } finally {
       setLoading(false);
     }
@@ -81,25 +80,43 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         resetForm();
         fetchData();
       } else {
-        const errorDetails = await res.json();
-        console.error("Ingestion server rejection payload:", errorDetails);
-        alert(`Failed to save record: ${JSON.stringify(errorDetails.detail || "Validation Error")}`);
+        const errDetails = await res.json();
+        alert(`Failed to create record: ${JSON.stringify(errDetails.detail || "Validation Error")}`);
       }
     } catch (err) {
-      console.error("Ingestion channel transmission issue:", err);
+      console.error("Ingestion endpoint transmission issue:", err);
     }
   };
 
   const handleUpdate = async (id, updatedFields) => {
     try {
-      let targetUrl = `/api/admin/curriculum/regular/subjects/${id}`;
-      let bodyPayload = { ...updatedFields };
+      let targetUrl = '';
+      let bodyPayload = {};
 
       if (activeTab === 'examSubjects') {
-        targetUrl = `/api/admin/curriculum/exam/subjects/${id}`;
         const selectedItem = data.examSubjects.find(item => item.id === id);
-        bodyPayload.exam_id = selectedItem.exam_id; 
-        bodyPayload.discipline = selectedItem.discipline || 'Competitive Exam';
+        if (!selectedItem) return;
+        
+        targetUrl = `/api/admin/curriculum/exam/subjects/${id}`;
+        bodyPayload = {
+          name: updatedFields.name,
+          subject_code: updatedFields.subject_code.toUpperCase(),
+          exam_id: selectedItem.exam_id,
+          discipline: selectedItem.discipline || 'Competitive Exam',
+          video_url: updatedFields.video_url || ""
+        };
+      } else {
+        const selectedItem = data.regSubjects.find(item => item.id === id);
+        if (!selectedItem) return;
+
+        targetUrl = `/api/admin/curriculum/regular/subjects/${id}`;
+        bodyPayload = {
+          grade_id: selectedItem.grade_id,
+          name: updatedFields.name,
+          subject_code: updatedFields.subject_code.toUpperCase(),
+          discipline: selectedItem.discipline || 'General',
+          video_url: updatedFields.video_url || ""
+        };
       }
 
       const res = await fetch(`${apiBase}${targetUrl}`, {
@@ -107,12 +124,16 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyPayload)
       });
+      
       if (res.ok) {
         setEditingId(null);
         fetchData();
+      } else {
+        const errJson = await res.json();
+        alert(`Update error: ${JSON.stringify(errJson.detail)}`);
       }
     } catch (err) {
-      console.error("Pipeline target mutation patch issue:", err);
+      console.error("Mutation update transmission issue:", err);
     }
   };
 
@@ -123,7 +144,9 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         regSubjects: `/api/admin/curriculum/regular/subjects/${id}`,
         examSubjects: `/api/admin/curriculum/exam/subjects/${id}`
       };
-      const targetUrl = endpoints[activeTab] || `/api/admin/curriculum/${activeTab}/${id}`;
+      const targetUrl = endpoints[activeTab];
+      if (!targetUrl) return;
+
       const res = await fetch(`${apiBase}${targetUrl}`, { method: 'DELETE' });
       if (res.ok) fetchData();
     } catch (err) {
@@ -144,7 +167,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
 
   return (
     <div className="flex h-screen bg-slate-950 text-white font-sans overflow-hidden">
-      {/* SIDEBAR NAVIGATION PANE */}
+      {/* SIDEBAR NAVIGATION */}
       <aside className="w-72 bg-slate-900 border-r border-slate-800/60 flex flex-col justify-between">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-8">
@@ -152,7 +175,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
               <Layout size={20} />
             </div>
             <div>
-              <h2 className="font-black text-sm tracking-wider uppercase">Ascenda Architecture</h2>
+              <h2 className="font-black text-sm tracking-wider uppercase">Ascenda Dashboard</h2>
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Admin Control Cluster</p>
             </div>
           </div>
@@ -176,7 +199,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
         </div>
       </aside>
 
-      {/* WORKSPACE CONTENT AREA */}
+      {/* CONTENT INTERFACE */}
       <main className="flex-grow p-8 overflow-y-auto flex flex-col gap-6">
         <div className="bg-slate-900/30 p-6 rounded-2xl border border-slate-900">
           <h2 className="text-xl font-bold flex items-center gap-2 mb-4">
@@ -187,7 +210,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
             <form onSubmit={(e) => { e.preventDefault(); if(boardForm.name) handleCreate('/api/admin/organizations/', boardForm, () => setBoardForm({ name: '', org_type: 'Exam Board' })); }} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Board / Org Name</label>
-                <input type="text" placeholder="e.g., CBSE, IITJEE, NEET" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={boardForm.name} onChange={e => setBoardForm({...boardForm, name: e.target.value})} />
+                <input type="text" placeholder="e.g., CBSE" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={boardForm.name} onChange={e => setBoardForm({...boardForm, name: e.target.value})} />
               </div>
               <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Board</button>
             </form>
@@ -204,11 +227,11 @@ const AdminDashboard = ({ apiBase, onExit }) => {
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Grade Level</label>
-                <input type="text" placeholder="e.g., 10, 12" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={gradeForm.level} onChange={e => setGradeForm({...gradeForm, level: e.target.value})} />
+                <input type="text" placeholder="e.g., 12" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={gradeForm.level} onChange={e => setGradeForm({...gradeForm, level: e.target.value})} />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Display Title (Optional)</label>
-                <input type="text" placeholder="e.g., Class 10 Foundation" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={gradeForm.name} onChange={e => setGradeForm({...gradeForm, name: e.target.value})} />
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Display Title</label>
+                <input type="text" placeholder="e.g., Class 12 Science" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none" value={gradeForm.name} onChange={e => setGradeForm({...gradeForm, name: e.target.value})} />
               </div>
               <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">Save Grade</button>
             </form>
@@ -226,7 +249,6 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                     const selectedExam = data.exams.find(ex => ex.id === subjectForm.grade_id);
                     const examCode = selectedExam ? selectedExam.code : 'EXAM';
                     
-                    // FIXED: Ensure strict mapping to exam_id to satisfy Pydantic Schema validations
                     parsedPayload = {
                       name: subjectForm.name,
                       exam_id: subjectForm.grade_id, 
@@ -240,7 +262,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                       name: subjectForm.name,
                       grade_id: subjectForm.grade_id,
                       subject_code: subjectForm.subject_code,
-                      discipline: subjectForm.discipline || 'General',
+                      discipline: 'General',
                       video_url: subjectForm.video_url || ""
                     };
                     targetUrl = '/api/admin/curriculum/regular/subjects';
@@ -250,7 +272,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                     setSubjectForm({ name: '', subject_code: '', grade_id: '', discipline: 'Competitive Exam', video_url: '' })
                   ); 
                 } else {
-                  alert("Please complete the required form fields before saving.");
+                  alert("Please fill in all required form parameters.");
                 }
               }} 
               className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end"
@@ -273,13 +295,13 @@ const AdminDashboard = ({ apiBase, onExit }) => {
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Name</label>
-                <input type="text" placeholder="e.g., Physics, Chemistry, Maths" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} />
+                <input type="text" placeholder="e.g., Physics" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} />
               </div>
               
               {activeTab === 'regSubjects' ? (
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Subject Code</label>
-                  <input type="text" placeholder="e.g., PHY-QM" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.subject_code} onChange={e => setSubjectForm({...subjectForm, subject_code: e.target.value})} />
+                  <input type="text" placeholder="e.g., CBSE-PHY" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-indigo-500" value={subjectForm.subject_code} onChange={e => setSubjectForm({...subjectForm, subject_code: e.target.value})} />
                 </div>
               ) : (
                 <div>
@@ -287,7 +309,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
                   <div className="w-full bg-slate-900/50 border border-slate-800/40 rounded-xl p-3 text-xs text-slate-500 font-mono select-none h-[42px] flex items-center">
                     {subjectForm.grade_id && subjectForm.name 
                       ? `${(data.exams.find(ex => ex.id === subjectForm.grade_id)?.code || 'EXAM')}_${subjectForm.name.toUpperCase()}`
-                      : 'Waiting for stream allocation...'}
+                      : 'Waiting for selection...'}
                   </div>
                 </div>
               )}
@@ -301,7 +323,7 @@ const AdminDashboard = ({ apiBase, onExit }) => {
           )}
         </div>
 
-        {/* WORKSPACE DATA RECORDING SHEETS */}
+        {/* WORKSPACE SHEETS */}
         <div className="flex-grow bg-slate-900/10 border border-slate-900 rounded-2xl overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead>

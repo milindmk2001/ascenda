@@ -56,7 +56,7 @@ def create_grade(payload: schemas.GradeCreate, db: Session = Depends(get_db)):
 
 @admin_router.get("/regular/subjects", response_model=List[schemas.RegularSubject])
 def get_regular_subjects(db: Session = Depends(get_db)):
-    """Query base K-12 institutional streams mapping to 'subjects' table."""
+    """Query base K-12 institutional streams mapping to 'regular_subjects' table."""
     return db.query(models.RegularSubject).all()
 
 @admin_router.post("/regular/subjects", response_model=schemas.RegularSubject, status_code=201)
@@ -83,7 +83,7 @@ def update_regular_subject(subject_id: UUID, payload: schemas.AdminSubjectCreate
     """Mutate properties on a standard K-12 subject asset tracking tier."""
     db_sub = db.query(models.RegularSubject).filter(models.RegularSubject.id == subject_id).first()
     if not db_sub:
-        raise HTTPException(status_code=404, detail="Regular subject entity row missing.")
+        raise HTTPException(status_code=404, detail="Regular subject entity row missing in database.")
         
     db_sub.name = payload.name
     db_sub.subject_code = payload.subject_code.upper()
@@ -97,7 +97,7 @@ def update_regular_subject(subject_id: UUID, payload: schemas.AdminSubjectCreate
 
 @admin_router.delete("/regular/subjects/{subject_id}", status_code=204)
 def delete_regular_subject(subject_id: UUID, db: Session = Depends(get_db)):
-    """Purge a K-12 subject element structure node completely from system maps."""
+    """Purge a K-12 subject element structure node completely."""
     db_sub = db.query(models.RegularSubject).filter(models.RegularSubject.id == subject_id).first()
     if not db_sub:
         raise HTTPException(status_code=404, detail="Target regular subject node not found.")
@@ -134,15 +134,12 @@ def create_exam_stream(payload: schemas.ExamCreate, db: Session = Depends(get_db
 
 @admin_router.get("/exam/subjects", response_model=List[schemas.ExamSubjectResponse])
 def get_exam_subjects(db: Session = Depends(get_db)):
-    """Query exclusively from the dedicated exam_subjects database matrix table."""
+    """Query exclusively from the dedicated exam_subjects database table."""
     return db.query(models.ExamSubject).all()
 
 @admin_router.post("/exam/subjects", response_model=schemas.ExamSubjectResponse, status_code=201)
 def create_exam_subject(payload: schemas.ExamSubjectCreate, db: Session = Depends(get_db)):
-    """Commit a pristine record tracking entry directly into the exam_subjects matrix table."""
-    if not payload.exam_id:
-        raise HTTPException(status_code=400, detail="Missing parameter payload constraint: exam_id required.")
-
+    """Commit a record entry directly into the exam_subjects matrix table."""
     exam_exists = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
     if not exam_exists:
         raise HTTPException(status_code=404, detail="Target tracking parent Exam entity reference missing.")
@@ -164,12 +161,12 @@ def update_exam_subject(subject_id: UUID, payload: schemas.ExamSubjectCreate, db
     """Update tracking properties on an active exam subject entry node row."""
     db_sub = db.query(models.ExamSubject).filter(models.ExamSubject.id == subject_id).first()
     if not db_sub:
-        raise HTTPException(status_code=404, detail="Exam subject record entry not found.")
+        raise HTTPException(status_code=404, detail="Exam subject record entry not found in database.")
         
     db_sub.name = payload.name
     db_sub.subject_code = payload.subject_code.upper()
     db_sub.exam_id = payload.exam_id
-    db_sub.discipline = payload.discipline
+    db_sub.discipline = payload.discipline if payload.discipline else "Competitive Exam"
     db_sub.video_url = payload.video_url
     
     db.commit()
