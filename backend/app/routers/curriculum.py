@@ -5,16 +5,20 @@ from ..database import get_db
 from typing import List
 from uuid import UUID
 
-# 1. Standard Router for the User/Reader view
+# 1. Standard Router for the User/Reader view layout
 router = APIRouter(prefix="/api/curriculum", tags=["curriculum"])
 
-# 2. Admin Router for management
+# 2. Admin Router for system data ingestion management
 admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["admin-curriculum"])
 
-# --- TREE ENDPOINT (For the Course Reader Sidebar) ---
+
+# =====================================================================
+# --- COURSE SIDEBAR TREE ENDPOINT ---
+# =====================================================================
+
 @router.get("/subjects/{subject_id}/tree", response_model=List[schemas.CurriculumNode])
 def get_curriculum_tree(subject_id: UUID, db: Session = Depends(get_db)):
-    # Query only top-level nodes; 'children' will be nested automatically via models.py
+    """Query only top-level nodes; children nest automatically via models relationship."""
     nodes = db.query(models.CurriculumTree).filter(
         models.CurriculumTree.subject_id == subject_id,
         models.CurriculumTree.parent_id == None
@@ -22,20 +26,22 @@ def get_curriculum_tree(subject_id: UUID, db: Session = Depends(get_db)):
     
     return nodes if nodes else []
 
-# --- ADMIN: GRADES ---
-# Frontend fetches from: GET /api/admin/curriculum/grades
+
+# =====================================================================
+# --- ADMIN: K-12 CONTAINER GRADES ---
+# =====================================================================
+
 @admin_router.get("/grades", response_model=List[schemas.Grade])
 def get_grades(db: Session = Depends(get_db)):
+    """Fetch core tracking educational grades."""
     return db.query(models.Grade).all()
 
-# Frontend posts to: POST /api/admin/curriculum/grades
 @admin_router.post("/grades", response_model=schemas.Grade, status_code=201)
-def create_grade(payload: schemas.AdminGradeCreate, db: Session = Depends(get_db)):
-    string_level = str(payload.level)
-    
+def create_grade(payload: schemas.GradeCreate, db: Session = Depends(get_db)):
+    """Ingest a standard tier grade tracking row node."""
     new_grade = models.Grade(
-        level=string_level,
-        name=payload.name if payload.name else f"Grade {string_level}",
+        level=int(payload.level) if str(payload.level).isdigit() else None,
+        name=payload.name if payload.name else f"Grade {payload.level}",
         org_id=payload.org_id
     )
     db.add(new_grade)
@@ -43,16 +49,19 @@ def create_grade(payload: schemas.AdminGradeCreate, db: Session = Depends(get_db
     db.refresh(new_grade)
     return new_grade
 
-# --- ADMIN: SUBJECTS ---
-# FIXED: Frontend fetches from: GET /api/admin/curriculum/regular/subjects
+
+# =====================================================================
+# --- ADMIN: K-12 REGULAR CORE SUBJECTS ---
+# =====================================================================
+
 @admin_router.get("/regular/subjects", response_model=List[schemas.RegularSubject])
 def get_regular_subjects(db: Session = Depends(get_db)):
+    """Query base K-12 institutional streams mapping to 'subjects' table."""
     return db.query(models.RegularSubject).all()
 
-# FIXED: Frontend posts to: POST /api/admin/curriculum/subjects
-@admin_router.post("/subjects", response_model=schemas.RegularSubject, status_code=201)
+@admin_router.post("/regular/subjects", response_model=schemas.RegularSubject, status_code=201)
 def create_regular_subject(payload: schemas.AdminSubjectCreate, db: Session = Depends(get_db)):
-    # Enforce parent structural tree boundary validation checks
+    """Instantiate a new school stream subject container row."""
     grade = db.query(models.Grade).filter(models.Grade.id == payload.grade_id).first()
     if not grade:
         raise HTTPException(status_code=404, detail="Target container Grade level identifier missing.")
@@ -61,78 +70,7 @@ def create_regular_subject(payload: schemas.AdminSubjectCreate, db: Session = De
         name=payload.name,
         subject_code=payload.subject_code.upper(),
         grade_id=payload.grade_id,
-        discipline=payload.discipline if payload.discipline else "General",
-        video_url=payload.video_url if payload.video_url else ""
-    )
-    db.add(new_sub)
-    db.commit()
-    db.refresh(new_sub)
-    return new_sub
-
-# --- ADMIN: SUBJECT AREAS (Units) ---
-@admin_router.get("/regular/subject-areas", response_model=List[schemas.RegularSubjectArea])
-def get_regular_subject_areas(db: Session = Depends(get_db)):
-    return db.query(models.RegularSubjectArea).all()
-
-@admin_router.post("/regular/subject-areas", response_model=schemas.RegularSubjectArea)
-def create_regular_subject_area(area: schemas.RegularSubjectAreaCreate, db: Session = Depends(get_db)):
-    new_area = models.RegularSubjectArea(
-        title=area.title,
-        sequence_order=area.sequence_order,
-        subject_id=area.subject_id
-    )
-    db.add(new_area)
-    db.commit()
-    db.refresh(new_area)
-    return new_area
-
-# --- ADMIN: CHAPTERS ---
-@admin_router.get("/regular/chapters", response_model=List[schemas.RegularChapter])
-def get_regular_chapters(db: Session = Depends(get_db)):
-    return db.query(models.RegularChapter).all()
-
-@admin_router.post("/regular/chapters", response_model=schemas.RegularChapter)
-def create_regular_chapter(chap: schemas.RegularChapterCreate, db: Session = Depends(get_db)):
-    new_chap = models.RegularChapter(
-        title=chap.title,
-        sequence_order=chap.sequence_order,
-        subject_area_id=chap.subject_area_id
-    )
-    db.add(new_chap)
-    db.commit()
-    db.refresh(new_chap)
-    return new_chap
-
-# --- ADMIN: PROMPT TEMPLATES ---
-@admin_router.get("/prompt-templates", response_model=List[schemas.PromptTemplate])
-def get_prompt_templates(db: Session = Depends(get_db)):
-    return db.query(models.PromptTemplate).all()
-
-@admin_router.post("/prompt-templates", response_model=schemas.PromptTemplate)
-def create_prompt_template(template: schemas.PromptTemplateCreate, db: Session = Depends(get_db)):
-    new_template = models.PromptTemplate(
-        subject_id=template.subject_id,
-        model_name=template.model_name,
-        system_instruction=template.system_instruction
-    )
-    db.add(new_template)
-    db.commit()
-    db.refresh(new_template)
-    return new_template
-
-# --- ADMIN: EXAM SUBJECTS ---
-@admin_router.get("/exam/subjects", response_model=List[schemas.RegularSubject])
-def get_exam_subjects(db: Session = Depends(get_db)):
-    # You can filter by discipline/type later if you want to isolate them!
-    return db.query(models.RegularSubject).all()
-
-@admin_router.post("/exam/subjects", response_model=schemas.RegularSubject, status_code=201)
-def create_exam_subject(payload: schemas.AdminSubjectCreate, db: Session = Depends(get_db)):
-    new_sub = models.RegularSubject(
-        name=payload.name,
-        subject_code=payload.subject_code.upper(),
-        grade_id=payload.grade_id,
-        discipline="Exam Stream", # Explicitly tagging it as an exam resource
+        discipline=payload.discipline,
         video_url=payload.video_url
     )
     db.add(new_sub)
@@ -140,89 +78,78 @@ def create_exam_subject(payload: schemas.AdminSubjectCreate, db: Session = Depen
     db.refresh(new_sub)
     return new_sub
 
-# --- ADMIN: EXAM SPECIALTIES (Subject Areas / Units) ---
-@admin_router.get("/exam/subject-areas", response_model=List[schemas.RegularSubjectArea])
-def get_exam_subject_areas(db: Session = Depends(get_db)):
-    return db.query(models.RegularSubjectArea).all()
-
-@admin_router.post("/exam/subject-areas", response_model=schemas.RegularSubjectArea, status_code=201)
-def create_exam_subject_area(area: schemas.RegularSubjectAreaCreate, db: Session = Depends(get_db)):
-    new_area = models.RegularSubjectArea(
-        name=area.name,
-        sequence_order=area.sequence_order,
-        subject_id=area.subject_id
-    )
-    db.add(new_area)
+@admin_router.put("/regular/subjects/{subject_id}", response_model=schemas.RegularSubject)
+def update_regular_subject(subject_id: UUID, payload: schemas.AdminSubjectCreate, db: Session = Depends(get_db)):
+    """Mutate properties on a standard K-12 subject asset tracking tier."""
+    db_sub = db.query(models.RegularSubject).filter(models.RegularSubject.id == subject_id).first()
+    if not db_sub:
+        raise HTTPException(status_code=404, detail="Regular subject entity row missing.")
+        
+    db_sub.name = payload.name
+    db_sub.subject_code = payload.subject_code.upper()
+    db_sub.grade_id = payload.grade_id
+    db_sub.discipline = payload.discipline
+    db_sub.video_url = payload.video_url
+    
     db.commit()
-    db.refresh(new_area)
-    return new_area
+    db.refresh(db_sub)
+    return db_sub
 
-# ==========================================
-# --- ADMIN: EXAM STREAMS MANAGEMENT ---
-# ==========================================
+@admin_router.delete("/regular/subjects/{subject_id}", status_code=204)
+def delete_regular_subject(subject_id: UUID, db: Session = Depends(get_db)):
+    """Purge a K-12 subject element structure node completely from system maps."""
+    db_sub = db.query(models.RegularSubject).filter(models.RegularSubject.id == subject_id).first()
+    if not db_sub:
+        raise HTTPException(status_code=404, detail="Target regular subject node not found.")
+    db.delete(db_sub)
+    db.commit()
+    return None
 
-@admin_router.get("/exam/subjects", response_model=List[schemas.RegularSubject])
-def get_exam_subjects(db: Session = Depends(get_db)):
-    """Fetch only subjects belonging to competitive exam streams."""
-    return db.query(models.RegularSubject).filter(models.RegularSubject.discipline == "Exam").all()
 
-@admin_router.post("/exam/subjects", response_model=schemas.RegularSubject, status_code=201)
-def create_exam_subject(payload: schemas.AdminSubjectCreate, db: Session = Depends(get_db)):
-    """Create a subject explicitly tagged for competitive exam architecture."""
-    # Safety boundary validation check
-    grade = db.query(models.Grade).filter(models.Grade.id == payload.grade_id).first()
-    if not grade:
-        raise HTTPException(status_code=404, detail="Target container Grade level identifier missing.")
+# =====================================================================
+# --- ADMIN: EXAMS ROOT STREAM ---
+# =====================================================================
 
-    new_sub = models.RegularSubject(
+@admin_router.get("/exams", response_model=List[schemas.ExamResponse])
+def get_all_exams(db: Session = Depends(get_db)):
+    """Fetch top level competitive tracking indices (e.g., IITJEE, NEET)."""
+    return db.query(models.Exam).all()
+
+@admin_router.post("/exams", response_model=schemas.ExamResponse, status_code=201)
+def create_exam_stream(payload: schemas.ExamCreate, db: Session = Depends(get_db)):
+    """Create a foundational tracking node stream entry."""
+    new_exam = models.Exam(
         name=payload.name,
-        subject_code=payload.subject_code.upper(),
-        grade_id=payload.grade_id,
-        discipline="Exam",  # Force set to separate from standard K-12 core classes
-        video_url=payload.video_url
+        code=payload.code.upper()
     )
-    db.add(new_sub)
+    db.add(new_exam)
     db.commit()
-    db.refresh(new_sub)
-    return new_sub
+    db.refresh(new_exam)
+    return new_exam
 
-# --- ADMIN: EXAM SPECIALTIES (Subject Areas) ---
 
-@admin_router.get("/exam/subject-areas", response_model=List[schemas.RegularSubjectArea])
-def get_exam_subject_areas(db: Session = Depends(get_db)):
-    """List out unit modules associated with exam paths."""
-    return db.query(models.RegularSubjectArea).all()
-
-@admin_router.post("/exam/subject-areas", response_model=schemas.RegularSubjectArea, status_code=201)
-def create_exam_subject_area(area: schemas.RegularSubjectAreaCreate, db: Session = Depends(get_db)):
-    """Bind a structural unit/specialty topic area to a subject node."""
-    new_area = models.RegularSubjectArea(
-        name=area.name,
-        sequence_order=area.sequence_order,
-        subject_id=area.subject_id
-    )
-    db.add(new_area)
-    db.commit()
-    db.refresh(new_area)
-    return new_area
-# --- ADMIN: COMPETITIVE EXAM SUBJECT ROUTING ---
+# =====================================================================
+# --- ADMIN: COMPETITIVE EXAM SUBJECTS (FIXED ROUTING) ---
+# =====================================================================
 
 @admin_router.get("/exam/subjects", response_model=List[schemas.ExamSubjectResponse])
 def get_exam_subjects(db: Session = Depends(get_db)):
-    """Fetch everything inside the exam_subjects matrix table layer."""
+    """
+    FIXED: Query ONLY from the dedicated exam_subjects database matrix table.
+    Eliminated collision mappings with standard K-12 parameters.
+    """
     return db.query(models.ExamSubject).all()
 
 @admin_router.post("/exam/subjects", response_model=schemas.ExamSubjectResponse, status_code=201)
 def create_exam_subject(payload: schemas.ExamSubjectCreate, db: Session = Depends(get_db)):
-    """Create a pristine record inside the dedicated exam_subjects table layer."""
-    # Verify the target parent exam exist boundary
+    """Commit a pristine record tracking entry directly into the exam_subjects matrix table."""
     exam_exists = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
     if not exam_exists:
-        raise HTTPException(status_code=404, detail="Target tracking parent Exam entity reference missing.")
+        raise HTTPException(status_code=404, detail="Target tracking parent Exam entry reference missing.")
         
     new_sub = models.ExamSubject(
         name=payload.name,
-        subject_code=payload.subject_code.upper(), # Auto standardize normalization checks
+        subject_code=payload.subject_code.upper(),
         exam_id=payload.exam_id,
         discipline=payload.discipline,
         video_url=payload.video_url
@@ -234,7 +161,7 @@ def create_exam_subject(payload: schemas.ExamSubjectCreate, db: Session = Depend
 
 @admin_router.put("/exam/subjects/{subject_id}", response_model=schemas.ExamSubjectResponse)
 def update_exam_subject(subject_id: UUID, payload: schemas.ExamSubjectCreate, db: Session = Depends(get_db)):
-    """Update properties on an existing exam subject record."""
+    """Update tracking properties on an active exam subject entry node row."""
     db_sub = db.query(models.ExamSubject).filter(models.ExamSubject.id == subject_id).first()
     if not db_sub:
         raise HTTPException(status_code=404, detail="Exam subject record entry not found.")
@@ -242,6 +169,7 @@ def update_exam_subject(subject_id: UUID, payload: schemas.ExamSubjectCreate, db
     db_sub.name = payload.name
     db_sub.subject_code = payload.subject_code.upper()
     db_sub.exam_id = payload.exam_id
+    db_sub.discipline = payload.discipline
     db_sub.video_url = payload.video_url
     
     db.commit()
@@ -250,7 +178,7 @@ def update_exam_subject(subject_id: UUID, payload: schemas.ExamSubjectCreate, db
 
 @admin_router.delete("/exam/subjects/{subject_id}", status_code=204)
 def delete_exam_subject(subject_id: UUID, db: Session = Depends(get_db)):
-    """Evict an existing record entry from the system cluster layout."""
+    """Evict a competitive stream component from the system ecosystem mappings."""
     db_sub = db.query(models.ExamSubject).filter(models.ExamSubject.id == subject_id).first()
     if not db_sub:
         raise HTTPException(status_code=404, detail="Exam subject record entry not found.")
@@ -258,22 +186,72 @@ def delete_exam_subject(subject_id: UUID, db: Session = Depends(get_db)):
     db.commit()
     return None
 
-# --- ADMIN: EXAMS ROOT STREAM ---
 
-@admin_router.get("/exams", response_model=List[schemas.ExamResponse])
-def get_all_exams(db: Session = Depends(get_db)):
-    """Fetch all top-level exam streams (IITJEE, NEET, CET)."""
-    return db.query(models.Exam).all()
+# =====================================================================
+# --- ADMIN: SUBJECT AREAS (UNITS) ---
+# =====================================================================
 
-@admin_router.post("/exams", response_model=schemas.ExamResponse, status_code=201)
-def create_exam_stream(payload: schemas.ExamCreate, db: Session = Depends(get_db)):
-    """Create a new exam stream tier."""
-    new_exam = models.Exam(
-        name=payload.name,
-        code=payload.code.upper(),
-        organisation_id=payload.organisation_id
+@admin_router.get("/regular/subject-areas", response_model=List[schemas.RegularSubjectArea])
+def get_regular_subject_areas(db: Session = Depends(get_db)):
+    """Fetch structural modules mapping directly to K-12 programs."""
+    return db.query(models.RegularSubjectArea).all()
+
+@admin_router.post("/regular/subject-areas", response_model=schemas.RegularSubjectArea)
+def create_regular_subject_area(area: schemas.RegularSubjectAreaCreate, db: Session = Depends(get_db)):
+    """Build a distinct topic module branch under standard schooling frameworks."""
+    new_area = models.RegularSubjectArea(
+        title=area.title,
+        sequence_order=area.sequence_order,
+        subject_id=area.subject_id
     )
-    db.add(new_exam)
+    db.add(new_area)
     db.commit()
-    db.refresh(new_exam)
-    return new_exam
+    db.refresh(new_area)
+    return new_area
+
+
+# =====================================================================
+# --- ADMIN: K-12 CHAPTER TRACKS ---
+# =====================================================================
+
+@admin_router.get("/regular/chapters", response_model=List[schemas.RegularChapter])
+def get_regular_chapters(db: Session = Depends(get_db)):
+    """Read the ultimate branch layers mapping information nodes to K-12 paths."""
+    return db.query(models.RegularChapter).all()
+
+@admin_router.post("/regular/chapters", response_model=schemas.RegularChapter)
+def create_regular_chapter(chap: schemas.RegularChapterCreate, db: Session = Depends(get_db)):
+    """Build an information delivery leaf cell block under school tracking lines."""
+    new_chap = models.RegularChapter(
+        title=chap.title,
+        sequence_order=chap.sequence_order,
+        subject_area_id=chap.subject_area_id
+    )
+    db.add(new_chap)
+    db.commit()
+    db.refresh(new_chap)
+    return new_chap
+
+
+# =====================================================================
+# --- ADMIN: GENERATIVE PROMPT AGENTS TEMPLATES ---
+# =====================================================================
+
+@admin_router.get("/prompt-templates", response_model=List[schemas.PromptTemplate])
+def get_prompt_templates(db: Session = Depends(get_db)):
+    """Fetch active instruction payloads context frames for execution tasks."""
+    return db.query(models.PromptTemplate).all()
+
+@admin_router.post("/prompt-templates", response_model=schemas.PromptTemplate)
+def create_prompt_template(template: schemas.PromptTemplateCreate, db: Session = Depends(get_db)):
+    """Commit configuration controls tuning layout generation parameters."""
+    new_template = models.PromptTemplate(
+        name=template.name,
+        system_prompt=template.system_prompt,
+        user_template=template.user_template,
+        description=template.description
+    )
+    db.add(new_template)
+    db.commit()
+    db.refresh(new_template)
+    return new_template
