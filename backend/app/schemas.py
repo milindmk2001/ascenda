@@ -155,6 +155,10 @@ class ModularLessonBase(BaseModel):
     latex_formula: Optional[str] = None
     video_asset_id: Optional[str] = None
 
+# 🚀 ADDED THIS SPECIFIC CLASS TO FIX THE CRASH ON LINE 11 IN STUDIO.PY
+class ModularLessonCreate(ModularLessonBase):
+    pass
+
 class ModularLesson(ModularLessonBase):
     id: UUID
     created_at: datetime
