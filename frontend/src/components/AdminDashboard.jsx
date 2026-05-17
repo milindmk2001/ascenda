@@ -42,10 +42,24 @@ export default function AdminDashboard({ apiBase, onExit }) {
   // Competitive Provisioning Inputs
   const [examName, setExamName] = useState('');
   const [examCode, setExamCode] = useState('');
-  const [selectedExamId, setSelectedExamId] = useState(''); // Used as the filtered "Board" anchor
+  const [selectedExamId, setSelectedExamId] = useState(''); 
   const [compSubjectName, setCompSubjectName] = useState('');
   const [compSubjectCode, setCompSubjectCode] = useState('');
   const [discipline, setDiscipline] = useState('Competitive Exam');
+
+  // Automatically compute Competitive Subject Code when track or subject changes
+  useEffect(() => {
+    if (selectedExamId && compSubjectName) {
+      const selectedExam = exams.find(e => String(e.id) === String(selectedExamId));
+      if (selectedExam && selectedExam.code) {
+        // Formats clean strings like: IITJEE_Physics
+        const cleanSubjectName = compSubjectName.replace(/\s+/g, '_');
+        setCompSubjectCode(`${selectedExam.code}_${cleanSubjectName}`);
+      }
+    } else {
+      setCompSubjectCode('');
+    }
+  }, [selectedExamId, compSubjectName, exams]);
 
   // Sync data whenever mode or sub-tabs change
   useEffect(() => {
@@ -250,7 +264,6 @@ export default function AdminDashboard({ apiBase, onExit }) {
       });
       if (!res.ok) throw new Error("Failed to write competitive exam subject reference configuration.");
       setCompSubjectName('');
-      setCompSubjectCode('');
       fetchData();
     } catch (err) { alert(err.message); }
   };
@@ -326,7 +339,7 @@ export default function AdminDashboard({ apiBase, onExit }) {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-grow items-start">
           
-          {/* LEFT PANEL: CONTEXTUAL INPUT SUBMISSION FORMS ENGINE */}
+          {/* LEFT PANEL: INPUT SUBMISSION FORMS ENGINE */}
           <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 shadow-2xl">
             <h2 className="text-sm font-bold tracking-wide uppercase mb-4 text-slate-300">
               Provision {mode === 'k12' ? k12Tab.slice(0, -1) : compTab === 'exams' ? 'Competitive Track' : 'Track Subject'}
@@ -449,11 +462,17 @@ export default function AdminDashboard({ apiBase, onExit }) {
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 font-mono">Competitive Subject Module Title</label>
-                  <input type="text" value={compSubjectName} onChange={e => setCompSubjectName(e.target.value)} placeholder="e.g., Organic Chemistry" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-slate-700" />
+                  <input type="text" value={compSubjectName} onChange={e => setCompSubjectName(e.target.value)} placeholder="e.g., Physics" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-slate-700" />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 font-mono">Unique Identifier Code</label>
-                  <input type="text" value={compSubjectCode} onChange={e => setCompSubjectCode(e.target.value)} placeholder="e.g., JEE_ORG_CHEM" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-slate-700" />
+                  <input 
+                    type="text" 
+                    value={compSubjectCode} 
+                    onChange={e => setCompSubjectCode(e.target.value)} 
+                    placeholder="Auto-generated (e.g., IITJEE_Physics)" 
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-300 focus:outline-none focus:border-slate-700 font-mono" 
+                  />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 font-mono">Discipline Domain Classification</label>
@@ -541,7 +560,7 @@ export default function AdminDashboard({ apiBase, onExit }) {
               {mode === 'competitive' && compTab === 'exams' && (
                 exams.length === 0 ? <p className="text-slate-600 text-xs italic font-mono p-4 bg-slate-900 rounded-lg">No competitive exam board frameworks discovered.</p> :
                 exams.map(ex => (
-                  <div key={ex.id} className="p-3 bg-slate-900 border border-slate-800/60 rounded-lg flex justify-between items-center animate-fade-in hover:border-slate-700 transition">
+                  <div key={ex.id} className="p-3 bg-slate-900 border border-slate-800/60 rounded-lg flex justify-between items-center hover:border-slate-700 transition">
                     <span className="text-xs font-bold text-slate-200 tracking-wide">{ex.name}</span>
                     <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 text-purple-400 font-mono text-[10px] font-bold rounded uppercase tracking-widest">{ex.code}</span>
                   </div>
