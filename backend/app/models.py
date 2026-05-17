@@ -75,10 +75,13 @@ class Exam(Base):
 
 class ExamSubject(Base):
     __tablename__ = "exam_subjects"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String, nullable=False)
-    subject_code = Column(String, nullable=False, unique=True)
     exam_id = Column(UUID(as_uuid=True), ForeignKey("exams.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    subject_code = Column(String, nullable=False)
     discipline = Column(String, default="Competitive Exam")
-    video_url = Column(String, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
+
+    # Relationship back to the parent Exam
+    exam = relationship("Exam", back_populates="subjects")

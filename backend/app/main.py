@@ -10,13 +10,21 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Ascenda API")
 
+# Explicitly map production origins to prevent browser credential filtering errors
+origins = [
+    "https://ascenda-umber.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000"
+]
+
 # CORS Middleware config
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=origins, 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Register Routers
