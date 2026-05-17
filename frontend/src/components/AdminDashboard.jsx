@@ -47,12 +47,12 @@ export default function AdminDashboard({ apiBase, onExit }) {
   const [compSubjectCode, setCompSubjectCode] = useState('');
   const [discipline, setDiscipline] = useState('Competitive Exam');
 
-  // Automatically compute Competitive Subject Code when track or subject changes
+  // AUTOMATIC UNIQUE IDENTIFIER CODE GENERATION ENGINE
   useEffect(() => {
     if (selectedExamId && compSubjectName) {
       const selectedExam = exams.find(e => String(e.id) === String(selectedExamId));
       if (selectedExam && selectedExam.code) {
-        // Formats clean strings like: IITJEE_Physics
+        // Formats clean strings like: IITJEE_Physics or NEET_Chemistry
         const cleanSubjectName = compSubjectName.replace(/\s+/g, '_');
         setCompSubjectCode(`${selectedExam.code}_${cleanSubjectName}`);
       }
@@ -285,7 +285,7 @@ export default function AdminDashboard({ apiBase, onExit }) {
         </button>
       </header>
 
-      {/* TOP-LEVEL MODE SELECTION PILOTS */}
+      {/* TOP-LEVEL MODE SELECTION */}
       <div className="flex gap-4 mb-6 border-b border-slate-800/60 pb-4">
         <button
           onClick={() => setMode('k12')}
@@ -345,7 +345,7 @@ export default function AdminDashboard({ apiBase, onExit }) {
               Provision {mode === 'k12' ? k12Tab.slice(0, -1) : compTab === 'exams' ? 'Competitive Track' : 'Track Subject'}
             </h2>
 
-            {/* --- K-12 FORMS DISPATCH MATRIX --- */}
+            {/* --- K-12 FORMS --- */}
             {mode === 'k12' && k12Tab === 'boards' && (
               <form onSubmit={handleCreateBoard} className="space-y-4">
                 <div>
@@ -437,7 +437,7 @@ export default function AdminDashboard({ apiBase, onExit }) {
             )}
 
 
-            {/* --- COMPETITIVE FORMS DISPATCH MATRIX --- */}
+            {/* --- COMPETITIVE FORMS --- */}
             {mode === 'competitive' && compTab === 'exams' && (
               <form onSubmit={handleCreateExam} className="space-y-4">
                 <div>
@@ -511,7 +511,7 @@ export default function AdminDashboard({ apiBase, onExit }) {
                 organizations.map(o => (
                   <div key={o.id} className="p-3 bg-slate-900 border border-slate-800/60 rounded-lg flex justify-between items-center">
                     <span className="text-xs font-bold text-slate-200">{o.name}</span>
-                    <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 text-emerald-400 font-mono text-[10px] rounded uppercase tracking-wider">{o.org_type || 'System Board'}</span>
+                    <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 text-emerald-400 font-mono text-[10px] rounded uppercase tracking-wider">{o.org_type || 'School Board'}</span>
                   </div>
                 ))
               )}
@@ -556,7 +556,7 @@ export default function AdminDashboard({ apiBase, onExit }) {
                 ))
               )}
 
-              {/* --- COMPETITIVE MONITOR TRACK VIEWS --- */}
+              {/* --- COMPETITIVE TRACK VIEWS --- */}
               {mode === 'competitive' && compTab === 'exams' && (
                 exams.length === 0 ? <p className="text-slate-600 text-xs italic font-mono p-4 bg-slate-900 rounded-lg">No competitive exam board frameworks discovered.</p> :
                 exams.map(ex => (
