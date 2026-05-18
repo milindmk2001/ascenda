@@ -42,6 +42,11 @@ function App() {
           const grds = await gradeRes.json();
           setOrganizations(orgs);
           setGrades(grds);
+          
+          // Auto-select the first grade dynamically if available to avoid unaligned states
+          if (grds.length > 0) {
+            setSelectedGradeName(grds[0].name);
+          }
         }
       } catch (err) {
         console.error("Metadata initialization failed:", err);
@@ -105,7 +110,7 @@ function App() {
             <option value="NEET">NEET</option>
           </select>
 
-          {/* Grade Selector Dropdown: Automatically locks out for IIT/NEET tracks */}
+          {/* Grade Selector Dropdown: Dynamically maps database values */}
           <select 
             value={isCompetitiveTrack ? "ALL" : selectedGradeName}
             onChange={(e) => setSelectedGradeName(e.target.value)}
@@ -120,8 +125,11 @@ function App() {
               <option value="ALL">Global Track</option>
             ) : (
               <>
-                <option value="11">Class 11</option>
-                <option value="12">Class 12</option>
+                {grades.map((grade) => (
+                  <option key={grade.id} value={grade.name}>
+                    Class {grade.name}
+                  </option>
+                ))}
               </>
             )}
           </select>
