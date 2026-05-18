@@ -79,22 +79,89 @@ class ExamSubjectResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# --- Hub View Resolution Schema ---
+class HubCourseCardResponse(BaseModel):
+    id: UUID4
+    name: str
+    subject_code: str
+    discipline: str
+    track_type: str  # "K12" or "COMPETITIVE"
+    meta_tag: str    # e.g., "CBSE-11" or "IITJEE"
+
+    class Config:
+        from_attributes = True
+
 
 # ==========================================
-# 2. PUBLIC CORE CHANNELS
+# 2. PUBLIC CORE UNIFIED CHANNELS
 # ==========================================
 
 @router.get("/exams", response_model=List[ExamResponse])
 def get_public_exams(db: Session = Depends(get_db)):
-    """Returns active test blueprints in the directory."""
+    """Returns active test blueprints in the public directory."""
     return db.query(models.Exam).all()
+
+
+@router.get("/resolve-hub", response_model=List[HubCourseCardResponse])
+def resolve_hub_view_content(
+    track_code: str, 
+    grade_name: Optional[str] = None, 
+    db: Session = Depends(get_db)
+):
+    """
+    Unified public content engine.
+    If track_code matches a competitive exam, ignore grade and return exam subjects.
+    Otherwise, filter standard K-12 modules by both track/board and grade tier.
+    """
+    # 1. Standardize text layout input keys
+    cleaned_track = track_code.upper().strip().replace("-", "") # "IIT-JEE" -> "IITJEE"
+    
+    # 2. Check if track_code points to a Competitive Exam Track (IITJEE / NEET)
+    exam_track = db.query(models.Exam).filter(models.Exam.code == cleaned_track).first()
+    
+    if exam_track:
+        # Competitive track matched -> fetch directly from exam_subjects, skip grade constraints
+        subjects = db.query(models.ExamSubject).filter(models.ExamSubject.exam_id == exam_track.id).all()
+        return [
+            HubCourseCardResponse(
+                id=s.id,
+                name=s.name,
+                subject_code=s.subject_code,
+                discipline=s.discipline,
+                track_type="COMPETITIVE",
+                meta_tag=exam_track.code
+            ) for s in subjects
+        ]
+        
+    # 3. Fallback: Assume standard K-12 track (CBSE, ICSE) requiring Grade specificity
+    if not grade_name:
+        return []
+        
+    # Locate the target grade entry matching name constraint criteria (e.g., "11", "12", "Class 11")
+    cleaned_grade = grade_name.lower().replace("class", "").strip() # normalize inputs
+    grade_node = db.query(models.Grade).filter(models.Grade.name.like(f"%{cleaned_grade}%")).first()
+    
+    if not grade_node:
+        return []
+        
+    k12_subjects = db.query(models.RegularSubject).filter(models.RegularSubject.grade_id == grade_node.id).all()
+    return [
+        HubCourseCardResponse(
+            id=s.id,
+            name=s.name,
+            subject_code=s.subject_code,
+            discipline=s.discipline,
+            track_type="K12",
+            meta_tag=f"{track_code.upper().strip()}-{grade_node.name}"
+        ) for s in k12_subjects
+    ]
 
 
 # ==========================================
 # 3. ADMINISTRATIVE DATA MANAGEMENT (ADMIN)
 # ==========================================
 
-# --- 📁 PARTITION A: K-12 TRACK ARCHITECTURE (Fixes 404 Loops) ---
+# --- PARTITION A: K-12 TRACK ARCHITECTURE ---
 
 @admin_router.get("/grades", response_model=List[GradeResponse])
 def get_admin_grades(db: Session = Depends(get_db)):
@@ -143,17 +210,8 @@ def create_admin_regular_subject(payload: RegularSubjectCreate, db: Session = De
         db.rollback()
         raise HTTPException(status_code=500, detail=str(err))
 
-# Fallback alias paths matching your front-end architecture endpoints
-@admin_router.get("/subject-areas", response_model=List[RegularSubjectResponse])
-def get_admin_subject_areas_alias(db: Session = Depends(get_db)):
-    return db.query(models.RegularSubject).all()
 
-@admin_router.get("/regular/subject-areas", response_model=List[RegularSubjectResponse])
-def get_admin_regular_subject_areas_alias(db: Session = Depends(get_db)):
-    return db.query(models.RegularSubject).all()
-
-
-# --- 🏆 PARTITION B: COMPETITIVE EXAM TRACKS ---
+# --- PARTITION B: COMPETITIVE EXAM TRACKS ---
 
 @admin_router.get("/exams", response_model=List[ExamResponse])
 def get_admin_exams(db: Session = Depends(get_db)):
@@ -183,7 +241,7 @@ def create_exam_track(payload: ExamCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Database update rollback: {str(err)}")
 
 
-# --- 🧪 PARTITION C: COMPETITIVE EXAM SUBJECT MAPS ---
+# --- PARTITION C: COMPETITIVE EXAM SUBJECT MAPS ---
 
 @admin_router.get("/exam/subjects", response_model=List[ExamSubjectResponse])
 def get_admin_exam_subjects(db: Session = Depends(get_db)):

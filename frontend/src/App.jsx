@@ -17,154 +17,134 @@ function App() {
   
   const [activeSubject, setActiveSubject] = useState(null);
   
-  const [selectedOrgId, setSelectedOrgId] = useState("");
-  const [selectedGradeId, setSelectedGradeId] = useState("");
+  // Selection matrices tracking states
+  const [selectedTrackCode, setSelectedTrackCode] = useState("CBSE");
+  const [selectedGradeName, setSelectedGradeName] = useState("11");
 
-  // Global Sync Hooks
+  // Determine if competitive track rules override K-12 grading mechanics
+  const isCompetitiveTrack = 
+    selectedTrackCode === "IIT-JEE" || 
+    selectedTrackCode === "NEET" || 
+    selectedTrackCode === "IITJEE";
+
+  // Boot Layout Component Sync: Fetch metadata containers
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchMetadataLayer = async () => {
+      try {
+        setErrorMsg(null);
+        const [orgRes, gradeRes] = await Promise.all([
+          fetch(`${API_BASE}/api/admin/organizations/`),
+          fetch(`${API_BASE}/api/admin/curriculum/grades`)
+        ]);
+        
+        if (orgRes.ok && gradeRes.ok) {
+          const orgs = await orgRes.json();
+          const grds = await gradeRes.json();
+          setOrganizations(orgs);
+          setGrades(grds);
+        }
+      } catch (err) {
+        console.error("Metadata initialization failed:", err);
+      }
+    };
+    fetchMetadataLayer();
+  }, []);
+
+  // Content Resolver Hook: Triggers when selectors change
+  useEffect(() => {
+    const resolveActiveCurriculum = async () => {
       try {
         setLoading(true);
         setErrorMsg(null);
+
+        // Build parameters dynamically depending on track context
+        const queryParams = isCompetitiveTrack
+          ? `track_code=${selectedTrackCode}`
+          : `track_code=${selectedTrackCode}&grade_name=${selectedGradeName}`;
+
+        const res = await fetch(`${API_BASE}/api/curriculum/resolve-hub?${queryParams}`);
         
-        const [orgRes, gradeRes, subRes] = await Promise.all([
-          fetch(`${API_BASE}/api/admin/organizations/`),
-          fetch(`${API_BASE}/api/admin/curriculum/grades`),
-          fetch(`${API_BASE}/api/admin/curriculum/regular/subjects`)
-        ]);
-        
-        // Defensive validation text-checking to prevent "Unauthorized" crashes
-        if (!orgRes.ok) throw new Error(`Organizations API returned status ${orgRes.status}`);
-        if (!gradeRes.ok) throw new Error(`Grades API returned status ${gradeRes.status}`);
-        if (!subRes.ok) throw new Error(`Subjects API returned status ${subRes.status}`);
-
-        const orgData = await orgRes.json();
-        const gradeData = await gradeRes.json();
-        const subData = await subRes.json();
-
-        const safeOrgs = Array.isArray(orgData) ? orgData : [];
-        const safeGrades = Array.isArray(gradeData) ? gradeData : [];
-        const safeSubs = Array.isArray(subData) ? subData : [];
-
-        setOrganizations(safeOrgs);
-        setGrades(safeGrades);
-        setSubjects(safeSubs);
-
-        // Auto-select defaults cleanly using local variable space to bypass state lag
-        if (safeOrgs.length > 0) {
-          setSelectedOrgId(safeOrgs[0].id);
-          
-          // Match matching grades for this specific organization immediately
-          const matchingGrades = safeGrades.filter(g => String(g.org_id) === String(safeOrgs[0].id));
-          if (matchingGrades.length > 0) {
-            setSelectedGradeId(matchingGrades[0].id);
-          }
+        if (!res.ok) {
+          throw new Error(`Data resolve engine responded with status code: ${res.status}`);
         }
 
+        const resolvedSubjects = await res.json();
+        setSubjects(resolvedSubjects);
       } catch (err) {
-        console.error("Error running application startup layout sync:", err);
-        setErrorMsg(err.message || "Failed to connect to backend context channels.");
+        console.error("Curriculum engine resolution failure:", err);
+        setErrorMsg(err.message);
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
-  }, [view]); 
 
-  // Side-effect to keep grades and selected subject matrix in sync during manual dropdown mutations
-  useEffect(() => {
-    if (selectedOrgId && grades.length > 0) {
-      const filtered = grades.filter(g => String(g.org_id) === String(selectedOrgId));
-      if (filtered.length > 0) {
-        // Only override if the current selection is no longer a part of the active organization
-        const stillValid = filtered.some(g => String(g.id) === String(selectedGradeId));
-        if (!stillValid) {
-          setSelectedGradeId(filtered[0].id);
-        }
-      } else {
-        setSelectedGradeId("");
-      }
-    }
-  }, [selectedOrgId, grades]);
-
-  // Dynamic Filtering Logic with structural safeguards
-  const filteredGrades = (grades || []).filter(g => String(g.org_id) === String(selectedOrgId));
-  const filteredSubjects = (subjects || []).filter(sub => String(sub.grade_id) === String(selectedGradeId));
-  const displayedSubjects = filteredSubjects.length > 0 ? filteredSubjects : (subjects || []);
+    resolveActiveCurriculum();
+  }, [selectedTrackCode, selectedGradeName, isCompetitiveTrack]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
-      {/* Dynamic Navigation Header */}
-      {view !== 'reader' && (
-        <nav className="p-4 bg-slate-900/60 backdrop-blur border-b border-slate-800 flex flex-wrap justify-between items-center gap-4 z-50 sticky top-0">
-          <div 
-            onClick={() => setView('landing')} 
-            className="text-xl font-black tracking-tighter text-white cursor-pointer select-none"
+      {/* Dynamic Header Component Block */}
+      <nav className="p-4 border-b border-slate-900 flex justify-between items-center sticky top-0 bg-slate-950/80 backdrop-blur-md z-50">
+        <div 
+          onClick={() => setView('landing')} 
+          className="text-2xl font-black tracking-tighter cursor-pointer select-none"
+        >
+          ASCENDA<span className="text-emerald-500">PRO</span>
+        </div>
+        
+        <div className="flex gap-4 items-center">
+          {/* Main Core Tracking Dropdown */}
+          <select 
+            value={selectedTrackCode}
+            onChange={(e) => setSelectedTrackCode(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-200 outline-none focus:border-emerald-500 cursor-pointer"
           >
-            ASCENDA<span className="text-indigo-500">PRO</span>
-          </div>
+            <option value="CBSE">CBSE</option>
+            <option value="ICSE">ICSE</option>
+            <option value="IIT-JEE">IIT-JEE</option>
+            <option value="NEET">NEET</option>
+          </select>
 
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setView('landing')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${view === 'landing' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-            >
-              Hub View
-            </button>
-            <button 
-              onClick={() => setView('architect')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${view === 'architect' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-            >
-              Academic Architect
-            </button>
-            <button 
-              onClick={() => setView('studio')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${view === 'studio' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-            >
-              Content Studio
-            </button>
-            <button 
-              onClick={() => setView('admin')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${view === 'admin' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-            >
-              Admin Dashboard
-            </button>
-          </div>
+          {/* Grade Selector Dropdown: Automatically locks out for IIT/NEET tracks */}
+          <select 
+            value={isCompetitiveTrack ? "ALL" : selectedGradeName}
+            onChange={(e) => setSelectedGradeName(e.target.value)}
+            disabled={isCompetitiveTrack}
+            className={`bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-200 outline-none focus:border-emerald-500 transition-all ${
+              isCompetitiveTrack 
+                ? "opacity-30 cursor-not-allowed border-dashed text-slate-500 bg-slate-950" 
+                : "opacity-100 cursor-pointer"
+            }`}
+          >
+            {isCompetitiveTrack ? (
+              <option value="ALL">Global Track</option>
+            ) : (
+              <>
+                <option value="11">Class 11</option>
+                <option value="12">Class 12</option>
+              </>
+            )}
+          </select>
 
-          {/* Filtering Dropdowns */}
-          <div className="flex gap-2">
-            <select 
-              className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs outline-none text-white cursor-pointer" 
-              value={selectedOrgId} 
-              onChange={(e) => setSelectedOrgId(e.target.value)}
-            >
-              {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
-            </select>
-            <select 
-              className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs outline-none text-white cursor-pointer" 
-              value={selectedGradeId} 
-              onChange={(e) => setSelectedGradeId(e.target.value)}
-            >
-              {filteredGrades.map(g => (
-                <option key={g.id} value={g.id}>
-                  {g.name || `Grade ${g.level}`}
-                </option>
-              ))}
-              {filteredGrades.length === 0 && <option value="">No grades found</option>}
-            </select>
-          </div>
-        </nav>
-      )}
+          {/* Router Action Links */}
+          <button 
+            onClick={() => setView(view === 'admin' ? 'landing' : 'admin')}
+            className="text-xs font-semibold px-3 py-1.5 rounded-md border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-white"
+          >
+            {view === 'admin' ? 'Exit Console' : 'Admin Panel'}
+          </button>
+        </div>
+      </nav>
 
-      {/* Global Error Notice Banner */}
+      {/* Global Framework Status Banners */}
       {errorMsg && (
-        <div className="bg-red-950/80 border-b border-red-800 text-red-200 px-6 py-2 text-xs flex justify-between items-center">
-          <span><strong>System Engine Notice:</strong> {errorMsg}</span>
-          <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-white font-bold">&times;</button>
+        <div className="bg-red-950/40 border-b border-red-900 text-red-400 text-xs px-4 py-2 flex justify-between items-center font-mono">
+          <span>System Synchronization Error: {errorMsg}</span>
+          <button onClick={() => setErrorMsg(null)} className="text-white font-bold">&times;</button>
         </div>
       )}
 
-      {/* Main Core View Engine Routing */}
+      {/* Main Core View Engine Routing Layout */}
       <main className="flex-grow flex flex-col">
         {view === 'admin' ? (
           <AdminDashboard apiBase={API_BASE} onExit={() => setView('landing')} />
@@ -173,29 +153,18 @@ function App() {
         ) : view === 'reader' ? (
           <CourseReader 
             subject={activeSubject} 
-            onBack={() => setView('architect')} 
-          />
-        ) : view === 'architect' ? (
-          <AcademicArchitect 
-            subjects={displayedSubjects} 
-            loading={loading} 
-            selectedBoard={organizations.find(o => String(o.id) === String(selectedOrgId))?.name || "Select Board"}
-            selectedGrade={grades.find(g => String(g.id) === String(selectedGradeId))?.name || ""}
-            onCourseSelect={(sub) => {
-              setActiveSubject(sub);
-              setView('reader');
-            }}
             onBack={() => setView('landing')} 
           />
         ) : (
           <UserLearningHub 
-            subjects={displayedSubjects} 
+            subjects={subjects} 
             loading={loading} 
+            trackName={selectedTrackCode}
+            gradeName={isCompetitiveTrack ? "Global" : `Class ${selectedGradeName}`}
             onCourseSelect={(sub) => {
               setActiveSubject(sub);
               setView('reader');
             }}
-            onExploreArchitect={() => setView('architect')}
           />
         )}
       </main>
