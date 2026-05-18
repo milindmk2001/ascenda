@@ -121,7 +121,10 @@ def resolve_hub_curriculum(
     Core algorithmic multiplexer matching parameters down to active 
     subject components for the learning application dashboard layout.
     """
-    if track_code in ["IIT-JEE", "NEET", "IITJEE"]:
+    # Clean up input variations safely (e.g., "IIT-JEE" -> "IITJEE")
+    normalized_track = track_code.replace("-", "").strip().upper()
+
+    if normalized_track in ["IITJEE", "NEET"]:
         exam_node = db.query(models.Exam).filter(models.Exam.exam_code == "IITJEE").first()
         if not exam_node:
             return []
@@ -129,16 +132,17 @@ def resolve_hub_curriculum(
         exam_subs = db.query(models.ExamSubject).filter(models.ExamSubject.exam_id == exam_node.id).all()
         return [
             {
-                "id": sub.id,
+                "id": str(sub.id),
                 "name": sub.name,
                 "subject_code": sub.subject_code,
                 "discipline": sub.discipline,
-                "video_url": f"https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4"
+                "video_url": "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4"
             }
             for sub in exam_subs
         ]
     
     else:
+        # K-12 Flow Handling Layout
         org_node = db.query(models.Organization).filter(models.Organization.name == track_code).first()
         if not org_node:
             return []
@@ -152,7 +156,19 @@ def resolve_hub_curriculum(
             return []
             
         regular_subs = db.query(models.RegularSubject).filter(models.RegularSubject.grade_id == grade_node.id).all()
-        return regular_subs
+        
+        # FIX: Serialize SQLAlchemy database models explicitly into basic dictionary items 
+        # to prevent FastAPI serialization engine 500 runtime crashes.
+        return [
+            {
+                "id": str(sub.id),
+                "name": sub.name,
+                "subject_code": sub.subject_code,
+                "discipline": sub.discipline,
+                "video_url": sub.video_url if getattr(sub, "video_url", None) else ""
+            }
+            for sub in regular_subs
+        ]
 
 
 # ────────────────────────────────────────────────────────
