@@ -12,8 +12,10 @@ router = APIRouter(prefix="/api/curriculum", tags=["Curriculum Public Framework"
 admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["Admin Curriculum Ingestion Console"])
 
 
-# ==========================================\n# 1. PYDANTIC DATA TRANSFER SCHEMAS\n# ==========================================\n
-# --- K-12 Schema Matrix ---
+# ==========================================
+# 1. PYDANTIC DATA TRANSFER SCHEMAS
+# ==========================================
+
 class GradeCreate(BaseModel):
     name: str
     level: Optional[str] = None
@@ -46,8 +48,6 @@ class RegularSubjectResponse(BaseModel):
     class Config:
         from_attributes = True
 
-
-# --- Competitive Exam Schema Matrix ---
 class ExamCreate(BaseModel):
     name: str
     exam_code: str
@@ -76,8 +76,6 @@ class ExamSubjectResponse(BaseModel):
     class Config:
         from_attributes = True
 
-
-# --- NEW: Curriculum Tree & Content Content Payload Schemas ---
 class LeafNode(BaseModel):
     id: UUID4
     title: str
@@ -110,7 +108,10 @@ class ContentPayloadResponse(BaseModel):
     unit: str
 
 
-# ==========================================\n# 2. PUBLIC CONSUMPTION ROUTER PORTS\n# ==========================================\n
+# ==========================================
+# 2. PUBLIC CONSUMPTION ROUTER PORTS
+# ==========================================
+
 @router.get("/resolve-hub")
 def resolve_hub_curriculum(
     track_code: str, 
@@ -121,12 +122,18 @@ def resolve_hub_curriculum(
     Core algorithmic multiplexer matching parameters down to active 
     subject components for the learning application dashboard layout.
     """
-    # Clean up input variations safely (e.g., "IIT-JEE" -> "IITJEE")
+    # Normalize input variation flags securely (e.g., "IIT-JEE" -> "IITJEE")
     normalized_track = track_code.replace("-", "").strip().upper()
 
     if normalized_track in ["IITJEE", "NEET"]:
-        exam_node = db.query(models.Exam).filter(models.Exam.exam_code == "IITJEE").first()
+        # Fallback query matching both standard formats
+        exam_node = db.query(models.Exam).filter(
+            (models.Exam.exam_code == "IITJEE") | (models.Exam.exam_code == "IIT-JEE")
+        ).first()
+        
+        # SAFETY GUARD: If the metadata track isn't seeded yet, return an empty array instead of crashing
         if not exam_node:
+            print(f"Warning: Exam record for tracking code '{normalized_track}' not found in public.exams.")
             return []
         
         exam_subs = db.query(models.ExamSubject).filter(models.ExamSubject.exam_id == exam_node.id).all()
@@ -142,7 +149,6 @@ def resolve_hub_curriculum(
         ]
     
     else:
-        # K-12 Flow Handling Layout
         org_node = db.query(models.Organization).filter(models.Organization.name == track_code).first()
         if not org_node:
             return []
@@ -157,8 +163,7 @@ def resolve_hub_curriculum(
             
         regular_subs = db.query(models.RegularSubject).filter(models.RegularSubject.grade_id == grade_node.id).all()
         
-        # FIX: Serialize SQLAlchemy database models explicitly into basic dictionary items 
-        # to prevent FastAPI serialization engine 500 runtime crashes.
+        # Explicitly map fields to primitive dictionaries to clear out JSON serialization errors
         return [
             {
                 "id": str(sub.id),
@@ -171,24 +176,15 @@ def resolve_hub_curriculum(
         ]
 
 
-# ────────────────────────────────────────────────────────
-# NEW PIPELINE ROUTE: GET COLLAPSIBLE SYLLABUS TREE 
-# ────────────────────────────────────────────────────────
 @router.get("/{exam_type}/{subject_code}", response_model=CurriculumTreeResponse)
 def get_curriculum_tree(
     exam_type: str = Path(..., description="Target exam tracker tag, e.g., iitjee"),
     subject_code: str = Path(..., description="Target subject selection token, e.g., physics"),
     db: Session = Depends(get_db)
 ):
-    """
-    Assembles relational components from public.curriculum_tree into an optimized, 
-    nested JSON format using automated case-insensitive SQL matching layers.
-    """
-    # Defensive Normalization: lowercase URL inputs match case-insensitive conditions in SQL
     norm_exam = exam_type.strip().lower()
     norm_subject = subject_code.strip().lower()
 
-    # Query uses LOWER mappings to ensure compatibility with mixed case entries
     query = text("""
         SELECT id, parent_id, title, level, content_type,
                unit_number, is_leaf, content_id, display_order
@@ -199,7 +195,7 @@ def get_curriculum_tree(
     """)
     
     rows = db.execute(query, {
-        "exam_type": norm_exam if norm_exam != "iit-jee" else "iitjee",
+        "exam_type": "iitjee" if norm_exam in ["iitjee", "iit-jee"] else norm_exam,
         "subject_pattern": f"%{norm_subject}%"
     }).fetchall()
     
@@ -214,8 +210,6 @@ def get_curriculum_tree(
     topics_dict: Dict[str, Dict[str, Any]] = {}
     all_leaves: List[Dict[str, Any]] = []
 
-    # Filter out units not belonging to the chosen subject (if multiple exist)
-    # level 1 contains titles like 'Unit 1 — Physics and Measurement'
     for row in rows:
         if row.level == 1:
             units_dict[str(row.id)] = {
@@ -243,7 +237,6 @@ def get_curriculum_tree(
                 "is_leaf": True
             })
 
-    # Stitching Phase 1: Append Leaf dict nodes directly to Topics
     for leaf in all_leaves:
         p_id = leaf["parent_id"]
         if p_id in topics_dict:
@@ -255,13 +248,11 @@ def get_curriculum_tree(
                 "is_leaf": True
             })
 
-    # Stitching Phase 2: Append Topics arrays directly inside parent Unit buckets
     for t_id, topic_data in topics_dict.items():
         p_id = topic_data.pop("parent_id", None)
         if p_id in units_dict:
             units_dict[p_id]["topics"].append(topic_data)
 
-    # Compile maps back to an array structure sorted by unit positioning sequence
     sorted_units = sorted(list(units_dict.values()), key=lambda x: x["unit_number"])
 
     return {
@@ -271,18 +262,11 @@ def get_curriculum_tree(
     }
 
 
-# ────────────────────────────────────────────────────────
-# NEW PIPELINE ROUTE: RECOVER CANVAS DISPLAY CONTENT 
-# ────────────────────────────────────────────────────────
 @router.get("/content/{content_id}", response_model=ContentPayloadResponse)
 def get_content_payload(
     content_id: UUID4 = Path(..., description="Target database content row identifier uuid"),
     db: Session = Depends(get_db)
 ):
-    """
-    Returns actual textual concept notes or solved numerical frameworks 
-    when a user clicks a dynamic leaf.
-    """
     query = text("""
         SELECT content, content_type, topic, unit
         FROM public.generated_content
@@ -291,11 +275,10 @@ def get_content_payload(
     """)
     
     result = db.execute(query, {"content_id": str(content_id)}).fetchone()
-    
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
-            detail="The active instructional textbook artifact could not be found in the system vector repository."
+            detail="The active instructional textbook artifact could not be found."
         )
         
     return {
@@ -306,8 +289,9 @@ def get_content_payload(
     }
 
 
-# ==========================================\n# 3. ADMINISTRATIVE WORKFLOW MANAGEMENT CHANNELS\n# ==========================================\n
-# --- PARTITION A: K-12 INTERFACE CONFIGURATIONS ---
+# ==========================================
+# 3. ADMINISTRATIVE WORKFLOW MANAGEMENT CHANNELS
+# ==========================================
 
 @admin_router.get("/grades", response_model=List[GradeResponse])
 def get_admin_grades(db: Session = Depends(get_db)):
@@ -343,9 +327,6 @@ def create_admin_regular_subject(payload: RegularSubjectCreate, db: Session = De
     db.refresh(new_sub)
     return new_sub
 
-
-# --- PARTITION B: GLOBAL TRACK TRACKING ---
-
 @admin_router.get("/exams", response_model=List[ExamResponse])
 def get_admin_exams(db: Session = Depends(get_db)):
     return db.query(models.Exam).all()
@@ -361,17 +342,12 @@ def create_admin_exam_track(payload: ExamCreate, db: Session = Depends(get_db)):
     db.refresh(new_exam)
     return new_exam
 
-
-# --- PARTITION C: COMPETITIVE EXAM SUBJECT MAPS ---
-
 @admin_router.get("/exam/subjects", response_model=List[ExamSubjectResponse])
 def get_admin_exam_subjects(db: Session = Depends(get_db)):
-    """Lists registered exam domain components."""
     return db.query(models.ExamSubject).all()
 
 @admin_router.post("/exam/subjects", response_model=ExamSubjectResponse, status_code=status.HTTP_201_CREATED)
 def create_exam_subject_node(payload: ExamSubjectCreate, db: Session = Depends(get_db)):
-    """Safely handles dashboard payloads to build data objects without column matching crashes."""
     parent_exam = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
     if not parent_exam:
         raise HTTPException(
