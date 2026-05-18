@@ -42,11 +42,6 @@ function App() {
           const grds = await gradeRes.json();
           setOrganizations(orgs);
           setGrades(grds);
-          
-          // Auto-select the first grade dynamically if available to avoid unaligned states
-          if (grds.length > 0) {
-            setSelectedGradeName(grds[0].name);
-          }
         }
       } catch (err) {
         console.error("Metadata initialization failed:", err);
@@ -86,6 +81,19 @@ function App() {
     resolveActiveCurriculum();
   }, [selectedTrackCode, selectedGradeName, isCompetitiveTrack]);
 
+  // RELATIONAL JOIN FIX: Map current selectedTrackCode to find the active organization object
+  const activeOrg = organizations.find(org => org.name === selectedTrackCode);
+
+  // Filter grades to only show rows linked via org_id to the active dropdown selection
+  const contextualGrades = grades.filter(grade => grade.org_id === activeOrg?.id);
+
+  // Auto-correct selectedGradeName state if track switching leaves it on an invalid grade
+  useEffect(() => {
+    if (contextualGrades.length > 0 && !contextualGrades.some(g => g.name === selectedGradeName)) {
+      setSelectedGradeName(contextualGrades[0].name);
+    }
+  }, [selectedTrackCode, contextualGrades]);
+
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
       {/* Dynamic Header Component Block */}
@@ -110,7 +118,7 @@ function App() {
             <option value="NEET">NEET</option>
           </select>
 
-          {/* Grade Selector Dropdown: Dynamically maps database values */}
+          {/* Grade Selector Dropdown: Dynamically maps related grades matching the active org_id */}
           <select 
             value={isCompetitiveTrack ? "ALL" : selectedGradeName}
             onChange={(e) => setSelectedGradeName(e.target.value)}
@@ -125,7 +133,7 @@ function App() {
               <option value="ALL">Global Track</option>
             ) : (
               <>
-                {grades.map((grade) => (
+                {contextualGrades.map((grade) => (
                   <option key={grade.id} value={grade.name}>
                     Class {grade.name}
                   </option>
