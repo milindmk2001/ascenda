@@ -150,17 +150,17 @@ def get_content_payload(
 
 @router.get("/{exam_type}/{subject_code}", response_model=CurriculumTreeResponse)
 def get_curriculum_tree(
-    exam_type: str = Path(..., description="Target track selector tag, e.g., CBSE or IIT-JEE"),
+    exam_type: str = Path(..., description="Target exam tracker tag, e.g., CBSE or IIT-JEE"),
     subject_code: str = Path(..., description="Target subject selection token, e.g., physics"),
     db: Session = Depends(get_db)
 ):
     """
-    Unified engine resolving curriculum hierarchies for both K-12 and Competitive tracks.
+    Fetches course structures reactively from target schema configurations.
     """
     clean_exam = exam_type.strip().lower().replace("-", "").replace("_", "")
-    norm_subject = subject_code.strip().lower()
+    clean_subject = subject_code.strip().lower()
 
-    # Step 1: Attempt to pull directly from the structured tree matrix view table
+    # Base Matrix Query: Scans across mapped views
     query = text("""
         SELECT id, parent_id, title, level, content_type,
                unit_number, is_leaf, content_id, display_order
@@ -174,7 +174,7 @@ def get_curriculum_tree(
     except Exception:
         rows = []
 
-    # Step 2: Adaptive fallback matching across foundational courses/exams structural maps
+    # Dynamic Fallback: Query real target metadata schemas when flat structural view returns empty
     if not rows:
         fallback_query = text("""
             SELECT id, NULL::uuid as parent_id, name as title, 1 as level, 
@@ -182,20 +182,22 @@ def get_curriculum_tree(
                    NULL::uuid as content_id, 0 as display_order
             FROM public.courses
             WHERE (LOWER(name) LIKE :exam_pattern OR LOWER(code) LIKE :exam_pattern)
-               OR (LOWER(REPLACE(REPLACE(name, '_', ''), '-', '')) LIKE :exam_pattern)
+              AND (LOWER(name) LIKE :subject_pattern OR LOWER(description) LIKE :subject_pattern)
             UNION ALL
             SELECT s.id, s.exam_id as parent_id, s.name as title, 1 as level,
                    'unit' as content_type, 1 as unit_number, false as is_leaf,
                    NULL::uuid as content_id, 0 as display_order
             FROM public.exam_subjects s
             JOIN public.exams e ON s.exam_id = e.id
-            WHERE LOWER(REPLACE(REPLACE(e.exam_code, '_', ''), '-', '')) = :clean_exam
-               OR LOWER(REPLACE(REPLACE(e.name, '_', ''), '-', '')) = :clean_exam;
+            WHERE (LOWER(REPLACE(REPLACE(e.exam_code, '_', ''), '-', '')) = :clean_exam
+               OR LOWER(REPLACE(REPLACE(e.name, '_', ''), '-', '')) = :clean_exam)
+               AND LOWER(s.name) LIKE :subject_pattern;
         """)
         try:
             rows = db.execute(fallback_query, {
                 "clean_exam": clean_exam,
-                "exam_pattern": f"%{clean_exam}%"
+                "exam_pattern": f"%{clean_exam}%",
+                "subject_pattern": f"%{clean_subject}%"
             }).fetchall()
         except Exception:
             rows = []
@@ -211,7 +213,6 @@ def get_curriculum_tree(
     topics_dict: Dict[str, Dict[str, Any]] = {}
     all_leaves: List[Dict[str, Any]] = []
 
-    # Build hierarchy structures safely based on runtime structural identifiers
     for row in rows:
         row_id = str(row.id)
         if row.level == 1 or row.content_type == "unit":
@@ -240,7 +241,6 @@ def get_curriculum_tree(
                 "is_leaf": True
             })
 
-    # Assemble deep tree maps
     for leaf in all_leaves:
         p_id = leaf["parent_id"]
         if p_id and p_id in topics_dict:

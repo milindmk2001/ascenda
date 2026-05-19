@@ -121,3 +121,16 @@ class GeneratedContentPayload(Base):
     content_type = Column(String, nullable=False)
     topic = Column(String, nullable=False)
     unit = Column(String, nullable=False)
+
+# Place this at the end of app/models.py
+
+class Course(Base):
+    __tablename__ = "courses"
+    __table_args__ = {"schema": "public", "extend_existing": True}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    code = Column(String, nullable=False)
+    description = Column(TEXT, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=text("now()"))
+    organization_id = Column(UUID(as_uuid=True), nullable=True)
