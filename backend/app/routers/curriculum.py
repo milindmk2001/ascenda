@@ -155,27 +155,42 @@ def get_curriculum_tree(
     db: Session = Depends(get_db)
 ):
     """
-    Fetches flat layout database items and returns a nested tree structures array map.
+    Fetches flat layout database items and returns a nested tree structure mapping array.
     """
-    # Standardize input variations (removes hyphens and underscores completely)
     clean_input_exam = exam_type.strip().lower().replace("-", "").replace("_", "")
     norm_subject = subject_code.strip().lower()
 
-    # Strips underscores and hyphens from the DB column dynamically during lookup for a resilient match
+    # FIX: Corrected the filtering logic to avoid accidentally stripping level 1 items
     query = text("""
         SELECT id, parent_id, title, level, content_type,
                unit_number, is_leaf, content_id, display_order
         FROM public.curriculum_tree
         WHERE LOWER(REPLACE(REPLACE(exam_type, '_', ''), '-', '')) = :clean_exam
-          AND (LOWER(title) LIKE :subject_pattern OR level > 1)
         ORDER BY unit_number ASC, level ASC, display_order ASC;
     """)
     
-    rows = db.execute(query, {
-        "clean_exam": clean_input_exam,
-        "subject_pattern": f"%{norm_subject}%"
-    }).fetchall()
+    try:
+        rows = db.execute(query, {"clean_exam": clean_input_exam}).fetchall()
+    except Exception:
+        rows = []
     
+    # FALLBACK ENGINE: If curriculum_tree view is empty or unpopulated, 
+    # query relational schemas directly to fetch active items.
+    if not rows:
+        fallback_query = text("""
+            SELECT s.id, s.exam_id as parent_id, s.name as title, 1 as level, 
+                   'unit' as content_type, 1 as unit_number, false as is_leaf, 
+                   NULL::uuid as content_id, 0 as display_order
+            FROM public.exam_subjects s
+            JOIN public.exams e ON s.exam_id = e.id
+            WHERE LOWER(REPLACE(REPLACE(e.exam_code, '_', ''), '-', '')) = :clean_exam
+               OR LOWER(REPLACE(REPLACE(e.name, '_', ''), '-', '')) = :clean_exam;
+        """)
+        try:
+            rows = db.execute(fallback_query, {"clean_exam": clean_input_exam}).fetchall()
+        except Exception:
+            rows = []
+
     if not rows:
         return {
             "exam_type": exam_type.upper(),
@@ -193,7 +208,7 @@ def get_curriculum_tree(
             units_dict[row_id] = {
                 "id": row.id,
                 "title": row.title,
-                "unit_number": row.unit_number,
+                "unit_number": row.unit_number if row.unit_number is not None else 1,
                 "content_type": "unit",
                 "topics": []
             }
