@@ -120,18 +120,17 @@ def resolve_hub_curriculum(
     Core algorithmic multiplexer matching incoming dashboard selectors
     to corresponding dataset structures in PostgreSQL database engines.
     """
-    # Standardize input keys to handle structural variations (IIT-JEE / IITJEE -> IIT_JEE)
-    clean_track = track_code.replace("-", "_").strip().upper()
-    if clean_track == "IITJEE":
-        clean_track = "IIT_JEE"
+    # Normalize structural strings to cleanly match database entries (IIT-JEE -> IITJEE)
+    clean_track = track_code.replace("-", "").strip().upper()
 
-    if clean_track in ["IIT_JEE", "NEET"]:
-        # Match using explicit string identifiers matching the table entries
-        exam_node = db.query(models.Exam).filter(models.Exam.exam_code == clean_track).first()
+    if clean_track in ["IITJEE", "NEET"]:
+        # FIXED: Changed models.Exam.exam_code to models.Exam.code to match schema layout
+        exam_node = db.query(models.Exam).filter(models.Exam.code == clean_track).first()
         
-        # Safe structural fallback sequence if seed properties deviate across schemas
-        if not exam_node and clean_track == "IIT_JEE":
-            exam_node = db.query(models.Exam).filter(models.Exam.exam_code == "IITJEE").first()
+        if not exam_node:
+            # Fallback check in case the table contains hyphenated strings ("IIT-JEE")
+            fallback_track = track_code.strip().upper()
+            exam_node = db.query(models.Exam).filter(models.Exam.code == fallback_track).first()
             
         if not exam_node:
             return []
@@ -149,7 +148,7 @@ def resolve_hub_curriculum(
         ]
         
     else:
-        # Standard Multi-Tenant K-12 Track Pathway (e.g. CBSE / ICSE)
+        # Standard Multi-Tenant K-12 Track Pathway (CBSE / ICSE)
         org_node = db.query(models.Organization).filter(models.Organization.name == track_code.strip().upper()).first()
         if not org_node:
             return []
@@ -157,10 +156,9 @@ def resolve_hub_curriculum(
         if not grade_name:
             return []
             
-        # Clean down structural strings to parse both integers and textual grades gracefully
         cleaned_grade = grade_name.lower().replace("class", "").strip()
         
-        # SCOPE-LOCKED FILTER: Explicitly bind the lookup to the active org context to block row mismatches
+        # Scope-locked query matching the specific active tenant organization id context
         grade_node = db.query(models.Grade).filter(
             models.Grade.org_id == org_node.id,
             models.Grade.name.like(f"%{cleaned_grade}%")
@@ -188,21 +186,14 @@ def get_curriculum_tree(
     subject_code: str = Path(..., description="Target subject selection token, e.g., physics"),
     db: Session = Depends(get_db)
 ):
-    """
-    Assembles complete nested curriculum rendering trees safely mapping 
-    Units -> Topics -> Leaves with flexible case-insensitive filtering.
-    """
-    norm_exam = exam_type.strip().lower().replace("-", "_")
-    if norm_exam == "iitjee":
-        norm_exam = "iit_jee"
-        
+    norm_exam = exam_type.strip().lower().replace("-", "")
     norm_subject = subject_code.strip().lower()
 
     query = text("""
         SELECT id, parent_id, title, level, content_type,
                unit_number, is_leaf, content_id, display_order
         FROM public.curriculum_tree
-        WHERE (LOWER(exam_type) = :exam_type OR LOWER(exam_type) = 'iit_jee' OR LOWER(exam_type) = 'iitjee')
+        WHERE (LOWER(exam_type) = :exam_type OR REPLACE(LOWER(exam_type), '-', '') = :exam_type)
           AND (LOWER(title) LIKE :subject_pattern OR level > 1)
         ORDER BY unit_number ASC, level ASC, display_order ASC;
     """)
@@ -344,14 +335,15 @@ def get_admin_exams(db: Session = Depends(get_db)):
 
 @admin_router.post("/exams", response_model=ExamResponse, status_code=status.HTTP_201_CREATED)
 def create_admin_exam_track(payload: ExamCreate, db: Session = Depends(get_db)):
+    # FIXED: Bound to code field directly to align with metadata patterns
     new_exam = models.Exam(
         name=payload.name.strip(),
-        exam_code=payload.exam_code.upper().strip()
+        code=payload.exam_code.upper().strip()
     )
     db.add(new_exam)
     db.commit()
     db.refresh(new_exam)
-    return new_exam
+    return ExamResponse(id=new_exam.id, name=new_exam.name, exam_code=new_exam.code)
 
 @admin_router.get("/exam/subjects", response_model=List[ExamSubjectResponse])
 def get_admin_exam_subjects(db: Session = Depends(get_db)):
