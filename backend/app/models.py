@@ -4,7 +4,10 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.database import Base
 
-# ==========================================\n# 1. ORGANIZATION & GRADE LAYER\n# ==========================================\n
+# ==========================================
+# 1. ORGANIZATION & GRADE LAYER
+# ==========================================
+
 class Organization(Base):
     __tablename__ = "organizations"
     
@@ -12,7 +15,7 @@ class Organization(Base):
     name = Column(String, nullable=False)
     org_type = Column(String, nullable=False)
     
-    grades = relationship("Grade", back_populates=\"organization\")
+    grades = relationship("Grade", back_populates="organization")
 
 
 class Grade(Base):
@@ -27,7 +30,10 @@ class Grade(Base):
     subjects = relationship("RegularSubject", back_populates="grade")
 
 
-# ==========================================\n# 2. K-12 STANDARDIZED CURRICULUM LAYER\n# ==========================================\n
+# ==========================================
+# 2. K-12 STANDARDIZED CURRICULUM LAYER
+# ==========================================
+
 class RegularSubject(Base):
     __tablename__ = "subjects"
 
@@ -41,7 +47,10 @@ class RegularSubject(Base):
     grade = relationship("Grade", back_populates="subjects")
 
 
-# ==========================================\n# 3. COMPETITIVE TRACKS / EXAMS ENGINE\n# ==========================================\n
+# ==========================================
+# 3. COMPETITIVE TRACKS / EXAMS ENGINE
+# ==========================================
+
 class Exam(Base):
     __tablename__ = "exams"
 
@@ -66,7 +75,10 @@ class ExamSubject(Base):
     exam = relationship("Exam", back_populates="subjects")
 
 
-# ==========================================\n# 4. CONTENT STUDIO & AI TUTOR RUNTIME LAYER\n# ==========================================\n
+# ==========================================
+# 4. CONTENT STUDIO & AI TUTOR RUNTIME LAYER
+# ==========================================
+
 class ModularLesson(Base):
     __tablename__ = "modular_lessons"
     
@@ -78,7 +90,10 @@ class ModularLesson(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-# ==========================================\n# 5. ASCENDAPRO CURRICULUM NAVIGATION LAYERS\n# ==========================================\n
+# ==========================================
+# 5. ASCENDAPRO CURRICULUM NAVIGATION LAYERS
+# ==========================================
+
 class CurriculumTreeView(Base):
     __tablename__ = "curriculum_tree"
     __table_args__ = {"schema": "public", "extend_existing": True}
