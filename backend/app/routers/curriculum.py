@@ -8,13 +8,73 @@ from sqlalchemy import text
 from app import models
 from app.database import get_db
 
-# Reuse the existing routers mounted in main.py
 router = APIRouter(prefix="/api/curriculum", tags=["Curriculum Public Framework"])
+admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["Admin Curriculum Ingestion Console"])
 
 
 # ==========================================
-# PYDANTIC SCHEMAS FOR THE TREE
+# 1. PYDANTIC DATA TRANSFER SCHEMAS
 # ==========================================
+
+class GradeCreate(BaseModel):
+    name: str
+    level: Optional[str] = None
+    org_id: Optional[UUID4] = None
+
+class GradeResponse(BaseModel):
+    id: UUID4
+    name: Optional[str]
+    level: Optional[str]
+    org_id: Optional[UUID4] = None
+
+    class Config:
+        from_attributes = True
+
+class RegularSubjectCreate(BaseModel):
+    name: str
+    subject_code: str
+    discipline: str = "Science"
+    grade_id: UUID4
+    video_url: Optional[str] = ""
+
+class RegularSubjectResponse(BaseModel):
+    id: UUID4
+    name: str
+    subject_code: str
+    discipline: str
+    grade_id: Optional[UUID4] = None
+    video_url: Optional[str] = ""
+
+    class Config:
+        from_attributes = True
+
+class ExamCreate(BaseModel):
+    name: str
+    exam_code: str
+
+class ExamResponse(BaseModel):
+    id: UUID4
+    name: str
+    exam_code: str
+
+    class Config:
+        from_attributes = True
+
+class ExamSubjectCreate(BaseModel):
+    exam_id: UUID4
+    name: str
+    subject_code: str
+    discipline: str
+
+class ExamSubjectResponse(BaseModel):
+    id: UUID4
+    exam_id: UUID4
+    name: str
+    subject_code: str
+    discipline: str
+
+    class Config:
+        from_attributes = True
 
 class LeafNode(BaseModel):
     id: UUID4
@@ -49,8 +109,44 @@ class ContentPayloadResponse(BaseModel):
 
 
 # ==========================================
-# ROUTE ENDPOINTS
+# 2. PUBLIC CORE ROUTE ENDPOINTS
 # ==========================================
+
+@router.get("/resolve-hub")
+def resolve_hub_fallback(track_code: str = "CBSE", grade_name: Optional[str] = None):
+    """
+    Prevents landing panels from locking if runtime database tracks are unconfigured.
+    """
+    return []
+
+@router.get("/content/{content_id}", response_model=ContentPayloadResponse)
+def get_content_payload(
+    content_id: UUID4 = Path(..., description="Target payload identifier"),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns text documentation contents for canvas node viewports.
+    """
+    query = text("""
+        SELECT content, content_type, topic, unit
+        FROM public.generated_content
+        WHERE id = :content_id
+        LIMIT 1;
+    """)
+    
+    result = db.execute(query, {"content_id": str(content_id)}).fetchone()
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="The active knowledge asset could not be located."
+        )
+        
+    return {
+        "content": result.content,
+        "content_type": result.content_type,
+        "topic": result.topic,
+        "unit": result.unit
+    }
 
 @router.get("/{exam_type}/{subject_code}", response_model=CurriculumTreeResponse)
 def get_curriculum_tree(
@@ -59,17 +155,14 @@ def get_curriculum_tree(
     db: Session = Depends(get_db)
 ):
     """
-    Fetches the flat curriculum rows for an exam and structures them into a 
-    nested Unit -> Topic -> Leaf dictionary hierarchy in O(N) time.
+    Fetches flat layout database items and returns a nested tree structures array map.
     """
-    # Normalize inputs for robust SQL matching
     norm_exam = exam_type.strip().lower().replace("-", "")
     if norm_exam == "iitjee":
-        norm_exam = "iit_jee"  # Sync with DB table normalization strings
+        norm_exam = "iit_jee"
         
     norm_subject = subject_code.strip().lower()
 
-    # Parametrized raw query targeting the curriculum materialized schema structure
     query = text("""
         SELECT id, parent_id, title, level, content_type,
                unit_number, is_leaf, content_id, display_order
@@ -96,7 +189,6 @@ def get_curriculum_tree(
     topics_dict: Dict[str, Dict[str, Any]] = {}
     all_leaves: List[Dict[str, Any]] = []
 
-    # Single-pass parsing of the database rows
     for row in rows:
         row_id = str(row.id)
         if row.level == 1:
@@ -125,7 +217,6 @@ def get_curriculum_tree(
                 "is_leaf": True
             })
 
-    # Nest level 3 leaves inside level 2 topics
     for leaf in all_leaves:
         p_id = leaf["parent_id"]
         if p_id in topics_dict:
@@ -137,13 +228,11 @@ def get_curriculum_tree(
                 "is_leaf": True
             })
 
-    # Nest level 2 topics inside level 1 units
     for t_id, topic_data in topics_dict.items():
         p_id = topic_data.pop("parent_id", None)
         if p_id in units_dict:
             units_dict[p_id]["topics"].append(topic_data)
 
-    # Output sorted arrays aligned to defined sequence ordering constraints
     sorted_units = sorted(list(units_dict.values()), key=lambda x: x["unit_number"])
 
     return {
@@ -153,31 +242,95 @@ def get_curriculum_tree(
     }
 
 
-@router.get("/content/{content_id}", response_model=ContentPayloadResponse)
-def get_content_payload(
-    content_id: UUID4 = Path(..., description="Target data payload unique record identifier"),
-    db: Session = Depends(get_db)
-):
-    """
-    Returns text documentation contents for canvas node viewports.
-    """
-    query = text("""
-        SELECT content, content_type, topic, unit
-        FROM public.generated_content
-        WHERE id = :content_id
-        LIMIT 1;
-    """)
-    
-    result = db.execute(query, {"content_id": str(content_id)}).fetchone()
-    if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="The active core knowledge asset could not be located."
+# ==========================================
+# 3. ADMINISTRATIVE BACKEND LAYER
+# ==========================================
+
+@admin_router.get("/grades", response_model=List[GradeResponse])
+def get_admin_grades(db: Session = Depends(get_db)):
+    """Lists structured educational grades registers."""
+    return db.query(models.Grade).all()
+
+@admin_router.post("/grades", response_model=GradeResponse, status_code=status.HTTP_201_CREATED)
+def create_admin_grade(payload: GradeCreate, db: Session = Depends(get_db)):
+    try:
+        new_grade = models.Grade(
+            name=payload.name.strip(),
+            level=payload.level,
+            org_id=payload.org_id
         )
-        
-    return {
-        "content": result.content,
-        "content_type": result.content_type,
-        "topic": result.topic,
-        "unit": result.unit
-    }
+        db.add(new_grade)
+        db.commit()
+        db.refresh(new_grade)
+        return new_grade
+    except Exception as err:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database operational error: {str(err)}")
+
+@admin_router.get("/subjects", response_model=List[RegularSubjectResponse])
+def get_admin_subjects(db: Session = Depends(get_db)):
+    return db.query(models.RegularSubject).all()
+
+@admin_router.post("/subjects", response_model=RegularSubjectResponse, status_code=status.HTTP_201_CREATED)
+def create_admin_subject(payload: RegularSubjectCreate, db: Session = Depends(get_db)):
+    target_grade = db.query(models.Grade).filter(models.Grade.id == payload.grade_id).first()
+    if not target_grade:
+        raise HTTPException(status_code=404, detail="Parent tracking class partition key link missing.")
+    try:
+        new_subject = models.RegularSubject(
+            name=payload.name.strip(),
+            subject_code=payload.subject_code.upper().strip(),
+            discipline=payload.discipline,
+            grade_id=payload.grade_id,
+            video_url=payload.video_url
+        )
+        db.add(new_subject)
+        db.commit()
+        db.refresh(new_subject)
+        return new_subject
+    except Exception as err:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database update rollback: {str(err)}")
+
+@admin_router.get("/exams", response_model=List[ExamResponse])
+def get_admin_exams(db: Session = Depends(get_db)):
+    return db.query(models.Exam).all()
+
+@admin_router.post("/exams", response_model=ExamResponse, status_code=status.HTTP_201_CREATED)
+def create_admin_exam(payload: ExamCreate, db: Session = Depends(get_db)):
+    try:
+        new_exam = models.Exam(
+            name=payload.name.strip(),
+            exam_code=payload.exam_code.upper().strip()
+        )
+        db.add(new_exam)
+        db.commit()
+        db.refresh(new_exam)
+        return new_exam
+    except Exception as err:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database update rollback: {str(err)}")
+
+@admin_router.get("/exam/subjects", response_model=List[ExamSubjectResponse])
+def get_admin_exam_subjects(db: Session = Depends(get_db)):
+    return db.query(models.ExamSubject).all()
+
+@admin_router.post("/exam/subjects", response_model=ExamSubjectResponse, status_code=status.HTTP_201_CREATED)
+def create_exam_subject_node(payload: ExamSubjectCreate, db: Session = Depends(get_db)):
+    parent_exam = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
+    if not parent_exam:
+        raise HTTPException(status_code=404, detail=f"Target tracking track profile code link missing.")
+    try:
+        new_subject = models.ExamSubject(
+            exam_id=payload.exam_id,
+            name=payload.name.strip(),
+            subject_code=payload.subject_code.upper().strip(),
+            discipline=payload.discipline.strip()
+        )
+        db.add(new_subject)
+        db.commit()
+        db.refresh(new_subject)
+        return new_subject
+    except Exception as err:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error writing subject node: {str(err)}")

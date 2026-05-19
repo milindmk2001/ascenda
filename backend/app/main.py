@@ -5,23 +5,18 @@ from app.database import engine
 from app import models
 from app.routers import organizations, curriculum, studio, ai_tutor 
 
-# Import the router instances directly from your file layout
-from app.routers.curriculum import router as public_curriculum_router
-from app.routers.curriculum import admin_router as admin_curriculum_router
-
-# Initialize database tables
+# Initialize database tables schemas
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Ascenda API")
 
-# Explicitly map production origins to prevent browser credential filtering errors
+# Explicit production mapping tokens
 origins = [
     "https://ascenda-umber.vercel.app",
     "http://localhost:5173",
     "http://localhost:3000"
 ]
 
-# CORS Middleware config
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins, 
@@ -31,7 +26,7 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
-# Register Routers
+# Register Structural Routers
 app.include_router(organizations.router)
 app.include_router(curriculum.admin_router)
 app.include_router(curriculum.router)
@@ -41,7 +36,6 @@ app.include_router(ai_tutor.router)
 @app.get("/")
 def health():
     return {
-        "status": "active", 
-        "project": "Ascenda",
-        "environment": os.getenv("RAILWAY_ENVIRONMENT", "development")
+        "status": "healthy",
+        "engine": "Ascenda Dynamic Core Engine V2"
     }
