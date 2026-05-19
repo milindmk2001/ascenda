@@ -5,6 +5,10 @@ from app.database import engine
 from app import models
 from app.routers import organizations, curriculum, studio, ai_tutor 
 
+# Import the router instances directly from your file layout
+from app.routers.curriculum import router as public_curriculum_router
+from app.routers.curriculum import admin_router as admin_curriculum_router
+
 # Initialize database tables
 models.Base.metadata.create_all(bind=engine)
 
