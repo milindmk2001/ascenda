@@ -118,3 +118,33 @@ class ModularLesson(Base):
     latex_formula = Column(String)
     video_asset_id = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# ==========================================
+# 5. ASCENDAPRO CURRICULUM TREE & CONTENT SCHEMA
+# ==========================================
+
+class CurriculumTree(Base):
+    __tablename__ = "curriculum_tree"
+    __table_args__ = {"schema": "public", "extend_existing": True}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    parent_id = Column(UUID(as_uuid=True), nullable=True)
+    title = Column(String, nullable=False)
+    level = Column(Integer, nullable=False) # 1=unit, 2=topic, 3=leaf
+    content_type = Column(String, nullable=False) # unit | topic | concept | etc.
+    exam_type = Column(String, default="IITJEE")
+    unit_number = Column(Integer, nullable=True)
+    is_leaf = Column(Boolean, default=False)
+    content_id = Column(UUID(as_uuid=True), nullable=True)
+    display_order = Column(Integer, default=0)
+
+
+class GeneratedContent(Base):
+    __tablename__ = "generated_content"
+    __table_args__ = {"schema": "public", "extend_existing": True}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    content = Column(TEXT, nullable=False)
+    content_type = Column(String, nullable=False)
+    topic = Column(String, nullable=False)
+    unit = Column(String, nullable=False)
