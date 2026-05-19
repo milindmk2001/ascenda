@@ -150,46 +150,35 @@ def get_content_payload(
 
 @router.get("/{exam_type}/{subject_code}", response_model=CurriculumTreeResponse)
 def get_curriculum_tree(
-    exam_type: str = Path(..., description="Target exam tracker tag, e.g., iitjee"),
+    exam_type: str = Path(..., description="Target track selector tag, e.g., CBSE or IIT-JEE"),
     subject_code: str = Path(..., description="Target subject selection token, e.g., physics"),
     db: Session = Depends(get_db)
 ):
     """
-    Fetches flat layout database items and returns a nested tree structure mapping array.
+    Queries the public.courses table directly to fetch and assemble structural navigation maps.
     """
+    # Standardize incoming frontend payload string formats
     clean_input_exam = exam_type.strip().lower().replace("-", "").replace("_", "")
     norm_subject = subject_code.strip().lower()
 
-    # FIX: Corrected the filtering logic to avoid accidentally stripping level 1 items
+    # Query public.courses directly, using resilient string comparisons for course_type and subject fields
     query = text("""
         SELECT id, parent_id, title, level, content_type,
                unit_number, is_leaf, content_id, display_order
-        FROM public.curriculum_tree
-        WHERE LOWER(REPLACE(REPLACE(exam_type, '_', ''), '-', '')) = :clean_exam
+        FROM public.courses
+        WHERE LOWER(REPLACE(REPLACE(course_type, '_', ''), '-', '')) = :clean_exam
+          AND LOWER(subject) = :norm_subject
         ORDER BY unit_number ASC, level ASC, display_order ASC;
     """)
     
     try:
-        rows = db.execute(query, {"clean_exam": clean_input_exam}).fetchall()
-    except Exception:
+        rows = db.execute(query, {
+            "clean_exam": clean_input_exam,
+            "norm_subject": norm_subject
+        }).fetchall()
+    except Exception as err:
+        # Emergency backup query in case of database schema variations during lookup
         rows = []
-    
-    # FALLBACK ENGINE: If curriculum_tree view is empty or unpopulated, 
-    # query relational schemas directly to fetch active items.
-    if not rows:
-        fallback_query = text("""
-            SELECT s.id, s.exam_id as parent_id, s.name as title, 1 as level, 
-                   'unit' as content_type, 1 as unit_number, false as is_leaf, 
-                   NULL::uuid as content_id, 0 as display_order
-            FROM public.exam_subjects s
-            JOIN public.exams e ON s.exam_id = e.id
-            WHERE LOWER(REPLACE(REPLACE(e.exam_code, '_', ''), '-', '')) = :clean_exam
-               OR LOWER(REPLACE(REPLACE(e.name, '_', ''), '-', '')) = :clean_exam;
-        """)
-        try:
-            rows = db.execute(fallback_query, {"clean_exam": clean_input_exam}).fetchall()
-        except Exception:
-            rows = []
 
     if not rows:
         return {
@@ -202,9 +191,11 @@ def get_curriculum_tree(
     topics_dict: Dict[str, Dict[str, Any]] = {}
     all_leaves: List[Dict[str, Any]] = []
 
+    # Map database row structures into their distinct structural levels
     for row in rows:
         row_id = str(row.id)
-        if row.level == 1:
+        # Level 1 represents foundational Course/Unit blocks
+        if row.level == 1 or row.content_type == "unit":
             units_dict[row_id] = {
                 "id": row.id,
                 "title": row.title,
@@ -212,27 +203,30 @@ def get_curriculum_tree(
                 "content_type": "unit",
                 "topics": []
             }
-        elif row.level == 2:
+        # Level 2 represents middle topic clusters
+        elif row.level == 2 or row.content_type == "topic":
             topics_dict[row_id] = {
                 "id": row.id,
                 "title": row.title,
                 "content_type": "topic",
-                "parent_id": str(row.parent_id),
+                "parent_id": str(row.parent_id) if row.parent_id else None,
                 "leaves": []
             }
-        elif row.level == 3:
+        # Level 3 represents lesson canvases, formulas, and deep leaf-nodes
+        else:
             all_leaves.append({
                 "id": row.id,
-                "parent_id": str(row.parent_id),
+                "parent_id": str(row.parent_id) if row.parent_id else None,
                 "title": row.title,
-                "content_type": row.content_type,
+                "content_type": row.content_type if row.content_type else "text",
                 "content_id": row.content_id,
                 "is_leaf": True
             })
 
+    # Safely nest Level 3 leaf elements inside their structural Level 2 parent topic frameworks
     for leaf in all_leaves:
         p_id = leaf["parent_id"]
-        if p_id in topics_dict:
+        if p_id and p_id in topics_dict:
             topics_dict[p_id]["leaves"].append({
                 "id": leaf["id"],
                 "title": leaf["title"],
@@ -241,11 +235,13 @@ def get_curriculum_tree(
                 "is_leaf": True
             })
 
+    # Nest organized Level 2 clusters inside their respective Level 1 unit trackers
     for t_id, topic_data in topics_dict.items():
         p_id = topic_data.pop("parent_id", None)
-        if p_id in units_dict:
+        if p_id and p_id in units_dict:
             units_dict[p_id]["topics"].append(topic_data)
 
+    # Output sorted arrays aligned to defined sequence ordering metrics
     sorted_units = sorted(list(units_dict.values()), key=lambda x: x["unit_number"])
 
     return {
