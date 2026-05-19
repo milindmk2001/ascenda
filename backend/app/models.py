@@ -4,10 +4,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.database import Base
 
-# ==========================================
-# 1. ORGANIZATION & GRADE LAYER
-# ==========================================
-
+# ==========================================\n# 1. ORGANIZATION & GRADE LAYER\n# ==========================================\n
 class Organization(Base):
     __tablename__ = "organizations"
     
@@ -15,7 +12,7 @@ class Organization(Base):
     name = Column(String, nullable=False)
     org_type = Column(String, nullable=False)
     
-    grades = relationship("Grade", back_populates="organization")
+    grades = relationship("Grade", back_populates=\"organization\")
 
 
 class Grade(Base):
@@ -30,35 +27,27 @@ class Grade(Base):
     subjects = relationship("RegularSubject", back_populates="grade")
 
 
-# ==========================================
-# 2. K-12 STANDARDIZED CURRICULUM LAYER
-# ==========================================
-
+# ==========================================\n# 2. K-12 STANDARDIZED CURRICULUM LAYER\n# ==========================================\n
 class RegularSubject(Base):
     __tablename__ = "subjects"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     subject_code = Column(String, nullable=False)
-    discipline = Column(String, default="General Science")
-    grade_id = Column(UUID(as_uuid=True), ForeignKey("grades.id", ondelete="CASCADE"), nullable=True)
+    discipline = Column(String, default="Science")
+    grade_id = Column(UUID(as_uuid=True), ForeignKey("grades.id"), nullable=True)
     video_url = Column(String, default="")
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"))
 
     grade = relationship("Grade", back_populates="subjects")
 
 
-# ==========================================
-# 3. COMPETITIVE TRACK SCHEMA MATRICES
-# ==========================================
-
+# ==========================================\n# 3. COMPETITIVE TRACKS / EXAMS ENGINE\n# ==========================================\n
 class Exam(Base):
     __tablename__ = "exams"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     exam_code = Column(String, unique=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"))
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True)
 
     subjects = relationship("ExamSubject", back_populates="exam", cascade="all, delete-orphan")
@@ -77,10 +66,7 @@ class ExamSubject(Base):
     exam = relationship("Exam", back_populates="subjects")
 
 
-# ==========================================
-# 4. CONTENT STUDIO & AI TUTOR RUNTIME LAYER
-# ==========================================
-
+# ==========================================\n# 4. CONTENT STUDIO & AI TUTOR RUNTIME LAYER\n# ==========================================\n
 class ModularLesson(Base):
     __tablename__ = "modular_lessons"
     
@@ -92,10 +78,7 @@ class ModularLesson(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-# ==========================================
-# 5. DYNAMIC CURRICULUM ARCHITECTURE VIEWS
-# ==========================================
-
+# ==========================================\n# 5. ASCENDAPRO CURRICULUM NAVIGATION LAYERS\n# ==========================================\n
 class CurriculumTreeView(Base):
     __tablename__ = "curriculum_tree"
     __table_args__ = {"schema": "public", "extend_existing": True}
@@ -122,7 +105,6 @@ class GeneratedContentPayload(Base):
     topic = Column(String, nullable=False)
     unit = Column(String, nullable=False)
 
-# Place this at the end of app/models.py
 
 class Course(Base):
     __tablename__ = "courses"

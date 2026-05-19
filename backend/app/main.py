@@ -28,8 +28,8 @@ app.add_middleware(
 
 # Register Structural Routers
 app.include_router(organizations.router)
-app.include_router(curriculum.admin_router)
-app.include_router(curriculum.router)
+app.include_router(curriculum.admin_router) # Handles /api/admin/curriculum
+app.include_router(curriculum.router)       # Handles /api/curriculum
 app.include_router(studio.router)
 app.include_router(ai_tutor.router)
 

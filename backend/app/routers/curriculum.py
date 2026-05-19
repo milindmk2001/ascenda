@@ -113,47 +113,49 @@ class ContentPayloadResponse(BaseModel):
 # ==========================================
 
 @router.get("/resolve-hub")
-def resolve_hub_fallback(track_code: str = "CBSE", grade_name: Optional[str] = None, db: Session = Depends(get_db)):
+def resolve_hub_fallback(track_code: Optional[str] = None, grade_name: Optional[str] = None, db: Session = Depends(get_db)):
     """
-    Highly permissive track locator for resolving root configuration sets.
+    Permissive tracking locator engine. Resolves and lists all configured courses 
+    and tracks to build selection components on the frontend hub layout viewports.
     """
-    clean_track = track_code.strip().lower().replace("-", "").replace("_", "")
-    track_pattern = f"%{clean_track}%"
-    
-    query = text("""
-        SELECT id, name, code, description 
-        FROM public.courses
-        WHERE LOWER(name) LIKE :pattern 
-           OR LOWER(code) LIKE :pattern
-           OR LOWER(REPLACE(REPLACE(code, '_', ''), '-', '')) LIKE :pattern;
-    """)
-    
+    if track_code:
+        clean_track = track_code.strip().lower().replace("-", "").replace("_", "")
+        track_pattern = f"%{clean_track}%"
+        
+        query = text("""
+            SELECT id, name, code, description 
+            FROM public.courses
+            WHERE LOWER(name) LIKE :pattern 
+               OR LOWER(code) LIKE :pattern;
+        """)
+        try:
+            result = db.execute(query, {"pattern": track_pattern}).fetchall()
+            if result:
+                return [
+                    {"id": str(row.id), "name": row.name, "code": row.code, "description": row.description or ""}
+                    for row in result
+                ]
+        except Exception:
+            pass
+
+    # Fallback/Default: Fetch all courses so the app can render alternative tracks beyond just CBSE
+    fallback_all = text("SELECT id, name, code, description FROM public.courses LIMIT 50;")
     try:
-        result = db.execute(query, {"pattern": track_pattern}).fetchall()
-        if not result:
-            # Absolute hardcoded safety row fallback to guarantee frontend never receives flat empty array
-            return [{
-                "id": "00000000-0000-0000-0000-000000000000",
-                "name": track_code.upper(),
-                "code": track_code.upper(),
-                "description": f"Auto-initialized operational context tracking for {track_code}"
-            }]
-        return [
-            {
-                "id": str(row.id),
-                "name": row.name,
-                "code": row.code,
-                "description": row.description if row.description else ""
-            }
-            for row in result
-        ]
+        all_rows = db.execute(fallback_all).fetchall()
+        if all_rows:
+            return [
+                {"id": str(row.id), "name": row.name, "code": row.code, "description": row.description or ""}
+                for row in all_rows
+            ]
     except Exception:
-        return [{
-            "id": "00000000-0000-0000-0000-000000000000",
-            "name": track_code.upper(),
-            "code": track_code.upper(),
-            "description": "Fallback Matrix Gateway"
-        }]
+        pass
+
+    # Absolute baseline array to guarantee UI mapping logic doesn't crash on boot up
+    return [
+        {"id": "00000000-0000-0000-0000-000000000000", "name": "CBSE", "code": "CBSE", "description": "K-12 Architecture"},
+        {"id": "11111111-1111-1111-1111-111111111111", "name": "IIT-JEE", "code": "IITJEE", "description": "Competitive Track"},
+        {"id": "22222222-2222-2222-2222-222222222222", "name": "NEET", "code": "NEET", "description": "Medical Entrance"}
+    ]
 
 @router.get("/content/{content_id}", response_model=ContentPayloadResponse)
 def get_content_payload(content_id: UUID4 = Path(..., description="Target payload identifier"), db: Session = Depends(get_db)):
@@ -182,7 +184,6 @@ def get_curriculum_tree(
     clean_exam = exam_type.strip().lower().replace("-", "").replace("_", "")
     clean_subject = subject_code.strip().lower()
 
-    # Query the composite curriculum navigational architecture
     query = text("""
         SELECT id, parent_id, title, level, content_type,
                unit_number, is_leaf, content_id, display_order
@@ -200,7 +201,6 @@ def get_curriculum_tree(
     except Exception:
         rows = []
 
-    # Safe standalone structural fallback mapping logic
     if not rows:
         fallback_query = text("""
             SELECT id, NULL::uuid as parent_id, name as title, 1 as level, 
@@ -228,7 +228,6 @@ def get_curriculum_tree(
         except Exception:
             rows = []
 
-    # If completely empty, guarantee a valid shell return structure to protect UI mapping loops
     if not rows:
         return {"exam_type": exam_type.upper(), "subject": subject_code.capitalize(), "units": []}
 
@@ -285,3 +284,93 @@ def get_curriculum_tree(
         "subject": subject_code.capitalize(),
         "units": sorted(list(units_dict.values()), key=lambda x: x["unit_number"])
     }
+
+
+# ==========================================
+# 3. ADMIN MANAGEMENT INGESTION ENDPOINTS
+# ==========================================
+
+@admin_router.get("/grades", response_model=List[GradeResponse])
+def get_admin_grades(db: Session = Depends(get_db)):
+    return db.query(models.Grade).all()
+
+@admin_router.post("/grades", response_model=GradeResponse, status_code=status.HTTP_201_CREATED)
+def create_admin_grade(payload: GradeCreate, db: Session = Depends(get_db)):
+    try:
+        new_grade = models.Grade(
+            name=payload.name.strip(),
+            level=payload.level.strip() if payload.level else None,
+            org_id=payload.org_id
+        )
+        db.add(new_grade)
+        db.commit()
+        db.refresh(new_grade)
+        return new_grade
+    except Exception as err:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database update failure: {str(err)}")
+
+@admin_router.get("/subjects", response_model=List[RegularSubjectResponse])
+def get_admin_subjects(db: Session = Depends(get_db)):
+    return db.query(models.RegularSubject).all()
+
+@admin_router.post("/subjects", response_model=RegularSubjectResponse, status_code=status.HTTP_201_CREATED)
+def create_admin_subject(payload: RegularSubjectCreate, db: Session = Depends(get_db)):
+    try:
+        new_sub = models.RegularSubject(
+            name=payload.name.strip(),
+            subject_code=payload.subject_code.upper().strip(),
+            discipline=payload.discipline.strip(),
+            grade_id=payload.grade_id,
+            video_url=payload.video_url
+        )
+        db.add(new_sub)
+        db.commit()
+        db.refresh(new_sub)
+        return new_sub
+    except Exception as err:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database update failure: {str(err)}")
+
+@admin_router.get("/exams", response_model=List[ExamResponse])
+def get_admin_exams(db: Session = Depends(get_db)):
+    return db.query(models.Exam).all()
+
+@admin_router.post("/exams", response_model=ExamResponse, status_code=status.HTTP_201_CREATED)
+def create_admin_exam(payload: ExamCreate, db: Session = Depends(get_db)):
+    try:
+        new_exam = models.Exam(
+            name=payload.name.strip(),
+            exam_code=payload.exam_code.upper().strip()
+        )
+        db.add(new_exam)
+        db.commit()
+        db.refresh(new_exam)
+        return new_exam
+    except Exception as err:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database update rollback: {str(err)}")
+
+@admin_router.get("/exam/subjects", response_model=List[ExamSubjectResponse])
+def get_admin_exam_subjects(db: Session = Depends(get_db)):
+    return db.query(models.ExamSubject).all()
+
+@admin_router.post("/exam/subjects", response_model=ExamSubjectResponse, status_code=status.HTTP_201_CREATED)
+def create_exam_subject_node(payload: ExamSubjectCreate, db: Session = Depends(get_db)):
+    parent_exam = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
+    if not parent_exam:
+        raise HTTPException(status_code=404, detail="Target tracking track profile code link missing.")
+    try:
+        new_subject = models.ExamSubject(
+            exam_id=payload.exam_id,
+            name=payload.name.strip(),
+            subject_code=payload.subject_code.upper().strip(),
+            discipline=payload.discipline.strip()
+        )
+        db.add(new_subject)
+        db.commit()
+        db.refresh(new_subject)
+        return new_subject
+    except Exception as err:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database rollback: {str(err)}")
