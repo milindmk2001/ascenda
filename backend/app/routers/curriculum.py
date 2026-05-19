@@ -157,24 +157,22 @@ def get_curriculum_tree(
     """
     Fetches flat layout database items and returns a nested tree structures array map.
     """
-    norm_exam = exam_type.strip().lower().replace("-", "")
-    if norm_exam == "iitjee":
-        norm_exam = "iit_jee"
-        
+    # Standardize input variations (removes hyphens and underscores completely)
+    clean_input_exam = exam_type.strip().lower().replace("-", "").replace("_", "")
     norm_subject = subject_code.strip().lower()
 
+    # Strips underscores and hyphens from the DB column dynamically during lookup for a resilient match
     query = text("""
         SELECT id, parent_id, title, level, content_type,
                unit_number, is_leaf, content_id, display_order
         FROM public.curriculum_tree
-        WHERE (LOWER(exam_type) = :exam_type OR REPLACE(LOWER(exam_type), '_', '') = :exam_clean)
+        WHERE LOWER(REPLACE(REPLACE(exam_type, '_', ''), '-', '')) = :clean_exam
           AND (LOWER(title) LIKE :subject_pattern OR level > 1)
         ORDER BY unit_number ASC, level ASC, display_order ASC;
     """)
     
     rows = db.execute(query, {
-        "exam_type": norm_exam,
-        "exam_clean": norm_exam.replace("_", ""),
+        "clean_exam": clean_input_exam,
         "subject_pattern": f"%{norm_subject}%"
     }).fetchall()
     
@@ -319,7 +317,7 @@ def get_admin_exam_subjects(db: Session = Depends(get_db)):
 def create_exam_subject_node(payload: ExamSubjectCreate, db: Session = Depends(get_db)):
     parent_exam = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
     if not parent_exam:
-        raise HTTPException(status_code=404, detail=f"Target tracking track profile code link missing.")
+        raise HTTPException(status_code=404, detail="Target tracking track profile code link missing.")
     try:
         new_subject = models.ExamSubject(
             exam_id=payload.exam_id,
