@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status, Path
+from fastapi import APIRouter, Depends, HTTPException, status, Path, Query
 from pydantic import BaseModel, UUID4
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -138,8 +138,8 @@ def resolve_hub_fallback(track_code: Optional[str] = None, grade_name: Optional[
         except Exception:
             pass
 
-    # Fallback/Default: Fetch all courses so the app can render alternative tracks beyond just CBSE
-    fallback_all = text("SELECT id, name, code, description FROM public.courses LIMIT 50;")
+    # Fallback/Default: Fetch all courses from the database
+    fallback_all = text("SELECT id, name, code, description FROM public.courses ORDER BY code ASC LIMIT 50;")
     try:
         all_rows = db.execute(fallback_all).fetchall()
         if all_rows:
@@ -150,12 +150,72 @@ def resolve_hub_fallback(track_code: Optional[str] = None, grade_name: Optional[
     except Exception:
         pass
 
-    # Absolute baseline array to guarantee UI mapping logic doesn't crash on boot up
     return [
-        {"id": "00000000-0000-0000-0000-000000000000", "name": "CBSE", "code": "CBSE", "description": "K-12 Architecture"},
-        {"id": "11111111-1111-1111-1111-111111111111", "name": "IIT-JEE", "code": "IITJEE", "description": "Competitive Track"},
-        {"id": "22222222-2222-2222-2222-222222222222", "name": "NEET", "code": "NEET", "description": "Medical Entrance"}
+        {"id": "00000000-0000-0000-0000-000000000000", "name": "CBSE", "code": "CBSE", "description": "Standard K-12 Foundation"},
+        {"id": "11111111-1111-1111-1111-111111111111", "name": "IIT-JEE", "code": "IITJEE", "description": "Engineering Preparation Track"},
+        {"id": "22222222-2222-2222-2222-222222222222", "name": "NEET", "code": "NEET", "description": "Medical Entrance Track"}
     ]
+
+@router.get("/subjects", response_model=List[RegularSubjectResponse])
+def get_filtered_subjects(
+    track_code: Optional[str] = Query(None, description="e.g., CBSE, IITJEE"),
+    grade_name: Optional[str] = Query(None, description="e.g., 11, 12"),
+    db: Session = Depends(get_db)
+):
+    """
+    Dynamically maps subjects filtered directly by track context or grade identifiers.
+    Falls back to a flat text pattern lookup if full relational links are missing.
+    """
+    # Clean up strings
+    clean_track = track_code.strip().lower() if track_code else ""
+    clean_grade = grade_name.strip().lower() if grade_name else ""
+
+    # Check relation matrix via raw text join filtering for speed and safety
+    sql_query = text("""
+        SELECT s.id, s.name, s.subject_code, s.discipline, s.grade_id, s.video_url
+        FROM public.subjects s
+        JOIN public.grades g ON s.grade_id = g.id
+        LEFT JOIN public.organizations o ON g.org_id = o.id
+        WHERE (:grade_name = '' OR LOWER(g.name) = :grade_name)
+          AND (:track_code = '' OR LOWER(o.name) LIKE :track_pattern OR LOWER(s.discipline) LIKE :track_pattern);
+    """)
+    
+    try:
+        params = {
+            "grade_name": clean_grade,
+            "track_code": clean_track,
+            "track_pattern": f"%{clean_track}%"
+        }
+        rows = db.execute(sql_query, params).fetchall()
+        if rows:
+            return [
+                {
+                    "id": row.id,
+                    "name": row.name,
+                    "subject_code": row.subject_code,
+                    "discipline": row.discipline,
+                    "grade_id": row.grade_id,
+                    "video_url": row.video_url or ""
+                } for row in rows
+            ]
+    except Exception:
+        pass
+
+    # Safety Fallback: Return all subjects if no filters match perfectly
+    try:
+        all_subs = db.execute(text("SELECT id, name, subject_code, discipline, grade_id, video_url FROM public.subjects LIMIT 20;")).fetchall()
+        return [
+            {
+                "id": r.id,
+                "name": r.name,
+                "subject_code": r.subject_code,
+                "discipline": r.discipline,
+                "grade_id": r.grade_id,
+                "video_url": r.video_url or ""
+            } for r in all_subs
+        ]
+    except Exception:
+        return []
 
 @router.get("/content/{content_id}", response_model=ContentPayloadResponse)
 def get_content_payload(content_id: UUID4 = Path(..., description="Target payload identifier"), db: Session = Depends(get_db)):

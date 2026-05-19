@@ -26,7 +26,7 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
-# Register Structural Routers
+# Register Structural Routers sequentially
 app.include_router(organizations.router)
 app.include_router(curriculum.admin_router) # Handles /api/admin/curriculum
 app.include_router(curriculum.router)       # Handles /api/curriculum
