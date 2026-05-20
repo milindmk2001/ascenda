@@ -423,3 +423,4 @@ def create_exam_subject_node(payload: ExamSubjectCreate, db: Session = Depends(g
     except Exception as err:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database rollback: {str(err)}")
+    #new push
