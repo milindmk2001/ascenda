@@ -227,39 +227,43 @@ def get_content_payload(content_id: UUID4 = Path(..., description="Target payloa
 @router.get("/{exam_type}/{subject_code}", response_model=CurriculumTreeResponse)
 def get_curriculum_tree(
     exam_type: str = Path(..., description="e.g., CBSE or IIT-JEE"),
-    subject_code: str = Path(..., description="e.g., physics"),
+    subject_code: str = Path(..., description="e.g., physics, chemistry, maths"),
     db: Session = Depends(get_db)
 ):
+    # Normalize strings (e.g., "iitjee", "maths")
     clean_exam = exam_type.strip().lower().replace("-", "").replace("_", "")
     clean_subject = subject_code.strip().lower()
 
+    # Form accurate wildcards for searching subject specific records
+    # This turns 'maths' into '%maths%' to match 'IITJEE_MATHS' or 'maths' entries safely
+    subject_pattern = f"%{clean_subject}%"
+    exam_pattern = f"%{clean_exam}%"
+
+    # MAIN QUERY: Enforce strict verification on BOTH exam_type AND subject target match criteria
     query = text("""
         SELECT id, parent_id, title, level, content_type,
                unit_number, is_leaf, content_id, display_order
         FROM public.curriculum_tree
-        WHERE LOWER(REPLACE(REPLACE(exam_type, '_', ''), '-', '')) = :clean_exam
-           OR LOWER(exam_type) LIKE :exam_pattern
+        WHERE (LOWER(REPLACE(REPLACE(exam_type, '_', ''), '-', '')) = :clean_exam OR LOWER(exam_type) LIKE :exam_pattern)
+          AND (LOWER(title) LIKE :subject_pattern OR LOWER(content_type) LIKE :subject_pattern OR :clean_subject = 'physics' AND LOWER(title) NOT LIKE '%maths%' AND LOWER(title) NOT LIKE '%chemistry%')
         ORDER BY unit_number ASC, level ASC, display_order ASC;
     """)
     
     try:
+        # Let's try getting it directly from your custom structured curriculum tree layout table
         rows = db.execute(query, {
             "clean_exam": clean_exam,
-            "exam_pattern": f"%{clean_exam}%"
+            "exam_pattern": exam_pattern,
+            "subject_pattern": subject_pattern
         }).fetchall()
-    except Exception:
+    except Exception as e:
+        print(f"Primary tree fetch error: {e}")
         rows = []
 
+    # FALLBACK QUERY: If curriculum tree isn't fully compiled yet, parse directly from schema relations
     if not rows:
         fallback_query = text("""
-            SELECT id, NULL::uuid as parent_id, name as title, 1 as level, 
-                   'unit' as content_type, 1 as unit_number, false as is_leaf, 
-                   NULL::uuid as content_id, 0 as display_order
-            FROM public.courses
-            WHERE LOWER(code) LIKE :subject_pattern 
-               OR LOWER(name) LIKE :subject_pattern
-            UNION ALL
-            SELECT s.id, s.exam_id as parent_id, s.name as title, 1 as level,
+            SELECT s.id, NULL::uuid as parent_id, s.name as title, 1 as level,
                    'unit' as content_type, 1 as unit_number, false as is_leaf,
                    NULL::uuid as content_id, 0 as display_order
             FROM public.exam_subjects s
@@ -271,15 +275,17 @@ def get_curriculum_tree(
         try:
             rows = db.execute(fallback_query, {
                 "clean_exam": clean_exam,
-                "exam_pattern": f"%{clean_exam}%",
-                "subject_pattern": f"%{clean_subject}%"
+                "exam_pattern": exam_pattern,
+                "subject_pattern": subject_pattern
             }).fetchall()
-        except Exception:
+        except Exception as err:
+            print(f"Fallback query failure log: {err}")
             rows = []
 
     if not rows:
         return {"exam_type": exam_type.upper(), "subject": subject_code.capitalize(), "units": []}
 
+    # Build the response structured node objects
     units_dict: Dict[str, Dict[str, Any]] = {}
     topics_dict: Dict[str, Dict[str, Any]] = {}
     all_leaves: List[Dict[str, Any]] = []
@@ -312,6 +318,7 @@ def get_curriculum_tree(
                 "is_leaf": True
             })
 
+    # Group child nodes into parent categories cleanly
     for leaf in all_leaves:
         p_id = leaf["parent_id"]
         if p_id and p_id in topics_dict:
@@ -333,7 +340,6 @@ def get_curriculum_tree(
         "subject": subject_code.capitalize(),
         "units": sorted(list(units_dict.values()), key=lambda x: x["unit_number"])
     }
-
 
 # ==========================================
 # 4. ADMIN CONSOLE WORKSPACE ENDPOINTS
