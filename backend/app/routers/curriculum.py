@@ -109,113 +109,102 @@ class ContentPayloadResponse(BaseModel):
 
 
 # ==========================================
-# 2. PUBLIC CORE ROUTE ENDPOINTS
+# 2. CORE HUB LOOKUP ENGINE (HOMEPAGE RESOLVER)
 # ==========================================
 
 @router.get("/resolve-hub")
-def resolve_hub_fallback(track_code: Optional[str] = None, grade_name: Optional[str] = None, db: Session = Depends(get_db)):
-    """
-    Permissive tracking locator engine. Resolves and lists all configured courses 
-    and tracks to build selection components on the frontend hub layout viewports.
-    """
-    if track_code:
-        clean_track = track_code.strip().lower().replace("-", "").replace("_", "")
-        track_pattern = f"%{clean_track}%"
-        
-        query = text("""
-            SELECT id, name, code, description 
-            FROM public.courses
-            WHERE LOWER(name) LIKE :pattern 
-               OR LOWER(code) LIKE :pattern;
-        """)
-        try:
-            result = db.execute(query, {"pattern": track_pattern}).fetchall()
-            if result:
-                return [
-                    {"id": str(row.id), "name": row.name, "code": row.code, "description": row.description or ""}
-                    for row in result
-                ]
-        except Exception:
-            pass
-
-    # Fallback/Default: Fetch all courses from the database
-    fallback_all = text("SELECT id, name, code, description FROM public.courses ORDER BY code ASC LIMIT 50;")
-    try:
-        all_rows = db.execute(fallback_all).fetchall()
-        if all_rows:
-            return [
-                {"id": str(row.id), "name": row.name, "code": row.code, "description": row.description or ""}
-                for row in all_rows
-            ]
-    except Exception:
-        pass
-
-    return [
-        {"id": "00000000-0000-0000-0000-000000000000", "name": "CBSE", "code": "CBSE", "description": "Standard K-12 Foundation"},
-        {"id": "11111111-1111-1111-1111-111111111111", "name": "IIT-JEE", "code": "IITJEE", "description": "Engineering Preparation Track"},
-        {"id": "22222222-2222-2222-2222-222222222222", "name": "NEET", "code": "NEET", "description": "Medical Entrance Track"}
-    ]
-
-@router.get("/subjects", response_model=List[RegularSubjectResponse])
-def get_filtered_subjects(
-    track_code: Optional[str] = Query(None, description="e.g., CBSE, IITJEE"),
-    grade_name: Optional[str] = Query(None, description="e.g., 11, 12"),
+def resolve_hub_fallback(
+    track_code: Optional[str] = None, 
+    grade_name: Optional[str] = None, 
     db: Session = Depends(get_db)
 ):
     """
-    Dynamically maps subjects filtered directly by track context or grade identifiers.
-    Falls back to a flat text pattern lookup if full relational links are missing.
+    Unified Homepage Subject Loader Grid Endpoint.
+    - Competitive Tracks (IIT-JEE / NEET): Joins courses + exam_subjects with prefix filtering.
+    - K-12 School Boards (CBSE / ICSE): Fetches regular subjects mapped strictly to the active grade.
     """
-    # Clean up strings
-    clean_track = track_code.strip().lower() if track_code else ""
-    clean_grade = grade_name.strip().lower() if grade_name else ""
+    if not track_code:
+        return []
 
-    # Check relation matrix via raw text join filtering for speed and safety
-    sql_query = text("""
-        SELECT s.id, s.name, s.subject_code, s.discipline, s.grade_id, s.video_url
-        FROM public.subjects s
-        JOIN public.grades g ON s.grade_id = g.id
-        LEFT JOIN public.organizations o ON g.org_id = o.id
-        WHERE (:grade_name = '' OR LOWER(g.name) = :grade_name)
-          AND (:track_code = '' OR LOWER(o.name) LIKE :track_pattern OR LOWER(s.discipline) LIKE :track_pattern);
-    """)
-    
-    try:
-        params = {
-            "grade_name": clean_grade,
-            "track_code": clean_track,
-            "track_pattern": f"%{clean_track}%"
-        }
-        rows = db.execute(sql_query, params).fetchall()
-        if rows:
+    # Format the selector token to match your codebase conventions
+    clean_track = track_code.strip().upper().replace("-", "").replace("_", "")
+
+    # ──────────────────────────────────────────────────────────────
+    # TARGET TRACK 1: COMPETITIVE ADMISSION TIERS (IIT-JEE & NEET)
+    # ──────────────────────────────────────────────────────────────
+    if clean_track in ["IITJEE", "NEET"]:
+        # Match pattern strings matching 'IITJEE_%' or 'NEET_%'
+        prefix_pattern = f"{clean_track}_%"
+        
+        sql_query = text("""
+            SELECT 
+                c.id               AS course_id,
+                c.title            AS course_title,
+                c.description      AS description,
+                es.id              AS exam_subject_id,
+                es.name            AS subject_name,
+                es.subject_code    AS subject_code
+            FROM public.courses c
+            JOIN public.exam_subjects es ON es.id = c.exam_subject_id
+            WHERE es.subject_code LIKE :pattern
+            ORDER BY es.name ASC;
+        """)
+        try:
+            rows = db.execute(sql_query, {"pattern": prefix_pattern}).fetchall()
             return [
                 {
-                    "id": row.id,
-                    "name": row.name,
-                    "subject_code": row.subject_code,
-                    "discipline": row.discipline,
-                    "grade_id": row.grade_id,
-                    "video_url": row.video_url or ""
-                } for row in rows
+                    "id": str(row.course_id),
+                    "name": row.subject_name,           # E.g. "Physics" -> Rendered large on card
+                    "course_title": row.course_title,   # Full course title printed small below
+                    "subject_code": row.subject_code.lower(), 
+                    "description": row.description or "Complete Analytical Preparation Module"
+                }
+                for row in rows
             ]
-    except Exception:
-        pass
+        except Exception as err:
+            print(f"[Hub Error] Failed resolving competitive course mapping matrix: {err}")
+            return []
 
-    # Safety Fallback: Return all subjects if no filters match perfectly
-    try:
-        all_subs = db.execute(text("SELECT id, name, subject_code, discipline, grade_id, video_url FROM public.subjects LIMIT 20;")).fetchall()
-        return [
-            {
-                "id": r.id,
-                "name": r.name,
-                "subject_code": r.subject_code,
-                "discipline": r.discipline,
-                "grade_id": r.grade_id,
-                "video_url": r.video_url or ""
-            } for r in all_subs
-        ]
-    except Exception:
-        return []
+    # ──────────────────────────────────────────────────────────────
+    # TARGET TRACK 2: TRADITIONAL BOARDS SCHOLASTIC (CBSE / ICSE)
+    # ──────────────────────────────────────────────────────────────
+    if grade_name:
+        clean_grade = grade_name.strip()
+        sql_query = text("""
+            SELECT s.id, s.name, s.subject_code, s.discipline
+            FROM public.subjects s
+            JOIN public.grades g ON s.grade_id = g.id
+            WHERE LOWER(g.name) = LOWER(:grade_name)
+              AND (LOWER(s.discipline) LIKE :track_pattern OR :track_code = 'CBSE')
+            ORDER BY s.name ASC;
+        """)
+        try:
+            rows = db.execute(sql_query, {
+                "grade_name": clean_grade,
+                "track_code": track_code,
+                "track_pattern": f"%{track_code.lower()}%"
+            }).fetchall()
+            return [
+                {
+                    "id": str(row.id),
+                    "name": row.name,
+                    "course_title": f"Class {grade_name} — Comprehensive Curriculum",
+                    "subject_code": row.subject_code.lower(),
+                    "description": f"Standard Board Syllabus Matrix Alignment"
+                }
+                for row in rows
+            ]
+        except Exception as err:
+            print(f"[Hub Error] Failed resolving regular K12 boards: {err}")
+            return []
+
+    # Default fallback protection if parameters aren't fully resolved yet
+    return []
+
+
+# ==========================================
+# 3. CONTENT CANVAS READERS
+# ==========================================
 
 @router.get("/content/{content_id}", response_model=ContentPayloadResponse)
 def get_content_payload(content_id: UUID4 = Path(..., description="Target payload identifier"), db: Session = Depends(get_db)):
@@ -347,7 +336,7 @@ def get_curriculum_tree(
 
 
 # ==========================================
-# 3. ADMIN MANAGEMENT INGESTION ENDPOINTS
+# 4. ADMIN CONSOLE WORKSPACE ENDPOINTS
 # ==========================================
 
 @admin_router.get("/grades", response_model=List[GradeResponse])

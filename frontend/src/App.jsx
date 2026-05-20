@@ -27,51 +27,56 @@ function App() {
     selectedTrackCode === "NEET" || 
     selectedTrackCode === "IITJEE";
 
-  // Boot Layout Component Sync: Fetch metadata containers
+  // Fetch critical organizational layout metadata configurations on bootup
   useEffect(() => {
     const fetchMetadataLayer = async () => {
       try {
         setErrorMsg(null);
         const [orgRes, gradeRes] = await Promise.all([
-          fetch(`${API_BASE}/api/admin/organizations/`),
+          fetch(`${API_BASE}/api/organizations`),
           fetch(`${API_BASE}/api/admin/curriculum/grades`)
         ]);
-        
+
         if (orgRes.ok && gradeRes.ok) {
-          const orgs = await orgRes.json();
-          const grds = await gradeRes.json();
-          setOrganizations(orgs);
-          setGrades(grds);
+          const orgData = await orgRes.json();
+          const gradeData = await gradeRes.json();
+          setOrganizations(orgData);
+          setGrades(gradeData);
         }
       } catch (err) {
-        console.error("Metadata initialization failed:", err);
+        console.error("Meta configuration alignment dropped:", err);
+        setErrorMsg("Failed loading core system selection frameworks.");
       }
     };
     fetchMetadataLayer();
   }, []);
 
-  // Content Resolver Hook: Triggers when selectors change
+  // Hot Reload System Core: Synchronizes main grid whenever a state parameter changes
   useEffect(() => {
     const resolveActiveCurriculum = async () => {
       try {
         setLoading(true);
         setErrorMsg(null);
 
-        // Build parameters dynamically depending on track context
-        const queryParams = isCompetitiveTrack
-          ? `track_code=${selectedTrackCode}`
-          : `track_code=${selectedTrackCode}&grade_name=${selectedGradeName}`;
+        // Normalize state codes out of frontend filters
+        let trackQueryParam = selectedTrackCode;
+        if (selectedTrackCode === "IIT-JEE") trackQueryParam = "IITJEE";
 
-        const res = await fetch(`${API_BASE}/api/curriculum/resolve-hub?${queryParams}`);
-        
-        if (!res.ok) {
-          throw new Error(`Data resolve engine responded with status code: ${res.status}`);
+        // Construct context endpoint URL string parameters explicitly
+        let endpoint = `${API_BASE}/api/curriculum/resolve-hub?track_code=${trackQueryParam}`;
+        if (!isCompetitiveTrack && selectedGradeName) {
+          endpoint += `&grade_name=${selectedGradeName}`;
         }
 
-        const resolvedSubjects = await res.json();
-        setSubjects(resolvedSubjects);
+        const res = await fetch(endpoint);
+        if (!res.ok) {
+          throw new Error(`Failed to resolve system portfolio grid assets.`);
+        }
+        const activeSubjects = await res.json();
+        setSubjects(activeSubjects);
       } catch (err) {
-        console.error("Curriculum engine resolution failure:", err);
+        console.error("Error matching runtime path parameters:", err);
+        setSubjects([]);
         setErrorMsg(err.message);
       } finally {
         setLoading(false);
@@ -81,86 +86,76 @@ function App() {
     resolveActiveCurriculum();
   }, [selectedTrackCode, selectedGradeName, isCompetitiveTrack]);
 
-  // RELATIONAL JOIN FIX: Map current selectedTrackCode to find the active organization object
-  const activeOrg = organizations.find(org => org.name === selectedTrackCode);
-
-  // Filter grades to only show rows linked via org_id to the active dropdown selection
-  const contextualGrades = grades.filter(grade => grade.org_id === activeOrg?.id);
-
-  // Auto-correct selectedGradeName state if track switching leaves it on an invalid grade
-  useEffect(() => {
-    if (contextualGrades.length > 0 && !contextualGrades.some(g => g.name === selectedGradeName)) {
-      setSelectedGradeName(contextualGrades[0].name);
-    }
-  }, [selectedTrackCode, contextualGrades]);
-
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
-      {/* Dynamic Header Component Block */}
-      <nav className="p-4 border-b border-slate-900 flex justify-between items-center sticky top-0 bg-slate-950/80 backdrop-blur-md z-50">
-        <div 
-          onClick={() => setView('landing')} 
-          className="text-2xl font-black tracking-tighter cursor-pointer select-none"
-        >
-          ASCENDA<span className="text-emerald-500">PRO</span>
+    <div className="min-h-screen bg-[#070b14] text-slate-300 flex flex-col font-sans selection:bg-emerald-500/20 selection:text-emerald-400 antialiased">
+      
+      {/* Top Navbar Workspace Controls Layout */}
+      <nav className="border-b border-slate-900 bg-[#090f1c]/80 backdrop-blur-md px-8 py-4 sticky top-0 z-50 flex items-center justify-between">
+        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('landing')}>
+          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white font-black shadow-lg shadow-emerald-500/10 tracking-tighter">
+            A
+          </div>
+          <span className="text-white font-black uppercase text-sm tracking-widest font-mono">
+            Ascenda<span className="text-emerald-400 text-xs">.Pro</span>
+          </span>
         </div>
-        
-        <div className="flex gap-4 items-center">
-          {/* Main Core Tracking Dropdown */}
-          <select 
-            value={selectedTrackCode}
-            onChange={(e) => setSelectedTrackCode(e.target.value)}
-            className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-200 outline-none focus:border-emerald-500 cursor-pointer"
-          >
-            <option value="CBSE">CBSE</option>
-            <option value="ICSE">ICSE</option>
-            <option value="IIT-JEE">IIT-JEE</option>
-            <option value="NEET">NEET</option>
-          </select>
 
-          {/* Grade Selector Dropdown: Dynamically maps related grades matching the active org_id */}
-          <select 
-            value={isCompetitiveTrack ? "ALL" : selectedGradeName}
-            onChange={(e) => setSelectedGradeName(e.target.value)}
-            disabled={isCompetitiveTrack}
-            className={`bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-200 outline-none focus:border-emerald-500 transition-all ${
-              isCompetitiveTrack 
-                ? "opacity-30 cursor-not-allowed border-dashed text-slate-500 bg-slate-950" 
-                : "opacity-100 cursor-pointer"
-            }`}
-          >
-            {isCompetitiveTrack ? (
-              <option value="ALL">Global Track</option>
-            ) : (
-              <>
-                {contextualGrades.map((grade) => (
-                  <option key={grade.id} value={grade.name}>
-                    Class {grade.name}
-                  </option>
-                ))}
-              </>
-            )}
-          </select>
+        {/* Dynamic Context Selector Header Control Filters Grid */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-[#0d1527] border border-slate-900 rounded-xl px-3 py-1.5 shadow-inner">
+            <span className="text-[10px] font-mono font-bold tracking-wider text-slate-500 uppercase">Track</span>
+            <select
+              value={selectedTrackCode}
+              onChange={(e) => setSelectedTrackCode(e.target.value)}
+              className="bg-transparent text-xs font-bold text-slate-200 outline-none cursor-pointer focus:text-white"
+            >
+              <option value="CBSE" className="bg-[#0d1527]">CBSE Board</option>
+              <option value="IIT-JEE" className="bg-[#0d1527]">IIT-JEE Advance</option>
+              <option value="NEET" className="bg-[#0d1527]">NEET Medical</option>
+            </select>
+          </div>
 
-          {/* Router Action Links */}
+          {/* Grades filter component auto-disables for global competitive metrics */}
+          <div className={`flex items-center gap-2 bg-[#0d1527] border border-slate-900 rounded-xl px-3 py-1.5 transition-opacity duration-200 ${isCompetitiveTrack ? 'opacity-25 pointer-events-none' : 'opacity-100'}`}>
+            <span className="text-[10px] font-mono font-bold tracking-wider text-slate-500 uppercase">Grade</span>
+            <select
+              value={selectedGradeName}
+              disabled={isCompetitiveTrack}
+              onChange={(e) => setSelectedGradeName(e.target.value)}
+              className="bg-transparent text-xs font-bold text-slate-200 outline-none cursor-pointer focus:text-white"
+            >
+              <option value="11" className="bg-[#0d1527]">Class 11</option>
+              <option value="12" className="bg-[#0d1527]">Class 12</option>
+            </select>
+          </div>
+
+          <div className="h-4 w-[1px] bg-slate-800 mx-2" />
+
+          <button 
+            onClick={() => setView(view === 'studio' ? 'landing' : 'studio')}
+            className="text-xs font-bold font-mono px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl hover:border-slate-700 hover:text-white transition-all text-slate-400"
+          >
+            {view === 'studio' ? 'Exit Studio' : 'Content Studio'}
+          </button>
+          
           <button 
             onClick={() => setView(view === 'admin' ? 'landing' : 'admin')}
-            className="text-xs font-semibold px-3 py-1.5 rounded-md border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-white"
+            className="text-xs font-bold font-mono px-4 py-2 bg-gradient-to-r from-slate-900 to-slate-950 text-slate-400 border border-slate-800/80 rounded-xl hover:text-white"
           >
             {view === 'admin' ? 'Exit Console' : 'Admin Panel'}
           </button>
         </div>
       </nav>
 
-      {/* Global Framework Status Banners */}
+      {/* Global Sync Error Messaging Alert Banner */}
       {errorMsg && (
-        <div className="bg-red-950/40 border-b border-red-900 text-red-400 text-xs px-4 py-2 flex justify-between items-center font-mono">
-          <span>System Synchronization Error: {errorMsg}</span>
+        <div className="bg-red-950/40 border-b border-red-900/50 text-red-400 text-xs px-8 py-2 flex justify-between items-center font-mono">
+          <span>Synchronization Error Framework Log: {errorMsg}</span>
           <button onClick={() => setErrorMsg(null)} className="text-white font-bold">&times;</button>
         </div>
       )}
 
-      {/* Main Core View Engine Routing Layout */}
+      {/* Main Core Router Processing Canvas View Engine */}
       <main className="flex-grow flex flex-col">
         {view === 'admin' ? (
           <AdminDashboard apiBase={API_BASE} onExit={() => setView('landing')} />
@@ -178,7 +173,20 @@ function App() {
             trackName={selectedTrackCode}
             gradeName={isCompetitiveTrack ? "Global" : `Class ${selectedGradeName}`}
             onCourseSelect={(sub) => {
-              setActiveSubject(sub);
+              // Parse out subject tag identifiers clearly (e.g. 'iitjee_physics' -> 'physics')
+              const cleanSubjectCode = sub.subject_code.includes('_')
+                ? sub.subject_code.split('_')[1].toLowerCase()
+                : sub.subject_code.toLowerCase();
+
+              // Safe format the target lookup tokens
+              const cleanExamToken = selectedTrackCode.toLowerCase().replace("-", "");
+
+              setActiveSubject({
+                ...sub,
+                subject_code: cleanSubjectCode,
+                meta_tag: `${cleanExamToken}-${selectedGradeName}`
+              });
+              
               setView('reader');
             }}
           />
