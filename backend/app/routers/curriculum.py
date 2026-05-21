@@ -238,26 +238,43 @@ def get_curriculum_tree(
 ):
     """
     Curriculum Tree Fetcher Engine.
-    Strictly seals subject contexts to prevent content cross-leaking.
+    Uses a Hierarchical CTE lookup query structure to extract units and branches 
+    belonging exclusively to the targeted subject.
     """
     clean_exam = exam_type.strip().lower().replace("-", "").replace("_", "")
     clean_subject = subject_code.strip().lower()
 
-    # Target specific combined codes (e.g. 'iitjee_physics', 'iitjee_chemistry')
+    # Exact matching values for specialized entries
     exact_combined = f"{clean_exam}_{clean_subject}"
     pattern_combined = f"%{clean_exam}%{clean_subject}%"
 
-    # Strict targeted SQL query execution isolates topics explicitly
+    # Recursive hierarchical CTE ensures that if nodes are just grouped under a generic 'iitjee' exam_type,
+    # we only fetch elements whose branch tree starts with a Unit or sub-entry mentioning the specific subject.
     query = text("""
-        SELECT id, parent_id, title, level, content_type,
-               unit_number, is_leaf, content_id, display_order
-        FROM public.curriculum_tree
-        WHERE LOWER(exam_type) = :exact_combined
-           OR LOWER(exam_type) LIKE :pattern_combined
-           OR (
-                LOWER(exam_type) = :clean_exam 
-                AND LOWER(title) LIKE LOWER('%' || :clean_subject || '%')
-              )
+        WITH RECURSIVE filtered_tree AS (
+            -- Step 1: Secure top-level root unit containers belonging to this exam track
+            SELECT id, parent_id, title, level, content_type, unit_number, is_leaf, content_id, display_order, exam_type
+            FROM public.curriculum_tree
+            WHERE (LOWER(exam_type) = :exact_combined OR LOWER(exam_type) LIKE :pattern_combined)
+               OR (
+                    LOWER(exam_type) = :clean_exam 
+                    AND parent_id IS NULL 
+                    AND (
+                        LOWER(title) LIKE LOWER('%' || :clean_subject || '%')
+                        OR (:clean_subject = 'physics' AND LOWER(title) NOT LIKE '%maths%' AND LOWER(title) NOT LIKE '%chemistry%' AND LOWER(title) NOT LIKE '%biology%')
+                        OR (:clean_subject = 'maths' AND (LOWER(title) LIKE '%math%' OR LOWER(title) LIKE '%algebra%' OR LOWER(title) LIKE '%calculus%' OR LOWER(title) LIKE '%geometry%'))
+                    )
+               )
+            
+            UNION ALL
+            
+            -- Step 2: Recursively cascade down child nodes (topics, leaves) linked to those matched units
+            SELECT child.id, child.parent_id, child.title, child.level, child.content_type, child.unit_number, child.is_leaf, child.content_id, child.display_order, child.exam_type
+            FROM public.curriculum_tree child
+            JOIN filtered_tree parent ON child.parent_id = parent.id
+        )
+        SELECT DISTINCT id, parent_id, title, level, content_type, unit_number, is_leaf, content_id, display_order
+        FROM filtered_tree
         ORDER BY unit_number ASC, level ASC, display_order ASC;
     """)
     
@@ -269,10 +286,9 @@ def get_curriculum_tree(
             "clean_subject": clean_subject
         }).fetchall()
     except Exception as err:
-        print(f"[Tree Query Error] Execution failed: {err}")
+        print(f"[Tree Query Error] Recursive execution failed: {err}")
         rows = []
 
-    # Fallback to empty node array configuration if no records match
     if not rows:
         return {"exam_type": exam_type.upper(), "subject": subject_code.capitalize(), "units": []}
 
