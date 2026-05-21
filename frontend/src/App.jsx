@@ -11,7 +11,6 @@ function App() {
   const [view, setView] = useState('landing');
   const [subjects, setSubjects] = useState([]);
   const [grades, setGrades] = useState([]);
-  const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   
@@ -27,25 +26,21 @@ function App() {
     selectedTrackCode === "NEET" || 
     selectedTrackCode === "IITJEE";
 
-  // Boot Layout Component Sync: Fetch metadata containers
+  // Fetch active grade structural attributes for dashboard filter configurations
   useEffect(() => {
     const fetchMetadataLayer = async () => {
       try {
         setErrorMsg(null);
-        const [orgRes, gradeRes] = await Promise.all([
-          fetch(`${API_BASE}/api/organizations`),
-          fetch(`${API_BASE}/api/admin/curriculum/grades`)
-        ]);
+        const gradeRes = await fetch(`${API_BASE}/api/admin/curriculum/grades`);
 
-        if (orgRes.ok && gradeRes.ok) {
-          const orgData = await orgRes.json();
+        if (gradeRes.ok) {
           const gradeData = await gradeRes.json();
-          setOrganizations(orgData);
           setGrades(gradeData);
+        } else {
+          console.warn("Grades verification system returned an unexpected non-200 state code.");
         }
       } catch (err) {
-        console.error("Meta system parameters connection failed:", err);
-        setErrorMsg("Failed loading core system selection frameworks.");
+        console.error("Meta system parameters connection dropped:", err);
       }
     };
     fetchMetadataLayer();
@@ -68,7 +63,7 @@ function App() {
 
         const res = await fetch(endpoint);
         if (!res.ok) {
-          throw new Error(`Failed to resolve active course components.`);
+          throw new Error(`Failed to resolve active course components from the server.`);
         }
         const activeSubjects = await res.json();
         setSubjects(activeSubjects);
@@ -105,7 +100,7 @@ function App() {
             <select
               value={selectedTrackCode}
               onChange={(e) => setSelectedTrackCode(e.target.value)}
-              className="bg-transparent text-xs font-bold text-slate-200 outline-none cursor-pointer focus:text-white"
+              className="bg-transparent text-xs font-bold text-slate-200 outline-none cursor-pointer focus:text-white select-none"
             >
               <option value="CBSE" className="bg-[#0d1527]">CBSE Board</option>
               <option value="IIT-JEE" className="bg-[#0d1527]">IIT-JEE Advance</option>
@@ -119,7 +114,7 @@ function App() {
               value={selectedGradeName}
               disabled={isCompetitiveTrack}
               onChange={(e) => setSelectedGradeName(e.target.value)}
-              className="bg-transparent text-xs font-bold text-slate-200 outline-none cursor-pointer focus:text-white"
+              className="bg-transparent text-xs font-bold text-slate-200 outline-none cursor-pointer focus:text-white select-none"
             >
               <option value="11" className="bg-[#0d1527]">Class 11</option>
               <option value="12" className="bg-[#0d1527]">Class 12</option>
@@ -170,7 +165,7 @@ function App() {
             trackName={selectedTrackCode}
             gradeName={isCompetitiveTrack ? "Global" : `Class ${selectedGradeName}`}
             onCourseSelect={(sub) => {
-              // Extract clean code token without prefix fields
+              // Strip structural data table prefixes dynamically (e.g., 'cbse_physics' -> 'physics')
               let cleanSubjectCode = sub.subject_code.toLowerCase();
               if (cleanSubjectCode.includes('_')) {
                 cleanSubjectCode = cleanSubjectCode.split('_')[1];
