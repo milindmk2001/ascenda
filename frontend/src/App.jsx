@@ -27,7 +27,7 @@ function App() {
     selectedTrackCode === "NEET" || 
     selectedTrackCode === "IITJEE";
 
-  // Fetch critical organizational layout metadata configurations on bootup
+  // Boot Layout Component Sync: Fetch metadata containers
   useEffect(() => {
     const fetchMetadataLayer = async () => {
       try {
@@ -44,25 +44,23 @@ function App() {
           setGrades(gradeData);
         }
       } catch (err) {
-        console.error("Meta configuration alignment dropped:", err);
+        console.error("Meta system parameters connection failed:", err);
         setErrorMsg("Failed loading core system selection frameworks.");
       }
     };
     fetchMetadataLayer();
   }, []);
 
-  // Hot Reload System Core: Synchronizes main grid whenever a state parameter changes
+  // System Sync Engine: Live monitors runtime states to load course cards dynamically
   useEffect(() => {
     const resolveActiveCurriculum = async () => {
       try {
         setLoading(true);
         setErrorMsg(null);
 
-        // Normalize state codes out of frontend filters
         let trackQueryParam = selectedTrackCode;
         if (selectedTrackCode === "IIT-JEE") trackQueryParam = "IITJEE";
 
-        // Construct context endpoint URL string parameters explicitly
         let endpoint = `${API_BASE}/api/curriculum/resolve-hub?track_code=${trackQueryParam}`;
         if (!isCompetitiveTrack && selectedGradeName) {
           endpoint += `&grade_name=${selectedGradeName}`;
@@ -70,12 +68,12 @@ function App() {
 
         const res = await fetch(endpoint);
         if (!res.ok) {
-          throw new Error(`Failed to resolve system portfolio grid assets.`);
+          throw new Error(`Failed to resolve active course components.`);
         }
         const activeSubjects = await res.json();
         setSubjects(activeSubjects);
       } catch (err) {
-        console.error("Error matching runtime path parameters:", err);
+        console.error("Error patching track mapping components:", err);
         setSubjects([]);
         setErrorMsg(err.message);
       } finally {
@@ -89,7 +87,7 @@ function App() {
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-300 flex flex-col font-sans selection:bg-emerald-500/20 selection:text-emerald-400 antialiased">
       
-      {/* Top Navbar Workspace Controls Layout */}
+      {/* Top Header Application Dock Bar Layout */}
       <nav className="border-b border-slate-900 bg-[#090f1c]/80 backdrop-blur-md px-8 py-4 sticky top-0 z-50 flex items-center justify-between">
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('landing')}>
           <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white font-black shadow-lg shadow-emerald-500/10 tracking-tighter">
@@ -100,7 +98,7 @@ function App() {
           </span>
         </div>
 
-        {/* Dynamic Context Selector Header Control Filters Grid */}
+        {/* Realtime Grid Control Workspace Dropdown Filters */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 bg-[#0d1527] border border-slate-900 rounded-xl px-3 py-1.5 shadow-inner">
             <span className="text-[10px] font-mono font-bold tracking-wider text-slate-500 uppercase">Track</span>
@@ -115,7 +113,6 @@ function App() {
             </select>
           </div>
 
-          {/* Grades filter component auto-disables for global competitive metrics */}
           <div className={`flex items-center gap-2 bg-[#0d1527] border border-slate-900 rounded-xl px-3 py-1.5 transition-opacity duration-200 ${isCompetitiveTrack ? 'opacity-25 pointer-events-none' : 'opacity-100'}`}>
             <span className="text-[10px] font-mono font-bold tracking-wider text-slate-500 uppercase">Grade</span>
             <select
@@ -147,15 +144,15 @@ function App() {
         </div>
       </nav>
 
-      {/* Global Sync Error Messaging Alert Banner */}
+      {/* Global Sync Error Messaging Alert Box Banner */}
       {errorMsg && (
         <div className="bg-red-950/40 border-b border-red-900/50 text-red-400 text-xs px-8 py-2 flex justify-between items-center font-mono">
-          <span>Synchronization Error Framework Log: {errorMsg}</span>
+          <span>System Synchronization Error Layer: {errorMsg}</span>
           <button onClick={() => setErrorMsg(null)} className="text-white font-bold">&times;</button>
         </div>
       )}
 
-      {/* Main Core Router Processing Canvas View Engine */}
+      {/* Canvas Router Wrapper Context Frame Viewport */}
       <main className="flex-grow flex flex-col">
         {view === 'admin' ? (
           <AdminDashboard apiBase={API_BASE} onExit={() => setView('landing')} />
@@ -173,13 +170,13 @@ function App() {
             trackName={selectedTrackCode}
             gradeName={isCompetitiveTrack ? "Global" : `Class ${selectedGradeName}`}
             onCourseSelect={(sub) => {
-              // Parse out subject tag identifiers clearly (e.g. 'iitjee_physics' -> 'physics')
-              const cleanSubjectCode = sub.subject_code.includes('_')
-                ? sub.subject_code.split('_')[1].toLowerCase()
-                : sub.subject_code.toLowerCase();
+              // Extract clean code token without prefix fields
+              let cleanSubjectCode = sub.subject_code.toLowerCase();
+              if (cleanSubjectCode.includes('_')) {
+                cleanSubjectCode = cleanSubjectCode.split('_')[1];
+              }
 
-              // Safe format the target lookup tokens
-              const cleanExamToken = selectedTrackCode.toLowerCase().replace("-", "");
+              let cleanExamToken = selectedTrackCode.toLowerCase().replace("-", "");
 
               setActiveSubject({
                 ...sub,

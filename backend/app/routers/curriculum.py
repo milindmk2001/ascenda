@@ -119,21 +119,18 @@ def resolve_hub_fallback(
     db: Session = Depends(get_db)
 ):
     """
-    Unified Homepage Subject Loader Grid Endpoint.
-    - Competitive Tracks (IIT-JEE / NEET): Joins courses + exam_subjects with prefix filtering.
-    - K-12 School Boards (CBSE / ICSE): Fetches regular subjects mapped strictly to the active grade.
+    Unified Dashboard Subject Card Resolution Framework.
+    Queries courses from public.courses for both boards and competitive tracks.
     """
     if not track_code:
         return []
 
-    # Format the selector token to match your codebase conventions
     clean_track = track_code.strip().upper().replace("-", "").replace("_", "")
 
     # ──────────────────────────────────────────────────────────────
-    # TARGET TRACK 1: COMPETITIVE ADMISSION TIERS (IIT-JEE & NEET)
+    # CASE A: COMPETITIVE EXTRACTION TRACK (IIT-JEE / NEET)
     # ──────────────────────────────────────────────────────────────
     if clean_track in ["IITJEE", "NEET"]:
-        # Match pattern strings matching 'IITJEE_%' or 'NEET_%'
         prefix_pattern = f"{clean_track}_%"
         
         sql_query = text("""
@@ -154,60 +151,70 @@ def resolve_hub_fallback(
             return [
                 {
                     "id": str(row.course_id),
-                    "name": row.subject_name,           # E.g. "Physics" -> Rendered large on card
-                    "course_title": row.course_title,   # Full course title printed small below
+                    "name": row.subject_name,
+                    "course_title": row.course_title,
                     "subject_code": row.subject_code.lower(), 
-                    "description": row.description or "Complete Analytical Preparation Module"
+                    "description": row.description or ""
                 }
                 for row in rows
             ]
         except Exception as err:
-            print(f"[Hub Error] Failed resolving competitive course mapping matrix: {err}")
+            print(f"[Hub Error] Competitive lookup failed: {err}")
             return []
 
     # ──────────────────────────────────────────────────────────────
-    # TARGET TRACK 2: TRADITIONAL BOARDS SCHOLASTIC (CBSE / ICSE)
+    # CASE B: TRADITIONAL ACADEMIC K-12 BOARDS (CBSE / ICSE)
     # ──────────────────────────────────────────────────────────────
     if grade_name:
         clean_grade = grade_name.strip()
+        # Pattern looks for names containing "CBSE Class 11" or "CBSE Class 12"
+        match_pattern = f"%{clean_track}%Class {clean_grade}%"
+
         sql_query = text("""
-            SELECT s.id, s.name, s.subject_code, s.discipline
-            FROM public.subjects s
+            SELECT 
+                c.id           AS course_id,
+                c.title        AS course_title,
+                c.description  AS description,
+                s.id           AS regular_subject_id,
+                s.name         AS subject_name,
+                s.subject_code AS subject_code
+            FROM public.courses c
+            JOIN public.subjects s ON s.id = c.regular_subject_id
             JOIN public.grades g ON s.grade_id = g.id
-            WHERE LOWER(g.name) = LOWER(:grade_name)
-              AND (LOWER(s.discipline) LIKE :track_pattern OR :track_code = 'CBSE')
+            WHERE LOWER(c.title) LIKE LOWER(:pattern) 
+               OR (LOWER(g.name) = LOWER(:grade_name) AND LOWER(c.title) LIKE LOWER(:track_clause))
             ORDER BY s.name ASC;
         """)
         try:
             rows = db.execute(sql_query, {
+                "pattern": match_pattern,
                 "grade_name": clean_grade,
-                "track_code": track_code,
-                "track_pattern": f"%{track_code.lower()}%"
+                "track_clause": f"%{clean_track}%"
             }).fetchall()
+            
             return [
                 {
-                    "id": str(row.id),
-                    "name": row.name,
-                    "course_title": f"Class {grade_name} — Comprehensive Curriculum",
+                    "id": str(row.course_id),
+                    "name": row.subject_name,
+                    "course_title": row.course_title,
                     "subject_code": row.subject_code.lower(),
-                    "description": f"Standard Board Syllabus Matrix Alignment"
+                    "description": row.description or ""
                 }
                 for row in rows
             ]
         except Exception as err:
-            print(f"[Hub Error] Failed resolving regular K12 boards: {err}")
+            print(f"[Hub Error] Board course lookup failure: {err}")
             return []
 
-    # Default fallback protection if parameters aren't fully resolved yet
     return []
 
 
 # ==========================================
-# 3. CONTENT CANVAS READERS
+# 3. CONTENT CANVAS ROUTERS
 # ==========================================
 
 @router.get("/content/{content_id}", response_model=ContentPayloadResponse)
-def get_content_payload(content_id: UUID4 = Path(..., description="Target payload identifier"), db: Session = Depends(get_db)):
+def get_content_payload(content_id: UUID4 = Path(..., description="Target asset code"), db: Session = Depends(get_db)):
     query = text("""
         SELECT content, content_type, topic, unit
         FROM public.generated_content
@@ -216,7 +223,7 @@ def get_content_payload(content_id: UUID4 = Path(..., description="Target payloa
     """)
     result = db.execute(query, {"content_id": str(content_id)}).fetchone()
     if not result:
-        raise HTTPException(status_code=404, detail="Asset could not be located.")
+        raise HTTPException(status_code=404, detail="Asset metadata not found.")
     return {
         "content": result.content,
         "content_type": result.content_type,
@@ -226,20 +233,21 @@ def get_content_payload(content_id: UUID4 = Path(..., description="Target payloa
 
 @router.get("/{exam_type}/{subject_code}", response_model=CurriculumTreeResponse)
 def get_curriculum_tree(
-    exam_type: str = Path(..., description="e.g., CBSE or IIT-JEE"),
+    exam_type: str = Path(..., description="e.g., CBSE, IIT-JEE or NEET"),
     subject_code: str = Path(..., description="e.g., physics, chemistry, maths"),
     db: Session = Depends(get_db)
 ):
-    # Normalize strings (e.g., "iitjee", "maths")
+    """
+    Curriculum Tree Fetcher.
+    Strictly reads entries from public.curriculum_tree. If no rows match 
+    (like for CBSE), it gracefully returns an empty list container.
+    """
     clean_exam = exam_type.strip().lower().replace("-", "").replace("_", "")
     clean_subject = subject_code.strip().lower()
 
-    # Form accurate wildcards for searching subject specific records
-    # This turns 'maths' into '%maths%' to match 'IITJEE_MATHS' or 'maths' entries safely
     subject_pattern = f"%{clean_subject}%"
     exam_pattern = f"%{clean_exam}%"
 
-    # MAIN QUERY: Enforce strict verification on BOTH exam_type AND subject target match criteria
     query = text("""
         SELECT id, parent_id, title, level, content_type,
                unit_number, is_leaf, content_id, display_order
@@ -250,42 +258,18 @@ def get_curriculum_tree(
     """)
     
     try:
-        # Let's try getting it directly from your custom structured curriculum tree layout table
         rows = db.execute(query, {
             "clean_exam": clean_exam,
             "exam_pattern": exam_pattern,
             "subject_pattern": subject_pattern
         }).fetchall()
-    except Exception as e:
-        print(f"Primary tree fetch error: {e}")
+    except Exception:
         rows = []
 
-    # FALLBACK QUERY: If curriculum tree isn't fully compiled yet, parse directly from schema relations
-    if not rows:
-        fallback_query = text("""
-            SELECT s.id, NULL::uuid as parent_id, s.name as title, 1 as level,
-                   'unit' as content_type, 1 as unit_number, false as is_leaf,
-                   NULL::uuid as content_id, 0 as display_order
-            FROM public.exam_subjects s
-            JOIN public.exams e ON s.exam_id = e.id
-            WHERE (LOWER(REPLACE(REPLACE(e.exam_code, '_', ''), '-', '')) = :clean_exam 
-               OR LOWER(e.name) LIKE :exam_pattern)
-               AND (LOWER(s.subject_code) LIKE :subject_pattern OR LOWER(s.name) LIKE :subject_pattern);
-        """)
-        try:
-            rows = db.execute(fallback_query, {
-                "clean_exam": clean_exam,
-                "exam_pattern": exam_pattern,
-                "subject_pattern": subject_pattern
-            }).fetchall()
-        except Exception as err:
-            print(f"Fallback query failure log: {err}")
-            rows = []
-
+    # If curriculum tree is missing for this track, provide a clean response layout rather than throwing an error
     if not rows:
         return {"exam_type": exam_type.upper(), "subject": subject_code.capitalize(), "units": []}
 
-    # Build the response structured node objects
     units_dict: Dict[str, Dict[str, Any]] = {}
     topics_dict: Dict[str, Dict[str, Any]] = {}
     all_leaves: List[Dict[str, Any]] = []
@@ -318,7 +302,6 @@ def get_curriculum_tree(
                 "is_leaf": True
             })
 
-    # Group child nodes into parent categories cleanly
     for leaf in all_leaves:
         p_id = leaf["parent_id"]
         if p_id and p_id in topics_dict:
@@ -341,8 +324,9 @@ def get_curriculum_tree(
         "units": sorted(list(units_dict.values()), key=lambda x: x["unit_number"])
     }
 
+
 # ==========================================
-# 4. ADMIN CONSOLE WORKSPACE ENDPOINTS
+# 4. ADMIN PIPELINE CONTROL ROUTERS
 # ==========================================
 
 @admin_router.get("/grades", response_model=List[GradeResponse])
@@ -363,7 +347,7 @@ def create_admin_grade(payload: GradeCreate, db: Session = Depends(get_db)):
         return new_grade
     except Exception as err:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database update failure: {str(err)}")
+        raise HTTPException(status_code=500, detail=str(err))
 
 @admin_router.get("/subjects", response_model=List[RegularSubjectResponse])
 def get_admin_subjects(db: Session = Depends(get_db)):
@@ -385,7 +369,7 @@ def create_admin_subject(payload: RegularSubjectCreate, db: Session = Depends(ge
         return new_sub
     except Exception as err:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database update failure: {str(err)}")
+        raise HTTPException(status_code=500, detail=str(err))
 
 @admin_router.get("/exams", response_model=List[ExamResponse])
 def get_admin_exams(db: Session = Depends(get_db)):
@@ -404,7 +388,7 @@ def create_admin_exam(payload: ExamCreate, db: Session = Depends(get_db)):
         return new_exam
     except Exception as err:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database update rollback: {str(err)}")
+        raise HTTPException(status_code=500, detail=str(err))
 
 @admin_router.get("/exam/subjects", response_model=List[ExamSubjectResponse])
 def get_admin_exam_subjects(db: Session = Depends(get_db)):
@@ -414,7 +398,7 @@ def get_admin_exam_subjects(db: Session = Depends(get_db)):
 def create_exam_subject_node(payload: ExamSubjectCreate, db: Session = Depends(get_db)):
     parent_exam = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
     if not parent_exam:
-        raise HTTPException(status_code=404, detail="Target tracking track profile code link missing.")
+        raise HTTPException(status_code=404, detail="Exam structure tracking link profile details missing.")
     try:
         new_subject = models.ExamSubject(
             exam_id=payload.exam_id,
@@ -428,5 +412,4 @@ def create_exam_subject_node(payload: ExamSubjectCreate, db: Session = Depends(g
         return new_subject
     except Exception as err:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database rollback: {str(err)}")
-    #new push
+        raise HTTPException(status_code=500, detail=str(err))
