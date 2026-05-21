@@ -238,25 +238,26 @@ def get_curriculum_tree(
 ):
     """
     Curriculum Tree Fetcher Engine.
-    Matches directly against structural exam_type variants (e.g. 'IITJEE_MATHS', 'NEET_PHYSICS')
-    ensuring nested structures align accurately in the sidebar pane.
+    Strictly seals subject contexts to prevent content cross-leaking.
     """
     clean_exam = exam_type.strip().lower().replace("-", "").replace("_", "")
     clean_subject = subject_code.strip().lower()
 
-    # Create exact matching strings for rows containing combined data signatures
+    # Target specific combined codes (e.g. 'iitjee_physics', 'iitjee_chemistry')
     exact_combined = f"{clean_exam}_{clean_subject}"
     pattern_combined = f"%{clean_exam}%{clean_subject}%"
-    loose_subject_pattern = f"%{clean_subject}%"
 
+    # Strict targeted SQL query execution isolates topics explicitly
     query = text("""
         SELECT id, parent_id, title, level, content_type,
                unit_number, is_leaf, content_id, display_order
         FROM public.curriculum_tree
-        WHERE LOWER(exam_type) = :clean_exam
-           OR LOWER(exam_type) = :exact_combined
+        WHERE LOWER(exam_type) = :exact_combined
            OR LOWER(exam_type) LIKE :pattern_combined
-           OR (LOWER(exam_type) LIKE :loose_subject_pattern AND (:clean_exam = 'iitjee' OR :clean_exam = 'neet'))
+           OR (
+                LOWER(exam_type) = :clean_exam 
+                AND LOWER(title) LIKE LOWER('%' || :clean_subject || '%')
+              )
         ORDER BY unit_number ASC, level ASC, display_order ASC;
     """)
     
@@ -265,13 +266,13 @@ def get_curriculum_tree(
             "clean_exam": clean_exam,
             "exact_combined": exact_combined,
             "pattern_combined": pattern_combined,
-            "loose_subject_pattern": loose_subject_pattern
+            "clean_subject": clean_subject
         }).fetchall()
     except Exception as err:
         print(f"[Tree Query Error] Execution failed: {err}")
         rows = []
 
-    # Fallback to an empty node payload rather than a breaking error array if no rules exist yet
+    # Fallback to empty node array configuration if no records match
     if not rows:
         return {"exam_type": exam_type.upper(), "subject": subject_code.capitalize(), "units": []}
 
