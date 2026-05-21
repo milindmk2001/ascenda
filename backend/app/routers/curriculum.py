@@ -120,7 +120,7 @@ def resolve_hub_fallback(
 ):
     """
     Unified Dashboard Subject Card Resolution Framework.
-    Queries courses from public.courses for both boards and competitive tracks.
+    Queries structural courses out of public.courses cleanly.
     """
     if not track_code:
         return []
@@ -167,7 +167,6 @@ def resolve_hub_fallback(
     # ──────────────────────────────────────────────────────────────
     if grade_name:
         clean_grade = grade_name.strip()
-        # Pattern looks for names containing "CBSE Class 11" or "CBSE Class 12"
         match_pattern = f"%{clean_track}%Class {clean_grade}%"
 
         sql_query = text("""
@@ -238,35 +237,41 @@ def get_curriculum_tree(
     db: Session = Depends(get_db)
 ):
     """
-    Curriculum Tree Fetcher.
-    Strictly reads entries from public.curriculum_tree. If no rows match 
-    (like for CBSE), it gracefully returns an empty list container.
+    Curriculum Tree Fetcher Engine.
+    Matches directly against structural exam_type variants (e.g. 'IITJEE_MATHS', 'NEET_PHYSICS')
+    ensuring nested structures align accurately in the sidebar pane.
     """
     clean_exam = exam_type.strip().lower().replace("-", "").replace("_", "")
     clean_subject = subject_code.strip().lower()
 
-    subject_pattern = f"%{clean_subject}%"
-    exam_pattern = f"%{clean_exam}%"
+    # Create exact matching strings for rows containing combined data signatures
+    exact_combined = f"{clean_exam}_{clean_subject}"
+    pattern_combined = f"%{clean_exam}%{clean_subject}%"
+    loose_subject_pattern = f"%{clean_subject}%"
 
     query = text("""
         SELECT id, parent_id, title, level, content_type,
                unit_number, is_leaf, content_id, display_order
         FROM public.curriculum_tree
-        WHERE (LOWER(REPLACE(REPLACE(exam_type, '_', ''), '-', '')) = :clean_exam OR LOWER(exam_type) LIKE :exam_pattern)
-          AND (LOWER(title) LIKE :subject_pattern OR LOWER(content_type) LIKE :subject_pattern OR :clean_subject = 'physics' AND LOWER(title) NOT LIKE '%maths%' AND LOWER(title) NOT LIKE '%chemistry%')
+        WHERE LOWER(exam_type) = :clean_exam
+           OR LOWER(exam_type) = :exact_combined
+           OR LOWER(exam_type) LIKE :pattern_combined
+           OR (LOWER(exam_type) LIKE :loose_subject_pattern AND (:clean_exam = 'iitjee' OR :clean_exam = 'neet'))
         ORDER BY unit_number ASC, level ASC, display_order ASC;
     """)
     
     try:
         rows = db.execute(query, {
             "clean_exam": clean_exam,
-            "exam_pattern": exam_pattern,
-            "subject_pattern": subject_pattern
+            "exact_combined": exact_combined,
+            "pattern_combined": pattern_combined,
+            "loose_subject_pattern": loose_subject_pattern
         }).fetchall()
-    except Exception:
+    except Exception as err:
+        print(f"[Tree Query Error] Execution failed: {err}")
         rows = []
 
-    # If curriculum tree is missing for this track, provide a clean response layout rather than throwing an error
+    # Fallback to an empty node payload rather than a breaking error array if no rules exist yet
     if not rows:
         return {"exam_type": exam_type.upper(), "subject": subject_code.capitalize(), "units": []}
 
@@ -398,7 +403,7 @@ def get_admin_exam_subjects(db: Session = Depends(get_db)):
 def create_exam_subject_node(payload: ExamSubjectCreate, db: Session = Depends(get_db)):
     parent_exam = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
     if not parent_exam:
-        raise HTTPException(status_code=404, detail="Exam structure tracking link profile details missing.")
+        raise HTTPException(status_code=404, detail="Target exam tracker reference link missing.")
     try:
         new_subject = models.ExamSubject(
             exam_id=payload.exam_id,

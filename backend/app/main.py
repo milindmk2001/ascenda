@@ -5,12 +5,12 @@ from app.database import engine
 from app import models
 from app.routers import organizations, curriculum, studio, ai_tutor 
 
-# Initialize database tables schemas
+# Initialize database schemas
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Ascenda API")
 
-# Explicit production mapping tokens
+# Setup clean explicit allowed frontend production URLs
 origins = [
     "https://ascenda-umber.vercel.app",
     "http://localhost:5173",
@@ -26,10 +26,10 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
-# Register Structural Routers sequentially
+# Route Mounting sequence matches layout blueprints exactly
 app.include_router(organizations.router)
-app.include_router(curriculum.admin_router) # Handles /api/admin/curriculum
-app.include_router(curriculum.router)       # Handles /api/curriculum
+app.include_router(curriculum.admin_router) # Mounts /api/admin/curriculum
+app.include_router(curriculum.router)       # Mounts /api/curriculum
 app.include_router(studio.router)
 app.include_router(ai_tutor.router)
 
