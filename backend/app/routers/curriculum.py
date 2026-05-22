@@ -8,7 +8,7 @@ from sqlalchemy import text
 from app import models
 from app.database import get_db
 
-# ── ROUTER INITIALIZATION DEFINITIONS (MUST BE FIRST) ──────────────────
+# ── ROUTER INITIALIZATION DEFINITIONS ─────────────────────────────────
 router = APIRouter(prefix="/api/curriculum", tags=["Curriculum Public Framework"])
 admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["Admin Curriculum Ingestion Console"])
 
@@ -82,6 +82,49 @@ class ExamSubjectResponse(BaseModel):
 # 2. PUBLIC API ENDPOINTS
 # ==========================================
 
+@router.get("/resolve-hub")
+def resolve_course_hub(
+    track_code: str = Query(..., alias="track_code"), 
+    db: Session = Depends(get_db)
+):
+    """
+    Resolves the core entry structural wrapper for a given track (e.g., IITJEE or NEET).
+    Finds the exam tracker row and pulls its corresponding course subject lists.
+    """
+    # 1. Match track_code to exam table record
+    exam_query = db.query(models.Exam).filter(
+        models.Exam.exam_code == track_code.upper().strip()
+    ).first()
+    
+    if not exam_query:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Exam track matching metadata code '{track_code}' not found."
+        )
+        
+    # 2. Extract corresponding subject blocks mapped to this layout
+    subjects = db.query(models.ExamSubject).filter(
+        models.ExamSubject.exam_id == exam_query.id
+    ).all()
+    
+    return {
+        "exam": {
+            "id": str(exam_query.id),
+            "name": exam_query.name,
+            "exam_code": exam_query.exam_code
+        },
+        "subjects": [
+            {
+                "id": str(sub.id),
+                "exam_id": str(sub.exam_id),
+                "name": sub.name,
+                "subject_code": sub.subject_code,
+                "discipline": sub.discipline
+            } for sub in subjects
+        ]
+    }
+
+
 @router.get("/exam/subjects", response_model=List[ExamSubjectResponse])
 def get_public_exam_subjects(db: Session = Depends(get_db)):
     """Fetches a flat list of all exam tracking subjects across the ecosystem."""
@@ -95,7 +138,7 @@ def get_subjects_by_exam_id(exam_id: str, db: Session = Depends(get_db)):
 
 
 # =====================================================================
-# DYNAMIC HIERARCHICAL RECURSIVE SYLLABUS TREE ENDPOINT (IIT-JEE / NEET)
+# DYNAMIC HIERARCHICAL RECURSIVE SYLLABUS TREE ENDPOINT
 # =====================================================================
 
 @router.get("/exam/{exam_id}/tree")
