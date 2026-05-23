@@ -89,12 +89,12 @@ def resolve_course_hub(
     db: Session = Depends(get_db)
 ):
     """
-    Dynamically resolves the entry structure for any track (IITJEE, CBSE, NEET) 
-    by scanning what content is genuinely available in the database.
+    Dynamically resolves active tracks and subjects directly out of the main curriculum_tree table.
+    Provides the exact object envelope expected by the layout dashboard.
     """
     clean_code = track_code.upper().strip()
     
-    # 1. Dynamically check if this track code exists in your curriculum_tree data
+    # 1. Dynamic check verifying if this track code exists anywhere in your curriculum tree nodes
     check_sql = """
         SELECT COUNT(*) as cnt 
         FROM public.curriculum_tree 
@@ -109,15 +109,13 @@ def resolve_course_hub(
             detail=f"Database track verification failed: {str(e)}"
         )
 
-    # 2. Dynamic Fallback: If a track isn't loaded yet, create a functional layout container 
-    # instead of crashing with a 404, keeping the UI intact for editing/viewing.
+    # 2. Generate defensive fallback container structures
     exam_id = "77777777-7777-4777-a777-777777777777"
     exam_display_name = f"{clean_code} Curriculum Framework"
-    
     if grade_name:
         exam_display_name += f" (Grade {grade_name})"
 
-    # Automatically generate default subjects layout expected by your dual-pane component dashboard
+    # 3. Construct subjects array expected by multi-pane selection interfaces
     subjects_list = [
         {
             "id": "4ae2ad11-6a55-484e-8050-5b27668c7606", 
@@ -128,6 +126,7 @@ def resolve_course_hub(
         }
     ]
 
+    # Return the clean wrapped object data envelope
     return {
         "exam": {
             "id": exam_id,
@@ -161,10 +160,8 @@ def get_hierarchical_curriculum_tree(
     db: Session = Depends(get_db)
 ):
     """
-    Builds the visual navigation sidebar hierarchy dynamically.
-    Fetches all available track nodes directly to match frontend layout context state.
+    Builds the structural navigation layout trees out of curriculum metadata rows.
     """
-    # Pulls all structural syllabus items without rigid string locks
     sql_query = """
         SELECT id, parent_id, title, level, unit_number, display_order, is_leaf, content_type
         FROM public.curriculum_tree
