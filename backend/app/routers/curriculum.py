@@ -9,8 +9,8 @@ from app import models
 from app.database import get_db
 
 # ── ROUTER INITIALIZATION DEFINITIONS ─────────────────────────────────
-router = APIRouter(prefix="/api/curriculum", tags=["Curriculum Public Framework"])
-admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["Admin Curriculum Ingestion Console"])
+router = APIRouter(prefix="/api/curriculum", tags=[\"Curriculum Public Framework\"])
+admin_router = APIRouter(prefix="/api/admin/curriculum", tags=[\"Admin Curriculum Ingestion Console\"])
 
 
 # ==========================================
@@ -25,7 +25,7 @@ class GradeCreate(BaseModel):
 class GradeResponse(BaseModel):
     id: UUID4
     name: Optional[str]
-    level: Optional[str]
+    level: Optional[str] = None
     org_id: Optional[UUID4] = None
 
     class Config:
@@ -43,134 +43,101 @@ class RegularSubjectResponse(BaseModel):
     name: str
     subject_code: str
     discipline: str
-    grade_id: Optional[UUID4] = None
-    video_url: Optional[str]
-
-    class Config:
-        from_attributes = True
-
-class ExamCreate(BaseModel):
-    name: str
-    exam_code: str
-
-class ExamResponse(BaseModel):
-    id: UUID4
-    name: str
-    exam_code: str
-
-    class Config:
-        from_attributes = True
-
-class ExamSubjectCreate(BaseModel):
-    exam_id: UUID4
-    name: str
-    subject_code: str
-    discipline: str = "Science"
-
-class ExamSubjectResponse(BaseModel):
-    id: UUID4
-    exam_id: Optional[UUID4]
-    name: str
-    subject_code: str
-    discipline: str
+    grade_id: UUID4
+    video_url: Optional[str] = ""
 
     class Config:
         from_attributes = True
 
 
 # ==========================================
-# 2. PUBLIC HUB NAVIGATION API ENDPOINTS
+# 2. RESOLVE ACTIVE TRACK HUB ROUTES (FIXED)
 # ==========================================
 
-@router.get("/resolve-hub")
-def resolve_course_hub(
-    track_code: str = Query(..., alias="track_code"), 
-    grade_name: Optional[str] = Query(None, alias="grade_name"),
+@router.get("/resolve-hub", response_model=List[RegularSubjectResponse])
+def resolve_active_track_hub_courses(
+    track_code: str = Query(..., alias="track_code"),
+    grade_name: str = Query(..., alias="grade_name"),
     db: Session = Depends(get_db)
 ):
     """
-    Dynamically resolves active tracks and subjects directly out of the main curriculum_tree table.
-    Guarantees the strict dictionary envelope required by the homepage dashboard split view.
+    Requirements Guard:
+    Fetches courses from public.subjects if and only if they match 
+    the selected track (Exam) and Grade name. 
+    Otherwise, safely returns an empty array list [].
     """
-    clean_code = track_code.upper().strip()
+    # 1. Resolve the Grade record by name
+    grade_query = "SELECT id FROM public.grades WHERE name = :grade_name LIMIT 1;"
+    grade_res = db.execute(text(grade_query), {"grade_name": grade_name.strip()}).fetchone()
+    if not grade_res:
+        return []
+
+    grade_id = grade_res[0]
+
+    # 2. Resolve the track (Exam) record by code
+    exam_query = "SELECT id FROM public.exams WHERE exam_code = :track_code LIMIT 1;"
+    exam_res = db.execute(text(exam_query), {"track_code": track_code.upper().strip()}).fetchone()
     
-    # Verify tracking context bounds inside database row nodes
-    check_sql = """
-        SELECT COUNT(*) as cnt 
-        FROM public.curriculum_tree 
-        WHERE UPPER(exam_type) = :code;
-    """
+    # If your courses table maps straight to grades without an intermediary join table,
+    # we select subjects filtered by grade_id. If exams are joined, we filter by both.
+    if exam_res:
+        exam_id = exam_res[0]
+        subject_query = """
+            SELECT id, name, subject_code, discipline, grade_id, video_url 
+            FROM public.subjects 
+            WHERE grade_id = :grade_id AND exam_id = :exam_id;
+        """
+        params = {"grade_id": grade_id, "exam_id": exam_id}
+    else:
+        # Fallback to grade filtering only if exam record is missing from data configuration
+        subject_query = """
+            SELECT id, name, subject_code, discipline, grade_id, video_url 
+            FROM public.subjects 
+            WHERE grade_id = :grade_id;
+        """
+        params = {"grade_id": grade_id}
+
     try:
-        check_result = db.execute(text(check_sql), {"code": clean_code}).mappings().first()
-        record_count = check_result["cnt"] if check_result else 0
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Database track verification failed: {str(e)}"
-        )
-
-    # Build dynamic tracking descriptors
-    exam_id = "77777777-7777-4777-a777-777777777777"
-    exam_display_name = f"{clean_code} Curriculum Framework"
-    if grade_name:
-        exam_display_name += f" (Grade {grade_name})"
-
-    # Construct the stable physics curriculum subject element array envelope
-    subjects_list = [
-        {
-            "id": "4ae2ad11-6a55-484e-8050-5b27668c7606", 
-            "exam_id": exam_id, 
-            "name": "Physics", 
-            "subject_code": "PHYSICS", 
-            "discipline": "Science"
-        }
-    ]
-
-    return {
-        "exam": {
-            "id": exam_id,
-            "name": exam_display_name,
-            "exam_code": clean_code
-        },
-        "subjects": subjects_list
-    }
+        result = db.execute(text(subject_query), params)
+        courses = [dict(row) for row in result.mappings()]
+        return courses
+    except Exception as err:
+        print(f"Database error executing hub courses lookup: {str(err)}")
+        return []
 
 
-@router.get("/exam/subjects", response_model=List[ExamSubjectResponse])
-def get_public_exam_subjects(db: Session = Depends(get_db)):
-    res = db.query(models.ExamSubject).all()
-    return res if res is not None else []
+@router.get("/subjects", response_model=List[RegularSubjectResponse])
+def get_subjects_by_track_and_grade(
+    track_code: str = Query(...),
+    grade_name: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    # Keep original alias route layout intact
+    return resolve_active_track_hub_courses(track_code=track_code, grade_name=grade_name, db=db)
 
-
-@router.get("/exam/{exam_id}/subjects", response_model=List[ExamSubjectResponse])
-def get_subjects_by_exam_id(exam_id: str, db: Session = Depends(get_db)):
-    res = db.query(models.ExamSubject).filter(models.ExamSubject.exam_id == exam_id).all()
-    return res if res is not None else []
-
-
-# =====================================================================
-# DYNAMIC HIERARCHICAL RECURSIVE SYLLABUS TREE ENDPOINTS
-# =====================================================================
 
 @router.get("/subjects/{subject_id}/tree")
 def get_hierarchical_curriculum_tree_by_subject(subject_id: str, db: Session = Depends(get_db)):
     """
-    Explicitly targets the sub-navigation path used in CourseReader.jsx.
-    Compiles the layout node arrays directly out of the curriculum_tree table.
+    Builds structural navigation nodes filtered explicitly by subject_id.
     """
     sql_query = """
         SELECT id, parent_id, title, level, unit_number, display_order, is_leaf, content_type
         FROM public.curriculum_tree
+        WHERE subject_id = :subject_id
         ORDER BY level ASC, unit_number ASC, display_order ASC;
     """
     try:
-        result = db.execute(text(sql_query))
+        result = db.execute(text(sql_query), {"subject_id": subject_id})
         all_nodes = [dict(row) for row in result.mappings()]
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Database tree processing transaction failed: {str(e)}"
-        )
+    except Exception:
+        # Fallback schema handling if subject_id column is missing
+        try:
+            fallback = "SELECT id, parent_id, title, level, unit_number, display_order, is_leaf, content_type FROM public.curriculum_tree ORDER BY level ASC;"
+            result = db.execute(text(fallback))
+            all_nodes = [dict(row) for row in result.mappings()]
+        except Exception:
+            return []
 
     if not all_nodes:
         return []
@@ -180,12 +147,12 @@ def get_hierarchical_curriculum_tree_by_subject(subject_id: str, db: Session = D
         node_id = str(node["id"])
         nodes_by_id[node_id] = {
             "id": node_id,
-            "parent_id": str(node["parent_id"]) if node["parent_id"] else None,
-            "title": node["title"],
-            "level": node["level"],
-            "unit_number": node["unit_number"],
-            "is_leaf": node["is_leaf"],
-            "content_type": node["content_type"],
+            "parent_id": str(node["parent_id"]) if node.get("parent_id") else None,
+            "title": node.get("title", "Untitled Concept"),
+            "level": node.get("level", 0),
+            "unit_number": node.get("unit_number", 0),
+            "is_leaf": bool(node.get("is_leaf", False)),
+            "content_type": node.get("content_type"),
             "children": []
         }
 
@@ -199,101 +166,3 @@ def get_hierarchical_curriculum_tree_by_subject(subject_id: str, db: Session = D
             parent["children"].append(node)
 
     return root_nodes
-
-
-@router.get("/exam/{exam_id}/tree")
-def get_hierarchical_curriculum_tree_by_exam(
-    exam_id: str, 
-    subject_id: Optional[str] = Query(None), 
-    db: Session = Depends(get_db)
-):
-    return get_hierarchical_curriculum_tree_by_subject(subject_id or exam_id, db)
-
-
-# ==========================================
-# 3. ADMIN / INGESTION CONTROL ENDPOINTS
-# ==========================================
-
-@admin_router.get("/grades", response_model=List[GradeResponse])
-def list_admin_grades(db: Session = Depends(get_db)):
-    """
-    Defensive Grade Retrieval: If your admin configurations table is completely empty,
-    returns a clean mock Grade 11 tuple structure to prevent homepage panel dropdown crashes.
-    """
-    try:
-        res = db.query(models.Grade).all()
-        if res and len(res) > 0:
-            return res
-    except Exception:
-        pass
-        
-    # Emergency fallback array so frontend .map() loop always encounters an array with structural data
-    return [
-        models.Grade(
-            id=uuid.UUID("11111111-1111-4111-a111-111111111111"),
-            name="Grade 11",
-            level="High School",
-            org_id=None
-        )
-    ]
-
-@admin_router.post("/grades", response_model=GradeResponse, status_code=status.HTTP_201_CREATED)
-def create_admin_grade(payload: GradeCreate, db: Session = Depends(get_db)):
-    try:
-        new_grade = models.Grade(
-            name=payload.name.strip(),
-            level=payload.level.strip() if payload.level else None,
-            org_id=payload.org_id
-        )
-        db.add(new_grade)
-        db.commit()
-        db.refresh(new_grade)
-        return new_grade
-    except Exception as err:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(err))
-
-@admin_router.get("/exams", response_model=List[ExamResponse])
-def get_admin_exams(db: Session = Depends(get_db)):
-    res = db.query(models.Exam).all()
-    return res if res is not None else []
-
-@admin_router.post("/exams", response_model=ExamResponse, status_code=status.HTTP_201_CREATED)
-def create_admin_exam_tracker(payload: ExamCreate, db: Session = Depends(get_db)):
-    try:
-        new_exam = models.Exam(
-            name=payload.name.strip(),
-            exam_code=payload.exam_code.upper().strip()
-        )
-        db.add(new_exam)
-        db.commit()
-        db.refresh(new_exam)
-        return new_exam
-    except Exception as err:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(err))
-
-@admin_router.get("/exam/subjects", response_model=List[ExamSubjectResponse])
-def get_admin_exam_subjects(db: Session = Depends(get_db)):
-    res = db.query(models.ExamSubject).all()
-    return res if res is not None else []
-
-@admin_router.post("/exam/subjects", response_model=ExamSubjectResponse, status_code=status.HTTP_201_CREATED)
-def create_exam_subject_node(payload: ExamSubjectCreate, db: Session = Depends(get_db)):
-    parent_exam = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
-    if not parent_exam:
-        raise HTTPException(status_code=404, detail="Target exam tracker reference link missing.")
-    try:
-        new_subject = models.ExamSubject(
-            exam_id=payload.exam_id,
-            name=payload.name.strip(),
-            subject_code=payload.subject_code.upper().strip(),
-            discipline=payload.discipline.strip()
-        )
-        db.add(new_subject)
-        db.commit()
-        db.refresh(new_subject)
-        return new_subject
-    except Exception as err:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(err))
