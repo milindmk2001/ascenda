@@ -2,149 +2,171 @@ import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css'; // Enforce math equation styling
+import 'katex/dist/katex.min.css';
 
-export default function CourseReader({ selectedLeafId }) {
+const API_BASE = "https://ascenda-production.up.railway.app";
+
+export default function CourseReader({ subject, onBack }) {
+  const [treeNodes, setTreeNodes] = useState([]);
+  const [selectedLeafId, setSelectedLeafId] = useState(null);
   const [coreContent, setCoreContent] = useState('');
   const [aiExplanation, setAiExplanation] = useState('');
+  const [loadingTree, setLoadingTree] = useState(false);
   const [loadingCore, setLoadingCore] = useState(false);
   const [loadingAI, setLoadingAI] = useState(false);
-  const [error, setError] = useState(null);
+  const [expandedNodes, setExpandedNodes] = useState({});
 
-  // Trigger content fetching whenever a new syllabus leaf node is clicked
+  // Step 1: Fetch the whole structural navigation tree for the current subject
+  useEffect(() => {
+    if (!subject?.id) return;
+    
+    setLoadingTree(true);
+    fetch(`${API_BASE}/api/curriculum/subjects/${subject.id}/tree`)
+      .then(res => res.json())
+      .then(data => {
+        setTreeNodes(data || []);
+        setLoadingTree(false);
+      })
+      .catch(err => {
+        console.error("Error ingestion downstream tree:", err);
+        setLoadingTree(false);
+      });
+  }, [subject]);
+
+  // Step 2: Fetch specific unit content when a leaf node is selected
   useEffect(() => {
     if (!selectedLeafId) return;
-    
-    // Reset reader panels
+
     setCoreContent('');
     setAiExplanation('');
-    setError(null);
     setLoadingCore(true);
 
-    // Fetch textbook core content
-    fetch(`/api/curriculum/leaf/${selectedLeafId}`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to load textbook core lesson text.');
+    // Pipeline A: Core Database Text Payload Ingestion
+    fetch(`${API_BASE}/api/curriculum/leaf/${selectedLeafId}`)
+      .then(res => {
+        if (!res.ok) throw new Error('Static content frame unreachable.');
         return res.json();
       })
-      .then((data) => {
-        // Safe check for null/undefined content text fields
-        setCoreContent(data?.content_text || '*No core text has been generated for this module yet.*');
+      .then(data => {
+        setCoreContent(data?.content_text || '*No core text module configured for this node yet.*');
         setLoadingCore(false);
-        
-        // Immediately kick off streaming the pedagogically configured AI Tutor Deep Dive
-        triggerAiExplanation(selectedLeafId);
+
+        // Pipeline B: Establish Chunked Streaming for Socratic AI Explanation
+        triggerAiStream(selectedLeafId);
       })
-      .catch((err) => {
-        console.error(err);
-        setError(err.message);
+      .catch(err => {
+        setCoreContent(`*Error loading technical content profile.*`);
         setLoadingCore(false);
       });
   }, [selectedLeafId]);
 
-  // Handle server-side streaming chunk allocations
-  const triggerAiExplanation = async (leafId) => {
+  const triggerAiStream = async (leafId) => {
     setLoadingAI(true);
     try {
-      const response = await fetch('/api/ai_tutor/explain', {
+      const response = await fetch(`${API_BASE}/api/ai_tutor/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ curriculum_tree_id: leafId }),
+        body: JSON.stringify({
+          leaf_id: leafId,
+          subject_meta: subject?.meta_tag || "general"
+        })
       });
 
-      if (!response.ok) throw new Error('AI Tutor server endpoint unreachable.');
-
+      if (!response.body) return;
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let done = false;
 
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        if (value) {
-          const chunk = decoder.decode(value, { stream: true });
-          setAiExplanation((prev) => prev + chunk);
-        }
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const token = decoder.decode(value);
+        setAiExplanation(prev => prev + token);
       }
-    } catch (err) {
-      console.error(err);
-      setAiExplanation('⚠️ *Could not establish connection stream with Ascenda AI Tutor.*');
+    } catch (e) {
+      setAiExplanation(prev => prev + "\n\n*[AI Tutor Streaming Pipeline Disconnected]*");
     } finally {
       setLoadingAI(false);
     }
   };
 
-  if (!selectedLeafId) {
-    return (
-      <div className="flex items-center justify-center h-full text-slate-400 p-8">
-        <p className="text-lg font-medium">Select a module topic folder on the left layout directory to start reading.</p>
-      </div>
-    );
-  }
+  const toggleNode = (id) => {
+    setExpandedNodes(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
-  if (error) {
+  // Recursive Renderer Engine for Tree Sidebar Nodes
+  const renderTree = (nodes) => {
     return (
-      <div className="p-6 bg-red-950/40 border border-red-800 rounded-lg m-6 text-red-200">
-        <h4 className="font-bold text-lg mb-1">Initialization Exception Encountered</h4>
-        <p className="text-sm">{error}</p>
-      </div>
+      <ul className=\"pl-4 border-l border-slate-800 space-y-1 font-mono text-xs text-slate-400\">
+        {nodes.map(node => {
+          const hasChildren = node.children && node.children.length > 0;
+          const isExpanded = expandedNodes[node.id];
+
+          return (
+            <li key={node.id} className=\"py-1\">
+              <div 
+                onClick={() => hasChildren ? toggleNode(node.id) : setSelectedLeafId(node.id)}
+                className={`flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-slate-900 transition-all ${selectedLeafId === node.id ? 'text-emerald-400 bg-slate-900 font-bold' : ''}`}
+              >
+                {hasChildren && (<span>{isExpanded ? '▼' : '►'}</span>)}
+                <span className={node.is_leaf ? "text-slate-300" : "text-slate-500 font-bold uppercase tracking-wide text-[10px]"}>
+                  {node.title}
+                </span>
+              </div>
+              {hasChildren && isExpanded && renderTree(node.children)}
+            </li>
+          );
+        })}
+      </ul>
     );
-  }
+  };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 p-6 h-full w-full overflow-hidden bg-slate-950 text-slate-100">
-      
-      {/* LEFT PANE: Core Textbook Lesson Material */}
-      <div className="flex-1 bg-slate-900/50 border border-slate-800 rounded-xl p-6 overflow-y-auto max-h-[85vh]">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-          <span className="text-xs uppercase tracking-widest font-bold text-emerald-400">Standard Lesson Text</span>
-          {loadingCore && <span className="text-xs text-slate-400 animate-pulse">Syncing...</span>}
-        </div>
+    <div className=\"flex h-[calc(100vh-64px)] w-full bg-slate-950 text-slate-100 overflow-hidden\">
+      {/* SIDEBAR NAVIGATION COLUMN */}
+      <div className=\"w-80 border-r border-slate-900 bg-slate-950 p-4 flex flex-col overflow-y-auto\">
+        <button onClick={onBack} className=\"mb-6 text-left text-[10px] font-mono tracking-widest text-slate-500 hover:text-emerald-400 transition-colors uppercase\">
+          ← Back to Hub
+        </button>
+        <h2 className=\"text-sm font-black tracking-tight text-slate-200 mb-4 uppercase font-mono\">
+          {subject?.name || 'Syllabus Tree'}
+        </h2>
         
-        <div className="prose prose-invert max-w-none text-slate-300 leading-relaxed space-y-4">
-          {loadingCore ? (
-            <div className="space-y-3">
-              <div className="h-4 bg-slate-800 rounded w-3/4 animate-pulse"></div>
-              <div className="h-4 bg-slate-800 rounded animate-pulse"></div>
-              <div className="h-4 bg-slate-800 rounded w-5/6 animate-pulse"></div>
-            </div>
-          ) : (
-            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-              {coreContent}
-            </ReactMarkdown>
-          )}
-        </div>
+        {loadingTree ? (
+          <div className=\"space-y-2 animate-pulse text-xs font-mono text-slate-600\">Processing Tree Metatags...</div>
+        ) : treeNodes.length > 0 ? (
+          renderTree(treeNodes)
+        ) : (
+          <div className=\"text-xs text-slate-600 font-mono italic\">No structural tree entries found mapping to this index.</div>
+        )}
       </div>
 
-      {/* RIGHT PANE: Interactive Pedagogical AI Tutor Deep Dive */}
-      <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl p-6 overflow-y-auto max-h-[85vh] shadow-2xl relative">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
-            <span className="text-xs uppercase tracking-widest font-bold text-blue-400">Ascenda Socratic AI Tutor</span>
+      {/* CORE CONTENT MAIN RETRIEVAL VIEWER */}
+      <div className=\"flex-grow grid grid-cols-2 overflow-hidden bg-slate-900/20\">
+        {/* LEFT COLUMN PANEL: Core Lesson Materials */}
+        <div className=\"p-6 overflow-y-auto border-r border-slate-900\">
+          <div className=\"border-b border-slate-800 pb-2 mb-4\">
+            <span className=\"text-[10px] font-mono uppercase text-slate-500 tracking-widest\">Core Curriculum Specification Documentation</span>
           </div>
-          {loadingAI && <span className="text-xs text-blue-400 animate-pulse">Streaming Insights...</span>}
-        </div>
-
-        <div className="prose prose-invert max-w-none text-slate-200 leading-relaxed space-y-4 markdown-ai-zone">
-          {aiExplanation ? (
-            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-              {aiExplanation}
-            </ReactMarkdown>
-          ) : loadingAI ? (
-            <div className="space-y-4">
-              <p className="text-sm text-slate-400 italic">Synthesizing textbook data with IITJEE target parameter mapping matrices...</p>
-              <div className="space-y-2">
-                <div className="h-3 bg-slate-800 rounded animate-pulse"></div>
-                <div className="h-3 bg-slate-800 rounded w-5/6 animate-pulse"></div>
-              </div>
-            </div>
+          {loadingCore ? (
+            <div className=\"text-sm text-slate-500 animate-pulse font-mono\">Reading record blocks...</div>
           ) : (
-            <p className="text-sm text-slate-500 italic">Waiting for textbook core mapping resolution to trigger tutor pipeline output.</p>
+            <div className=\"prose prose-invert max-w-none text-slate-300\">
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{coreContent || "*Select a specific core lesson concept token from the sidebar hierarchy navigation to spin up content views.*"}</ReactMarkdown>
+            </div>
           )}
         </div>
-      </div>
 
+        {/* RIGHT COLUMN PANEL: AI Interactive Tutor Companion */}
+        <div className=\"p-6 overflow-y-auto bg-slate-950/40\">
+          <div className=\"flex items-center justify-between border-b border-slate-800 pb-2 mb-4\">
+            <span className=\"text-[10px] font-mono uppercase text-blue-400 tracking-widest\">Ascenda Socratic Engine Pipeline</span>
+            {loadingAI && <span className=\"text-[9px] font-mono bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded animate-pulse\">STREAMING INTERACTIVE VECTOR TOKENS</span>}
+          </div>
+          <div className=\"prose prose-invert max-w-none text-slate-300\">
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{aiExplanation || (loadingAI ? "" : "*Awaiting active content generation pipeline trigger signals...*")}</ReactMarkdown>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
