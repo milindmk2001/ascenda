@@ -96,13 +96,13 @@ export default function CourseReader({ subject, onBack }) {
   // Recursive Renderer Engine for Tree Sidebar Nodes
   const renderTree = (nodes) => {
     return (
-      <ul className=\"pl-4 border-l border-slate-800 space-y-1 font-mono text-xs text-slate-400\">
+      <ul className="pl-4 border-l border-slate-800 space-y-1 font-mono text-xs text-slate-400">
         {nodes.map(node => {
           const hasChildren = node.children && node.children.length > 0;
           const isExpanded = expandedNodes[node.id];
 
           return (
-            <li key={node.id} className=\"py-1\">
+            <li key={node.id} className="py-1">
               <div 
                 onClick={() => hasChildren ? toggleNode(node.id) : setSelectedLeafId(node.id)}
                 className={`flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-slate-900 transition-all ${selectedLeafId === node.id ? 'text-emerald-400 bg-slate-900 font-bold' : ''}`}
@@ -121,48 +121,48 @@ export default function CourseReader({ subject, onBack }) {
   };
 
   return (
-    <div className=\"flex h-[calc(100vh-64px)] w-full bg-slate-950 text-slate-100 overflow-hidden\">
+    <div className="flex h-[calc(100vh-64px)] w-full bg-slate-950 text-slate-100 overflow-hidden">
       {/* SIDEBAR NAVIGATION COLUMN */}
-      <div className=\"w-80 border-r border-slate-900 bg-slate-950 p-4 flex flex-col overflow-y-auto\">
-        <button onClick={onBack} className=\"mb-6 text-left text-[10px] font-mono tracking-widest text-slate-500 hover:text-emerald-400 transition-colors uppercase\">
+      <div className="w-80 border-r border-slate-900 bg-slate-950 p-4 flex flex-col overflow-y-auto">
+        <button onClick={onBack} className="mb-6 text-left text-[10px] font-mono tracking-widest text-slate-500 hover:text-emerald-400 transition-colors uppercase">
           ← Back to Hub
         </button>
-        <h2 className=\"text-sm font-black tracking-tight text-slate-200 mb-4 uppercase font-mono\">
+        <h2 className="text-sm font-black tracking-tight text-slate-200 mb-4 uppercase font-mono">
           {subject?.name || 'Syllabus Tree'}
         </h2>
         
         {loadingTree ? (
-          <div className=\"space-y-2 animate-pulse text-xs font-mono text-slate-600\">Processing Tree Metatags...</div>
+          <div className="space-y-2 animate-pulse text-xs font-mono text-slate-600">Processing Tree Metatags...</div>
         ) : treeNodes.length > 0 ? (
           renderTree(treeNodes)
         ) : (
-          <div className=\"text-xs text-slate-600 font-mono italic\">No structural tree entries found mapping to this index.</div>
+          <div className="text-xs text-slate-600 font-mono italic">No structural tree entries found mapping to this index.</div>
         )}
       </div>
 
       {/* CORE CONTENT MAIN RETRIEVAL VIEWER */}
-      <div className=\"flex-grow grid grid-cols-2 overflow-hidden bg-slate-900/20\">
+      <div className="flex-grow grid grid-cols-2 overflow-hidden bg-slate-900/20">
         {/* LEFT COLUMN PANEL: Core Lesson Materials */}
-        <div className=\"p-6 overflow-y-auto border-r border-slate-900\">
-          <div className=\"border-b border-slate-800 pb-2 mb-4\">
-            <span className=\"text-[10px] font-mono uppercase text-slate-500 tracking-widest\">Core Curriculum Specification Documentation</span>
+        <div className="p-6 overflow-y-auto border-r border-slate-900">
+          <div className="border-b border-slate-800 pb-2 mb-4">
+            <span className="text-[10px] font-mono uppercase text-slate-500 tracking-widest">Core Curriculum Specification Documentation</span>
           </div>
           {loadingCore ? (
-            <div className=\"text-sm text-slate-500 animate-pulse font-mono\">Reading record blocks...</div>
+            <div className="text-sm text-slate-500 animate-pulse font-mono">Reading record blocks...</div>
           ) : (
-            <div className=\"prose prose-invert max-w-none text-slate-300\">
+            <div className="prose prose-invert max-w-none text-slate-300">
               <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{coreContent || "*Select a specific core lesson concept token from the sidebar hierarchy navigation to spin up content views.*"}</ReactMarkdown>
             </div>
           )}
         </div>
 
         {/* RIGHT COLUMN PANEL: AI Interactive Tutor Companion */}
-        <div className=\"p-6 overflow-y-auto bg-slate-950/40\">
-          <div className=\"flex items-center justify-between border-b border-slate-800 pb-2 mb-4\">
-            <span className=\"text-[10px] font-mono uppercase text-blue-400 tracking-widest\">Ascenda Socratic Engine Pipeline</span>
-            {loadingAI && <span className=\"text-[9px] font-mono bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded animate-pulse\">STREAMING INTERACTIVE VECTOR TOKENS</span>}
+        <div className="p-6 overflow-y-auto bg-slate-950/40">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-4">
+            <span className="text-[10px] font-mono uppercase text-blue-400 tracking-widest">Ascenda Socratic Engine Pipeline</span>
+            {loadingAI && <span className="text-[9px] font-mono bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded animate-pulse">STREAMING INTERACTIVE VECTOR TOKENS</span>}
           </div>
-          <div className=\"prose prose-invert max-w-none text-slate-300\">
+          <div className="prose prose-invert max-w-none text-slate-300">
             <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{aiExplanation || (loadingAI ? "" : "*Awaiting active content generation pipeline trigger signals...*")}</ReactMarkdown>
           </div>
         </div>
