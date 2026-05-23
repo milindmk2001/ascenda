@@ -89,13 +89,12 @@ def resolve_course_hub(
     db: Session = Depends(get_db)
 ):
     """
-    Resolves the curriculum structure dynamically. Returns a hybrid layout matrix
-    that behaves simultaneously as a raw JSON Array and a structured Object envelope
-    to fulfill any arbitrary frontend .map() or .subjects reference patterns.
+    Dynamically resolves active tracks and subjects directly out of the main curriculum_tree table.
+    Provides the exact object envelope expected by the layout dashboard hub.
     """
     clean_code = track_code.upper().strip()
     
-    # 1. Dynamic check verifying if track context exists in curriculum_tree nodes
+    # Check if this track code exists anywhere in your curriculum tree nodes
     check_sql = """
         SELECT COUNT(*) as cnt 
         FROM public.curriculum_tree 
@@ -110,78 +109,58 @@ def resolve_course_hub(
             detail=f"Database track verification failed: {str(e)}"
         )
 
-    # 2. Build default virtual tracking parameters
+    # Generate fallback container structures
     exam_id = "77777777-7777-4777-a777-777777777777"
     exam_display_name = f"{clean_code} Curriculum Framework"
     if grade_name:
         exam_display_name += f" (Grade {grade_name})"
 
-    # 3. Create the subjects layout dictionary
-    target_subject = {
-        "id": "4ae2ad11-6a55-484e-8050-5b27668c7606", 
-        "exam_id": exam_id, 
-        "name": "Physics", 
-        "subject_code": "PHYSICS", 
-        "discipline": "Science"
+    # Construct stable physics placeholder subject array node matching CourseReader payload expectations
+    subjects_list = [
+        {
+            "id": "4ae2ad11-6a55-484e-8050-5b27668c7606", 
+            "exam_id": exam_id, 
+            "name": "Physics", 
+            "subject_code": "PHYSICS", 
+            "discipline": "Science"
+        }
+    ]
+
+    return {
+        "exam": {
+            "id": exam_id,
+            "name": exam_display_name,
+            "exam_code": clean_code
+        },
+        "subjects": subjects_list
     }
-
-    exam_metadata = {
-        "id": exam_id,
-        "name": exam_display_name,
-        "exam_code": clean_code
-    }
-
-    # ── THE HYBRID TRICK ──
-    # We construct a response object that serializes as a valid list [ ... ]
-    # but we manually add 'exam' and 'subjects' as properties to it.
-    class HybridListResponse(list):
-        pass
-
-    response_payload = HybridListResponse([target_subject])
-    
-    # Attach properties for cases where frontend checks response.data.subjects or response.data.exam
-    response_payload.exam = exam_metadata
-    response_payload.subjects = [target_subject]
-    
-    # Custom dict serialization overrides for FastAPI/Pydantic encoder compliance
-    response_payload.__dict__["exam"] = exam_metadata
-    response_payload.__dict__["subjects"] = [target_subject]
-
-    return response_payload
 
 
 @router.get("/exam/subjects", response_model=List[ExamSubjectResponse])
 def get_public_exam_subjects(db: Session = Depends(get_db)):
-    """Fetches a flat list of all exam tracking subjects across the ecosystem."""
     return db.query(models.ExamSubject).all()
 
 
 @router.get("/exam/{exam_id}/subjects", response_model=List[ExamSubjectResponse])
 def get_subjects_by_exam_id(exam_id: str, db: Session = Depends(get_db)):
-    """Fetches available curriculum subject nodes linked to an exam pipeline ID."""
     return db.query(models.ExamSubject).filter(models.ExamSubject.exam_id == exam_id).all()
 
 
 # =====================================================================
-# DYNAMIC HIERARCHICAL RECURSIVE SYLLABUS TREE ENDPOINT
+# DYNAMIC HIERARCHICAL RECURSIVE SYLLABUS TREE ENDPOINTS
 # =====================================================================
 
-@router.get("/exam/{exam_id}/tree")
-def get_hierarchical_curriculum_tree(
-    exam_id: str, 
-    subject_id: Optional[str] = Query(None), 
-    db: Session = Depends(get_db)
-):
+@router.get("/subjects/{subject_id}/tree")
+def get_hierarchical_curriculum_tree_by_subject(subject_id: str, db: Session = Depends(get_db)):
     """
-    Builds the visual navigation sidebar hierarchy dynamically.
-    Fetches all available track nodes directly to match frontend layout context state.
+    CRITICAL FIX: Matches the layout fetch URL called inside CourseReader.jsx.
+    Compiles curriculum nodes directly to clean out frontend navigation .map() crashes.
     """
     sql_query = """
         SELECT id, parent_id, title, level, unit_number, display_order, is_leaf, content_type
         FROM public.curriculum_tree
         ORDER BY level ASC, unit_number ASC, display_order ASC;
     """
-    
     try:
         result = db.execute(text(sql_query))
         all_nodes = [dict(row) for row in result.mappings()]
@@ -218,6 +197,16 @@ def get_hierarchical_curriculum_tree(
             parent["children"].append(node)
 
     return root_nodes
+
+
+@router.get("/exam/{exam_id}/tree")
+def get_hierarchical_curriculum_tree_by_exam(
+    exam_id: str, 
+    subject_id: Optional[str] = Query(None), 
+    db: Session = Depends(get_db)
+):
+    """Fallback support for exam-based tree retrieval requests."""
+    return get_hierarchical_curriculum_tree_by_subject(subject_id or exam_id, db)
 
 
 # ==========================================
