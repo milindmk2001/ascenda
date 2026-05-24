@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from supabase import create_client, Client
 import os
 import json
@@ -9,39 +9,42 @@ from google.genai import types
 
 router = APIRouter(prefix="/api/ai_tutor", tags=["ai_tutor"])
 
-# Use .get() defensively to prevent fatal KeyErrors during container build/boot phases
+# Read environment variables securely
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Initialize clients only if credentials exist, preventing startup crashes
+# Initialize database wrapper client
 if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-    print("⚠️ WARNING: SUPABASE_URL or SUPABASE_ANON_KEY is missing from environment variables.")
+    print("⚠️ WARNING: SUPABASE_URL or SUPABASE_ANON_KEY is missing from environment parameters.")
     supabase = None
 else:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+# Initialize AI client framework
 if not GEMINI_API_KEY:
-    print("⚠️ WARNING: GEMINI_API_KEY is missing from environment variables.")
+    print("⚠️ WARNING: GEMINI_API_KEY is missing from environment parameters.")
     gemini_client = None
 else:
     gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 class ExplanationRequest(BaseModel):
-    leafId: str
+    # Using Field with aliases handles BOTH 'leafId' and 'curriculum_tree_id' variants smoothly
+    leafId: str = Field(..., alias="leafId")
+
+    class Config:
+        populate_by_name = True  # Allows parsing raw matching keys seamlessly
 
 
 async def generate_explanation_stream(content_text: str, meta: dict):
     """
-    Socratic generator engine that pipes chunked response streams 
-    from the Gemini API directly back to CourseReader.jsx.
+    Socratic engine pushing live Markdown token streams directly to CourseReader.jsx.
     """
     if not gemini_client:
         yield "⚠️ AI Tutor Engine configuration error: GEMINI_API_KEY is missing on the server host environment."
         return
 
-    # Parse and extract metadata elements cleanly, supporting both raw JSON strings and standard lists
     def parse_meta_list(value):
         if not value:
             return []
@@ -59,7 +62,6 @@ async def generate_explanation_stream(content_text: str, meta: dict):
     mistakes_list = parse_meta_list(meta.get("common_mistakes"))
     prereqs_list = parse_meta_list(meta.get("prerequisites"))
 
-    # Construct the Socratic curriculum directive layout
     socratic_prompt = f"""
     You are the Ascenda AI Socratic Tutor, an elite competitive exam specialist for IITJEE and NEET physics.
     Your mission is to provide an immersive, deeply conceptual, and intuitive breakdown of the provided core lesson content.
@@ -88,7 +90,6 @@ async def generate_explanation_stream(content_text: str, meta: dict):
     """
 
     try:
-        # Request stream generation via the official Google GenAI model pipeline
         response_stream = gemini_client.models.generate_content_stream(
             model='gemini-2.5-flash',
             contents=socratic_prompt,
@@ -97,35 +98,41 @@ async def generate_explanation_stream(content_text: str, meta: dict):
                 top_p=0.95
             )
         )
-        
         for chunk in response_stream:
             if chunk.text:
                 yield chunk.text
-                
     except Exception as e:
         yield f"\n\n⚠️ [Streaming Pipeline Error: Failed to generate continuous token blocks from Gemini API - {str(e)}]"
 
 
 @router.post("/stream")
 async def stream_socratic_explanation(request: ExplanationRequest):
+    """
+    Processes incoming post targets from the CourseReader interface panel.
+    """
     if not supabase:
         raise HTTPException(
             status_code=500, 
             detail="Supabase infrastructure connection variables are not configured on the deployment backend."
         )
 
+    # Use the unified schema ID variable to pull the targeted row string directly
+    target_id = request.leafId
+    print(f"🚀 Processing incoming Socratic streaming request for Target ID: {target_id}")
+
     try:
-        # Use request.leafId here to capture the incoming frontend parameter cleanly
+        # Match data mapping using your true table column ('id')
         content_query = supabase.table("generated_content") \
             .select("id, topic, unit, content, difficulty, formulae") \
-            .eq("id", request.leafId) \
+            .eq("id", target_id) \
             .maybe_single() \
             .execute()
             
         if not content_query or not content_query.data:
+            print(f"❌ 404 Error: Could not locate ID '{target_id}' in public.generated_content table layout.")
             raise HTTPException(
                 status_code=404, 
-                detail=f"Target lesson content reference '{request.leafId}' could not be located in your database cluster."
+                detail=f"Target lesson content reference '{target_id}' could not be located in your database cluster."
             )
         
         db_record = content_query.data
@@ -137,6 +144,7 @@ async def stream_socratic_explanation(request: ExplanationRequest):
                 detail="The matching database record exists, but its core content text parameter is empty."
             )
         
+        # Safe structural dictionary mapping
         meta = {
             "topic": db_record.get("topic") or "Physics Concept",
             "unit": db_record.get("unit") or "Units and Measurements",
@@ -154,6 +162,7 @@ async def stream_socratic_explanation(request: ExplanationRequest):
     except HTTPException:
         raise
     except Exception as e:
+        print(f"💥 Critical crash caught inside stream processing route: {str(e)}")
         raise HTTPException(
             status_code=500, 
             detail=f"Database concept processing transaction dropped inside AI Tutor layer: {str(e)}"
