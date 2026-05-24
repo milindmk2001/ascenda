@@ -47,7 +47,7 @@ function App() {
   }, []);
 
   // System Sync Engine: Live monitors runtime states to load course cards dynamically
-  useEffect(() => {
+ useEffect(() => {
     const resolveActiveCurriculum = async () => {
       try {
         setLoading(true);
