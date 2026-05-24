@@ -29,7 +29,7 @@ else:
 
 
 class ExplanationRequest(BaseModel):
-    curriculum_tree_id: str
+    leafId: str
 
 
 async def generate_explanation_stream(content_text: str, meta: dict):
@@ -108,10 +108,6 @@ async def generate_explanation_stream(content_text: str, meta: dict):
 
 @router.post("/stream")
 async def stream_socratic_explanation(request: ExplanationRequest):
-    """
-    Targets interactive layout triggers from CourseReader.jsx.
-    Fetches context parameters from your Supabase data schema and pushes a streaming response.
-    """
     if not supabase:
         raise HTTPException(
             status_code=500, 
@@ -119,41 +115,37 @@ async def stream_socratic_explanation(request: ExplanationRequest):
         )
 
     try:
-        # Fetching content directly based on your real database table layout
-        # (Where the structural ID acts as the main reference lookup key)
+        # Use request.leafId here to capture the incoming frontend parameter cleanly
         content_query = supabase.table("generated_content") \
             .select("id, topic, unit, content, difficulty, formulae") \
-            .eq("id", request.curriculum_tree_id) \
+            .eq("id", request.leafId) \
             .maybe_single() \
             .execute()
             
         if not content_query or not content_query.data:
             raise HTTPException(
                 status_code=404, 
-                detail=f"Target lesson content reference '{request.curriculum_tree_id}' could not be located in your database cluster."
+                detail=f"Target lesson content reference '{request.leafId}' could not be located in your database cluster."
             )
         
         db_record = content_query.data
-        
-        # Pull text from your true text data column ('content')
         raw_text = db_record.get("content") or ""
+        
         if not raw_text.strip():
             raise HTTPException(
                 status_code=400,
                 detail="The matching database record exists, but its core content text parameter is empty."
             )
         
-        # Build prompt metadata dictionary elements on the fly out of your real row variables
         meta = {
             "topic": db_record.get("topic") or "Physics Concept",
             "unit": db_record.get("unit") or "Units and Measurements",
             "difficulty": db_record.get("difficulty") or "Medium",
             "key_formulae": db_record.get("formulae") or [],
-            "common_mistakes": [], # Optional placeholder fields for future enhancements
+            "common_mistakes": [],
             "prerequisites": []
         }
 
-        # Return a continuous StreamingResponse stream back to the UI markdown panel
         return StreamingResponse(
             generate_explanation_stream(raw_text, meta), 
             media_type="text/plain"
