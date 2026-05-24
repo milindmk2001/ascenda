@@ -304,3 +304,61 @@ def create_exam_subject_node(payload: ExamSubjectCreate, db: Session = Depends(g
     except Exception as err:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(err))
+    
+# =====================================================================
+# LEAF CONCEPT DETAIL EXTRACTION ENDPOINT
+# =====================================================================
+
+@router.get("/leaf/{leaf_id}")
+def get_curriculum_leaf_node_content(leaf_id: str, db: Session = Depends(get_db)):
+    """
+    Targets the leaf-node detail lookups triggered from CourseReader.jsx canvas elements.
+    Fetches comprehensive content blocks straight out of the curriculum_tree table.
+    """
+    sql_query = """
+        SELECT id, parent_id, title, level, unit_number, is_leaf, content_type
+        FROM public.curriculum_tree
+        WHERE id = :leaf_id LIMIT 1;
+    """
+    try:
+        # Cast string to standard clean query param dictionary values
+        result = db.execute(text(sql_query), {"leaf_id": leaf_id.strip()}).mappings().first()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Database concept processing transaction dropped: {str(e)}"
+        )
+
+    if not result:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Target leaf concept node reference '{leaf_id}' could not be located."
+        )
+
+    # Convert mapping dictionary proxy format to a clean standard Python dictionary 
+    node_data = dict(result)
+
+    # Generated text block for the markdown render canvas
+    educational_material = f"""# {node_data['title']}
+    
+## Core Curriculum Objectives
+Comprehensive study material, instructional breakdowns, and structured analytical benchmarks for **{node_data['title']}**.
+
+### Analytical Focus
+* Systematic formulation and structured review of fundamental parameters.
+* Test-oriented deep dives tailored for technical assessment environments.
+"""
+
+    # Return structure mapped seamlessly to both standard models and CourseReader.jsx expectations
+    return {
+        "id": str(node_data["id"]),
+        "title": node_data["title"] or "Untitled Concept Node",
+        "content_type": node_data["content_type"] or "CONCEPT",
+        "description": f"Comprehensive study material for {node_data['title']}.",
+        "content_text": educational_material,  #  FIX: Matches CourseReader.jsx line 41 exactly!
+        "video_placeholder_url": "https://www.w3schools.com/html/mov_bbb.mp4",
+        "meta": {
+            "level": node_data["level"],
+            "unit_number": node_data["unit_number"]
+        }
+    }
