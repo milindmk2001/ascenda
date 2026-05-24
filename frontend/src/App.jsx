@@ -47,7 +47,7 @@ function App() {
   }, []);
 
   // System Sync Engine: Live monitors runtime states to load course cards dynamically
- useEffect(() => {
+  useEffect(() => {
     const resolveActiveCurriculum = async () => {
       try {
         setLoading(true);
@@ -65,8 +65,15 @@ function App() {
         if (!res.ok) {
           throw new Error(`Failed to resolve active course components from the server.`);
         }
+        
         const activeSubjects = await res.json();
-        setSubjects(activeSubjects);
+        
+        // FIX: Extract the core array safely from the backend's data envelope dictionary
+        if (activeSubjects && Array.isArray(activeSubjects.subjects)) {
+          setSubjects(activeSubjects.subjects);
+        } else {
+          setSubjects([]);
+        }
       } catch (err) {
         console.error("Error patching track mapping components:", err);
         setSubjects([]);
