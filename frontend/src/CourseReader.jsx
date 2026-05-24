@@ -16,36 +16,34 @@ export default function CourseReader({ subject, onBack }) {
   const [loadingAI, setLoadingAI] = useState(false);
   const [expandedNodes, setExpandedNodes] = useState({});
 
-  // Step 1: Fetch structural navigation tree for current subject with strict validation guards
+  // Step 1: Fetch the whole structural navigation tree for the current subject
   useEffect(() => {
     if (!subject?.id) return;
     
     setLoadingTree(true);
     fetch(`${API_BASE}/api/curriculum/subjects/${subject.id}/tree`)
       .then(res => {
-        if (!res.ok) throw new Error("Server infrastructure returned an invalid tracking response state.");
+        if (!res.ok) throw new Error("Server tree interface responded with an error status.");
         return res.json();
       })
       .then(data => {
-        // Strict data type assertion checks to insulate rendering logic
-        if (data && Array.isArray(data)) {
+        // Defensive Check: Ensure the data is strictly an array before modifying state
+        if (Array.isArray(data)) {
           setTreeNodes(data);
-        } else if (data && Array.isArray(data.tree)) {
-          setTreeNodes(data.tree);
         } else {
-          console.warn("Expected an array payload block, but received standard token:", data);
+          console.error("Malformed payload received at Tree Endpoint. Expected Array:", data);
           setTreeNodes([]);
         }
         setLoadingTree(false);
       })
       .catch(err => {
-        print(f"Error compiling syllabus data matrix downstream: {err}");
+        console.error("Error ingestion downstream tree:", err);
         setTreeNodes([]);
         setLoadingTree(false);
       });
   }, [subject]);
 
-  // Step 2: Leaf token click handler to fetch core documentation and run AI streaming mechanics
+  // Step 2: Fetch specific unit content when a leaf node is selected
   useEffect(() => {
     if (!selectedLeafId) return;
 
@@ -53,6 +51,7 @@ export default function CourseReader({ subject, onBack }) {
     setAiExplanation('');
     setLoadingCore(true);
 
+    // Pipeline A: Core Database Text Payload Ingestion
     fetch(`${API_BASE}/api/curriculum/leaf/${selectedLeafId}`)
       .then(res => {
         if (!res.ok) throw new Error('Static content frame unreachable.');
@@ -61,9 +60,11 @@ export default function CourseReader({ subject, onBack }) {
       .then(data => {
         setCoreContent(data?.content_text || '*No core text module configured for this node yet.*');
         setLoadingCore(false);
+
+        // Pipeline B: Establish Chunked Streaming for Socratic AI Explanation
         triggerAiStream(selectedLeafId);
       })
-      .catch(() => {
+      .catch(err => {
         setCoreContent(`*Error loading technical content profile.*`);
         setLoadingCore(false);
       });
@@ -102,7 +103,7 @@ export default function CourseReader({ subject, onBack }) {
     setExpandedNodes(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Recursive directory engine generator UI layout mapping blocks
+  // Recursive Renderer Engine for Tree Sidebar Nodes
   const renderTree = (nodes) => {
     if (!Array.isArray(nodes)) return null;
 
@@ -133,7 +134,6 @@ export default function CourseReader({ subject, onBack }) {
 
   return (
     <div className="flex h-[calc(100vh-64px)] w-full bg-slate-950 text-slate-100 overflow-hidden">
-      
       {/* SIDEBAR NAVIGATION COLUMN */}
       <div className="w-80 border-r border-slate-900 bg-slate-950 p-4 flex flex-col overflow-y-auto">
         <button onClick={onBack} className="mb-6 text-left text-[10px] font-mono tracking-widest text-slate-500 hover:text-emerald-400 transition-colors uppercase">
@@ -148,16 +148,15 @@ export default function CourseReader({ subject, onBack }) {
         ) : treeNodes.length > 0 ? (
           renderTree(treeNodes)
         ) : (
-          <div className="p-4 border border-dashed border-slate-900 rounded text-center my-2">
-            <div className="text-[10px] text-slate-500 font-mono tracking-wider uppercase font-bold">No Courses Found</div>
-            <div className="text-[9px] text-slate-600 font-mono mt-1">No operational data schemas found matching your selection criteria.</div>
+          <div className="p-4 border border-dashed border-slate-900 rounded text-center my-2 bg-slate-950">
+            <div className="text-[10px] text-slate-500 font-mono tracking-wider uppercase font-bold">No Syllabus Items Found</div>
+            <div className="text-[9px] text-slate-600 font-mono mt-1">No operational chapters or topics found matching this index.</div>
           </div>
         )}
       </div>
 
       {/* CORE CONTENT MAIN RETRIEVAL VIEWER */}
       <div className="flex-grow grid grid-cols-2 overflow-hidden bg-slate-900/20">
-        
         {/* LEFT COLUMN PANEL: Core Lesson Materials */}
         <div className="p-6 overflow-y-auto border-r border-slate-900">
           <div className="border-b border-slate-800 pb-2 mb-4">
@@ -167,9 +166,7 @@ export default function CourseReader({ subject, onBack }) {
             <div className="text-sm text-slate-500 animate-pulse font-mono">Reading record blocks...</div>
           ) : (
             <div className="prose prose-invert max-w-none text-slate-300">
-              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                {coreContent || "*Select a specific core lesson concept token from the sidebar hierarchy navigation to spin up content views.*"}
-              </ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{coreContent || "*Select a specific core lesson concept token from the sidebar hierarchy navigation to spin up content views.*"}</ReactMarkdown>
             </div>
           )}
         </div>
@@ -181,12 +178,9 @@ export default function CourseReader({ subject, onBack }) {
             {loadingAI && <span className="text-[9px] font-mono bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded animate-pulse">STREAMING INTERACTIVE VECTOR TOKENS</span>}
           </div>
           <div className="prose prose-invert max-w-none text-slate-300">
-            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-              {aiExplanation || (loadingAI ? "" : "*Awaiting active content generation pipeline trigger signals...*")}
-            </ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{aiExplanation || (loadingAI ? "" : "*Awaiting active content generation pipeline trigger signals...*")}</ReactMarkdown>
           </div>
         </div>
-
       </div>
     </div>
   );
