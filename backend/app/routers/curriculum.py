@@ -248,10 +248,60 @@ def resolve_curriculum_hub_meta(
     db: Session = Depends(get_db)
 ):
     """
-    Returns initial tracking data parameters back to frontend orchestrators.
+    Resolves incoming track context (e.g. CBSE + Class 11, or IITJEE) down to a real 
+    course entry in the database, passing back a valid ID to initialize the sidebar tree.
     """
-    return {
-        "success": True,
-        "track_code": track_code,
-        "grade_name": grade_name
-    }
+    try:
+        # CASE A: Competitive Stream Profile (e.g., IIT-JEE, NEET)
+        if track_code in ["IITJEE", "NEET"] or not grade_name:
+            query = text("""
+                SELECT c.id as course_id, es.name, es.subject_code 
+                FROM public.courses c
+                JOIN public.exam_subjects es ON c.exam_subject_id = es.id
+                WHERE es.subject_code ILIKE :track OR es.name ILIKE :track
+                LIMIT 1
+            """)
+            record = db.execute(query, {"track": f"%{track_code}%"}).mappings().first()
+            if record:
+                return {
+                    "success": True,
+                    "grade_id": None,
+                    "org_id": None,
+                    "subject_id": str(record["course_id"]),
+                    "subject_meta": {"name": record["name"], "code": record["subject_code"]}
+                }
+        
+        # CASE B: Standard School Board Profile (e.g., CBSE, ICSE)
+        else:
+            query = text("""
+                SELECT c.id as course_id, rs.name, rs.subject_code, g.id as gid, g.org_id
+                FROM public.courses c
+                JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
+                JOIN public.grades g ON rs.grade_id = g.id
+                WHERE (g.name ILIKE :gname OR g.level ILIKE :gname)
+                  AND (rs.subject_code ILIKE :track OR rs.name ILIKE :track)
+                LIMIT 1
+            """)
+            record = db.execute(query, {"gname": f"%{grade_name}%", "track": f"%{track_code}%"}).mappings().first()
+            if record:
+                return {
+                    "success": True,
+                    "grade_id": str(record["gid"]),
+                    "org_id": str(record["org_id"]) if record["org_id"] else None,
+                    "subject_id": str(record["course_id"]),
+                    "subject_meta": {"name": record["name"], "code": record["subject_code"]}
+                }
+
+        # Safe fallback if nothing matches yet
+        return {
+            "success": False,
+            "msg": f"No active course mapping track discovered matching selection criteria: '{track_code}'",
+            "subject_id": None,
+            "grade_id": None
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Polymorphic hub metadata routing layout translation failed: {str(e)}"
+        )
