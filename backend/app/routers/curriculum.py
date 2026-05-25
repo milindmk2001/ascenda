@@ -192,58 +192,77 @@ Comprehensive study material, instructional breakdowns, and structured analytica
 @router.get("/resolve-hub")
 def resolve_curriculum_hub_meta(
     track_code: str = Query(..., alias="track_code"),
-    grade_name: str = Query(..., alias="grade_name"),
+    grade_name: Optional[str] = Query(None, alias="grade_name"),  # 🧠 FIX: Now gracefully accepts None
     db: Session = Depends(get_db)
 ):
     """
-    ADDED ENDPOINT:
-    Resolves human-readable track parameters and grade limits (e.g., CBSE/IITJEE & 11) down to 
-    functional primary database UUIDs to safely initialize workspace states on frontend dashboards.
+    Resolves human-readable track parameters down to functional database primary UUIDs.
+    Gracefully handles competitive exam tracks (like IITJEE) where grade_name may be absent.
     """
     try:
-        # 1. Resolve Grade ID and Organization Parent references safely
-        grade_query = text("""
-            SELECT id, name, org_id 
-            FROM public.grades 
-            WHERE name ILIKE :gname OR level ILIKE :gname 
-            LIMIT 1
-        """)
-        grade_record = db.execute(grade_query, {"gname": f"%{grade_name}%"}).mappings().first()
-        
-        if not grade_record:
+        grade_id = None
+        org_id = None
+
+        # 1. Resolve Grade ID safely ONLY if a grade_name was actually sent
+        if grade_name and grade_name.strip():
+            grade_query = text("""
+                SELECT id, name, org_id 
+                FROM public.grades 
+                WHERE name ILIKE :gname OR level ILIKE :gname 
+                LIMIT 1
+            """)
+            grade_record = db.execute(grade_query, {"gname": f"%{grade_name}%"}).mappings().first()
+            if grade_record:
+                grade_id = grade_record["id"]
+                org_id = grade_record["org_id"]
+
+        # 2. Extract relative subject path configurations
+        # If grade_id exists, match it. If not (IIT-JEE), search globally by track name/code alone!
+        if grade_id:
+            subject_query = text("""
+                SELECT id, name, subject_code 
+                FROM public.subjects 
+                WHERE grade_id = :gid 
+                  AND (subject_code ILIKE :track OR name ILIKE :track)
+                LIMIT 1
+            """)
+            subject_record = db.execute(
+                subject_query, 
+                {"gid": grade_id, "track": f"%{track_code}%"}
+            ).mappings().first()
+        else:
+            subject_query = text("""
+                SELECT id, name, subject_code 
+                FROM public.subjects 
+                WHERE subject_code ILIKE :track OR name ILIKE :track
+                LIMIT 1
+            """)
+            subject_record = db.execute(
+                subject_query, 
+                {"track": f"%{track_code}%"}
+            ).mappings().first()
+
+        if not subject_record:
             return {
                 "success": False,
-                "msg": f"Grade descriptor '{grade_name}' not discovered within backend schemas.",
+                "msg": f"No active track path discovered matching selection modifier: '{track_code}'",
                 "subject_id": None,
-                "grade_id": None
+                "grade_id": str(grade_id) if grade_id else None
             }
-
-        # 2. Extract relative subject path configurations tied directly to this grade layer
-        subject_query = text("""
-            SELECT id, name, subject_code 
-            FROM public.subjects 
-            WHERE grade_id = :gid 
-              AND (subject_code ILIKE :track OR name ILIKE :track)
-            LIMIT 1
-        """)
-        subject_record = db.execute(
-            subject_query, 
-            {"gid": grade_record["id"], "track": f"%{track_code}%"}
-        ).mappings().first()
 
         return {
             "success": True,
-            "grade_id": str(grade_record["id"]),
-            "org_id": str(grade_record["org_id"]) if grade_record["org_id"] else None,
-            "subject_id": str(subject_record["id"]) if subject_record else None,
+            "grade_id": str(grade_id) if grade_id else None,
+            "org_id": str(org_id) if org_id else None,
+            "subject_id": str(subject_record["id"]),
             "subject_meta": {
-                "name": subject_record["name"] if subject_record else "General Tracking Node",
-                "code": subject_record["subject_code"] if subject_record else track_code
+                "name": subject_record["name"],
+                "code": subject_record["subject_code"]
             }
         }
 
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Internal system mapping error during parameters hub resolution: {str(e)}"
+            detail=f"Internal database breakdown while resolving mapping parameters: {str(e)}"
         )
