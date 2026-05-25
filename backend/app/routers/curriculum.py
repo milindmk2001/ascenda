@@ -55,6 +55,23 @@ class RegularSubjectResponse(BaseModel):
 # 2. PUBLIC PUBLIC-FACING ROUTER ENDPOINTS
 # ==========================================
 
+@admin_router.get("/grades", response_model=List[GradeResponse])
+def get_all_admin_grades(db: Session = Depends(get_db)):
+    """
+    Fetches all registered grades/academic tiers for the admin ingestion dashboard layout.
+    """
+    try:
+        # Queries the grades table using your SQLAlchemy model mapping
+        grades_list = db.execute(
+            text("SELECT id, name, level, org_id FROM public.grades ORDER BY name ASC")
+        ).mappings().all()
+        return grades_list
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch administrative grade structural tiers: {str(e)}"
+        )
+    
 @router.get("/subjects", response_model=List[RegularSubjectResponse])
 def get_all_public_subjects(db: Session = Depends(get_db)):
     """
