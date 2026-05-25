@@ -5,63 +5,50 @@ from pydantic import BaseModel, UUID4
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app import models
 from app.database import get_db
 
-# ── ROUTER INITIALIZATION DEFINITIONS ─────────────────────────────────
-router = APIRouter(prefix="/api/curriculum", tags=["Curriculum Public Framework"])
-admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["Admin Curriculum Ingestion Console"])
+router = APIRouter(prefix="/api/curriculum", tags=["Curriculum Framework"])
+admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["Admin Console"])
 
 
 # ==========================================
-# 1. PYDANTIC DATA TRANSFER SCHEMAS
+# PYDANTIC DATA TRANSFER SCHEMAS
 # ==========================================
-
-class GradeCreate(BaseModel):
-    name: str
-    level: Optional[str] = None
-    org_id: Optional[UUID4] = None
 
 class GradeResponse(BaseModel):
     id: UUID4
-    name: str
+    name: Optional[str] = None
     level: Optional[str] = None
     org_id: Optional[UUID4] = None
 
     class Config:
         from_attributes = True
 
-class RegularSubjectCreate(BaseModel):
-    name: str
-    subject_code: str
-    discipline: str = "Science"
-    grade_id: UUID4
-    video_url: Optional[str] = ""
 
-class RegularSubjectResponse(BaseModel):
-    id: UUID4
+class CourseCardResponse(BaseModel):
+    id: UUID4  # This is the actual Course ID from public.courses
     name: str
     subject_code: str
     discipline: str
-    grade_id: UUID4
-    video_url: Optional[str]
-    created_at: Any
+    track_type: str  # "board" or "competitive"
+    video_url: Optional[str] = None
+    grade_id: Optional[UUID4] = None
+    exam_id: Optional[UUID4] = None
 
     class Config:
         from_attributes = True
 
 
 # ==========================================
-# 2. PUBLIC PUBLIC-FACING ROUTER ENDPOINTS
+# ENDPOINTS
 # ==========================================
 
 @admin_router.get("/grades", response_model=List[GradeResponse])
 def get_all_admin_grades(db: Session = Depends(get_db)):
     """
-    Fetches all registered grades/academic tiers for the admin ingestion dashboard layout.
+    Fetches all registered grades/academic tiers for dashboard drop-downs.
     """
     try:
-        # Queries the grades table using your SQLAlchemy model mapping
         grades_list = db.execute(
             text("SELECT id, name, level, org_id FROM public.grades ORDER BY name ASC")
         ).mappings().all()
@@ -71,40 +58,125 @@ def get_all_admin_grades(db: Session = Depends(get_db)):
             status_code=500,
             detail=f"Failed to fetch administrative grade structural tiers: {str(e)}"
         )
-    
 
-@router.get("/subjects", response_model=List[RegularSubjectResponse])
-def get_all_public_subjects(db: Session = Depends(get_db)):
+
+@router.get("/subjects", response_model=List[CourseCardResponse])
+def get_filtered_courses(
+    track_code: Optional[str] = Query(None, alias="track_code"),
+    grade_name: Optional[str] = Query(None, alias="grade_name"),
+    db: Session = Depends(get_db)
+):
     """
-    Retrieves all available core multi-disciplinary educational tracking pathways.
+    Polymorphic Course Resolver: Queries public.courses joined with regular_subjects 
+    or exam_subjects to return cards based on selection.
     """
-    return db.query(models.Subject).order_by(models.Subject.name).all()
+    try:
+        courses_output = []
+
+        # CASE A: User selected a Board Track (e.g., CBSE)
+        if track_code == "CBSE" or (grade_name and grade_name.strip()):
+            query = text("""
+                SELECT 
+                    c.id as course_id,
+                    rs.name as course_name,
+                    rs.subject_code,
+                    rs.discipline,
+                    rs.video_url,
+                    rs.grade_id,
+                    NULL::uuid as exam_id
+                FROM public.courses c
+                JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
+                JOIN public.grades g ON rs.grade_id = g.id
+                WHERE c.exam_subject_id IS NULL
+                  AND (g.name ILIKE :gname OR g.level ILIKE :gname)
+            """)
+            # Default to match '11' if frontend passes variation string configurations
+            g_search = f"%{grade_name}%" if grade_name else "%11%"
+            rows = db.execute(query, {"gname": g_search}).mappings().all()
+            
+            for r in rows:
+                courses_output.append({
+                    "id": r["course_id"],
+                    "name": r["course_name"],
+                    "subject_code": r["subject_code"],
+                    "discipline": r["discipline"],
+                    "track_type": "board",
+                    "video_url": r["video_url"],
+                    "grade_id": r["grade_id"],
+                    "exam_id": None
+                })
+
+        # CASE B: User selected a Competitive Track (e.g., IIT-JEE)
+        else:
+            query = text("""
+                SELECT 
+                    c.id as course_id,
+                    es.name as course_name,
+                    es.subject_code,
+                    es.discipline,
+                    es.exam_id
+                FROM public.courses c
+                JOIN public.exam_subjects es ON c.exam_subject_id = es.id
+                WHERE c.regular_subject_id IS NULL
+                  AND (es.subject_code ILIKE :track OR es.name ILIKE :track)
+            """)
+            track_search = f"%{track_code}%" if track_code else "%IITJEE%"
+            rows = db.execute(query, {"track": track_search}).mappings().all()
+            
+            for r in rows:
+                courses_output.append({
+                    "id": r["course_id"],
+                    "name": r["course_name"],
+                    "subject_code": r["subject_code"],
+                    "discipline": r["discipline"],
+                    "track_type": "competitive",
+                    "video_url": "https://www.youtube.com/embed/dQw4w9WgXcQ",
+                    "grade_id": None,
+                    "exam_id": r["exam_id"]
+                })
+
+        return courses_output
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Polymorphic data collection execution error: {str(e)}"
+        )
 
 
 @router.get("/subjects/{subject_id}/tree")
 def get_curriculum_hierarchical_tree(subject_id: str, db: Session = Depends(get_db)):
     """
-    Constructs a nested tree structure (Units -> Topics -> Chapters/Leaf Concepts)
-    to feed the frontend sidebar navigation tree component.
+    Constructs a nested tree structure (Units -> Topics -> Chapters/Leaf Concepts).
+    Handles queries whether the incoming ID matches a Course ID, a Regular Subject ID, or an Exam Subject ID.
     """
     try:
-        query = text("""
+        # Resolve real mapping reference by examining what type of node clicked
+        course_query = text("""
+            SELECT regular_subject_id, exam_subject_id 
+            FROM public.courses 
+            WHERE id = :sid LIMIT 1
+        """)
+        course_match = db.execute(course_query, {"sid": subject_id}).mappings().first()
+
+        real_target_id = subject_id
+        if course_match:
+            real_target_id = str(course_match["regular_subject_id"] or course_match["exam_subject_id"])
+
+        tree_query = text("""
             SELECT id, title, content_type, parent_id, level, unit_number
             FROM public.curriculum_tree
-            WHERE subject_id = :sid
+            WHERE subject_id = :target_id OR subject_id = :orig_id
             ORDER BY unit_number ASC, level ASC, title ASC
         """)
-        nodes = db.execute(query, {"sid": subject_id}).mappings().all()
+        nodes = db.execute(tree_query, {"target_id": real_target_id, "orig_id": subject_id}).mappings().all()
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to query curriculum relational topography framework: {str(e)}"
+            detail=f"Failed to query curriculum hierarchy: {str(e)}"
         )
 
-    # Transform SQLAlchemy mapping proxies into pure manipulatable dictionaries
     all_nodes = [dict(n) for n in nodes]
-    
-    # Fast access lookups map tracking references
     nodes_by_id = {str(node["id"]): {**node, "children": []} for node in all_nodes}
     root_nodes = []
 
@@ -122,8 +194,7 @@ def get_curriculum_hierarchical_tree(subject_id: str, db: Session = Depends(get_
 @router.get("/leaf/{leaf_id}")
 def get_individual_leaf_node_details(leaf_id: str, db: Session = Depends(get_db)):
     """
-    Resolves comprehensive tracking data models and textbook references for a single leaf node.
-    Synchronizes with public.generated_content to feed structural text down onto Left Panel views.
+    Resolves full material textbook references for a single leaf concept node.
     """
     try:
         query = text("""
@@ -133,51 +204,32 @@ def get_individual_leaf_node_details(leaf_id: str, db: Session = Depends(get_db)
         """)
         result = db.execute(query, {"lid": leaf_id}).mappings().first()
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Database concept processing transaction dropped: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Leaf node resolution error: {str(e)}")
 
     if not result:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Target leaf concept node reference '{leaf_id}' could not be located."
-        )
+        raise HTTPException(status_code=404, detail="Target leaf concept node could not be located.")
 
     node_data = dict(result)
 
-    # Data-Driven Lookup: Query matching ingested text content
     try:
         content_match = db.execute(
             text("""
-                SELECT content 
-                FROM public.generated_content 
-                WHERE topic ILIKE :title 
-                  AND content_type = 'theory' 
-                LIMIT 1
+                SELECT content FROM public.generated_content 
+                WHERE topic ILIKE :title AND content_type = 'theory' LIMIT 1
             """),
             {"title": f"%{node_data['title']}%"}
         ).mappings().first()
     except Exception:
         content_match = None
 
-    # Resolve core markdown contents without falling through or causing syntax fragmentation
-    if content_match and content_match["content"]:
-        educational_material = content_match["content"]
-    else:
-        educational_material = f"""# {node_data['title']}
-    
-## Core Curriculum Objectives
-Comprehensive study material, instructional breakdowns, and structured analytical benchmarks for **{node_data['title']}**.
-
-### Analytical Focus
-* Systematic formulation and structured review of fundamental parameters.
-* Test-oriented deep dives tailored for competitive examination assessment environments.
+    educational_material = content_match["content"] if content_match and content_match["content"] else f"""# {node_data['title']}
+## Core Study Material Objectives
+Comprehensive review and concept breakdowns are fully primed for **{node_data['title']}**.
 """
 
     return {
         "id": str(node_data["id"]),
-        "title": node_data["title"] or "Untitled Concept Node",
+        "title": node_data["title"] or "Untitled Node",
         "content_type": node_data["content_type"] or "CONCEPT",
         "description": f"Comprehensive study material for {node_data['title']}.",
         "content_text": educational_material,
@@ -192,77 +244,14 @@ Comprehensive study material, instructional breakdowns, and structured analytica
 @router.get("/resolve-hub")
 def resolve_curriculum_hub_meta(
     track_code: str = Query(..., alias="track_code"),
-    grade_name: Optional[str] = Query(None, alias="grade_name"),  # 🧠 FIX: Now gracefully accepts None
+    grade_name: Optional[str] = Query(None, alias="grade_name"),
     db: Session = Depends(get_db)
 ):
     """
-    Resolves human-readable track parameters down to functional database primary UUIDs.
-    Gracefully handles competitive exam tracks (like IITJEE) where grade_name may be absent.
+    Returns initial tracking data parameters back to frontend orchestrators.
     """
-    try:
-        grade_id = None
-        org_id = None
-
-        # 1. Resolve Grade ID safely ONLY if a grade_name was actually sent
-        if grade_name and grade_name.strip():
-            grade_query = text("""
-                SELECT id, name, org_id 
-                FROM public.grades 
-                WHERE name ILIKE :gname OR level ILIKE :gname 
-                LIMIT 1
-            """)
-            grade_record = db.execute(grade_query, {"gname": f"%{grade_name}%"}).mappings().first()
-            if grade_record:
-                grade_id = grade_record["id"]
-                org_id = grade_record["org_id"]
-
-        # 2. Extract relative subject path configurations
-        # If grade_id exists, match it. If not (IIT-JEE), search globally by track name/code alone!
-        if grade_id:
-            subject_query = text("""
-                SELECT id, name, subject_code 
-                FROM public.subjects 
-                WHERE grade_id = :gid 
-                  AND (subject_code ILIKE :track OR name ILIKE :track)
-                LIMIT 1
-            """)
-            subject_record = db.execute(
-                subject_query, 
-                {"gid": grade_id, "track": f"%{track_code}%"}
-            ).mappings().first()
-        else:
-            subject_query = text("""
-                SELECT id, name, subject_code 
-                FROM public.subjects 
-                WHERE subject_code ILIKE :track OR name ILIKE :track
-                LIMIT 1
-            """)
-            subject_record = db.execute(
-                subject_query, 
-                {"track": f"%{track_code}%"}
-            ).mappings().first()
-
-        if not subject_record:
-            return {
-                "success": False,
-                "msg": f"No active track path discovered matching selection modifier: '{track_code}'",
-                "subject_id": None,
-                "grade_id": str(grade_id) if grade_id else None
-            }
-
-        return {
-            "success": True,
-            "grade_id": str(grade_id) if grade_id else None,
-            "org_id": str(org_id) if org_id else None,
-            "subject_id": str(subject_record["id"]),
-            "subject_meta": {
-                "name": subject_record["name"],
-                "code": subject_record["subject_code"]
-            }
-        }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal database breakdown while resolving mapping parameters: {str(e)}"
-        )
+    return {
+        "success": True,
+        "track_code": track_code,
+        "grade_name": grade_name
+    }
