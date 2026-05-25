@@ -72,6 +72,7 @@ def get_all_admin_grades(db: Session = Depends(get_db)):
             detail=f"Failed to fetch administrative grade structural tiers: {str(e)}"
         )
     
+
 @router.get("/subjects", response_model=List[RegularSubjectResponse])
 def get_all_public_subjects(db: Session = Depends(get_db)):
     """
@@ -186,3 +187,63 @@ Comprehensive study material, instructional breakdowns, and structured analytica
             "unit_number": node_data["unit_number"]
         }
     }
+
+
+@router.get("/resolve-hub")
+def resolve_curriculum_hub_meta(
+    track_code: str = Query(..., alias="track_code"),
+    grade_name: str = Query(..., alias="grade_name"),
+    db: Session = Depends(get_db)
+):
+    """
+    ADDED ENDPOINT:
+    Resolves human-readable track parameters and grade limits (e.g., CBSE/IITJEE & 11) down to 
+    functional primary database UUIDs to safely initialize workspace states on frontend dashboards.
+    """
+    try:
+        # 1. Resolve Grade ID and Organization Parent references safely
+        grade_query = text("""
+            SELECT id, name, org_id 
+            FROM public.grades 
+            WHERE name ILIKE :gname OR level ILIKE :gname 
+            LIMIT 1
+        """)
+        grade_record = db.execute(grade_query, {"gname": f"%{grade_name}%"}).mappings().first()
+        
+        if not grade_record:
+            return {
+                "success": False,
+                "msg": f"Grade descriptor '{grade_name}' not discovered within backend schemas.",
+                "subject_id": None,
+                "grade_id": None
+            }
+
+        # 2. Extract relative subject path configurations tied directly to this grade layer
+        subject_query = text("""
+            SELECT id, name, subject_code 
+            FROM public.subjects 
+            WHERE grade_id = :gid 
+              AND (subject_code ILIKE :track OR name ILIKE :track)
+            LIMIT 1
+        """)
+        subject_record = db.execute(
+            subject_query, 
+            {"gid": grade_record["id"], "track": f"%{track_code}%"}
+        ).mappings().first()
+
+        return {
+            "success": True,
+            "grade_id": str(grade_record["id"]),
+            "org_id": str(grade_record["org_id"]) if grade_record["org_id"] else None,
+            "subject_id": str(subject_record["id"]) if subject_record else None,
+            "subject_meta": {
+                "name": subject_record["name"] if subject_record else "General Tracking Node",
+                "code": subject_record["subject_code"] if subject_record else track_code
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal system mapping error during parameters hub resolution: {str(e)}"
+        )
