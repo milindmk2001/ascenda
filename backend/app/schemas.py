@@ -26,7 +26,6 @@ class Organization(OrganizationBase):
         return uuid_to_str(v)
 
 # --- Grade ---
-# --- Grade ---
 class GradeBase(BaseModel):
     level: Optional[Union[int, str]] = None
     name: Optional[str] = None
@@ -45,7 +44,7 @@ class Grade(GradeBase):
     def transform_uuids(cls, v):
         return str(v) if v is not None else None
 
-# Add this explicit alias to satisfy curriculum.py imports cleanly
+# Explicit alias to satisfy routers importing GradeResponse
 GradeResponse = Grade
 
 # --- Curriculum Core Subjects ---
@@ -65,22 +64,13 @@ class RegularSubject(RegularSubjectBase):
     def transform_uuids(cls, v):
         return str(v) if v is not None else None
 
-# --- Course Mappings (New Sync Section) ---
-class CourseResponse(BaseModel):
-    id: UUID
-    title: str
-    rigor_level: Optional[str] = None
-    description: Optional[str] = None
-    regular_subject_id: Optional[UUID] = None
-    exam_subject_id: Optional[UUID] = None
-    model_config = ConfigDict(from_attributes=True)
-
+# --- Course Card Schema ---
 class CourseCardResponse(BaseModel):
     id: UUID
-    name: str  # Dynamically receives c.title values
+    name: str
     subject_code: str
     discipline: str
-    track_type: str  # "board" or "competitive"
+    track_type: str  
     video_url: Optional[str] = None
     grade_id: Optional[UUID] = None
     exam_id: Optional[UUID] = None

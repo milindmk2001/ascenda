@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.database import get_db
-# Imports synchronized parameters explicitly from centralized validation layer
 from app.schemas import CourseCardResponse, GradeResponse
 
 router = APIRouter(prefix="/api/curriculum", tags=["Curriculum Framework"])
@@ -35,14 +34,12 @@ def get_filtered_courses_from_hub(
     grade_name: Optional[str] = Query(None, alias="grade_name"),
     db: Session = Depends(get_db)
 ):
-    """
-    Loads courses dynamically from public.courses using actual table columns (title).
-    """
     try:
         courses_output = []
         clean_track = str(track_code).strip() if track_code else ""
         clean_grade = str(grade_name).strip() if grade_name else ""
 
+        # Check track structure
         is_board = clean_track in ["CBSE", "ICSE"] or (clean_grade != "")
 
         if is_board:
@@ -133,78 +130,25 @@ def get_curriculum_hierarchical_tree(subject_id: str, db: Session = Depends(get_
             ORDER BY unit_number ASC, level ASC, title ASC
         """)
         nodes = db.execute(tree_query, {"target_id": real_target_id, "orig_id": subject_id}).mappings().all()
+        
+        all_nodes = [dict(n) for n in nodes]
+        nodes_by_id = {str(node["id"]): {**node, "children": []} for node in all_nodes}
+        root_nodes = []
+
+        for node_id, node in nodes_by_id.items():
+            parent_id = str(node["parent_id"]) if node["parent_id"] else None
+            if parent_id and parent_id in nodes_by_id:
+                nodes_by_id[parent_id]["children"].append(node)
+            else:
+                if node["level"] == 1 or parent_id is None:
+                    root_nodes.append(node)
+
+        return root_nodes
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to query curriculum hierarchical tree parameters: {str(e)}"
         )
-
-    all_nodes = [dict(n) for n in nodes]
-    nodes_by_id = {str(node["id"]): {**node, "children": []} for node in all_nodes}
-    root_nodes = []
-
-    for node_id, node in nodes_by_id.items():
-        parent_id = str(node["parent_id"]) if node["parent_id"] else None
-        if parent_id and parent_id in nodes_by_id:
-            nodes_by_id[parent_id]["children"].append(node)
-        else:
-            if node["level"] == 1 or parent_id is None:
-                root_nodes.append(node)
-
-    return root_nodes
-
-
-@router.get("/leaf/{leaf_id}")
-def get_individual_leaf_node_details(leaf_id: str, db: Session = Depends(get_db)):
-    try:
-        query = text("""
-            SELECT id, title, content_type, level, unit_number, subject_id
-            FROM public.curriculum_tree
-            WHERE id = :lid LIMIT 1
-        """)
-        result = db.execute(query, {"lid": leaf_id}).mappings().first()
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Database concept processing transaction dropped: {str(e)}"
-        )
-
-    if not result:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Target leaf concept node reference '{leaf_id}' could not be located."
-        )
-
-    node_data = dict(result)
-
-    try:
-        content_match = db.execute(
-            text("""
-                SELECT content FROM public.generated_content 
-                WHERE topic ILIKE :title AND content_type = 'theory' LIMIT 1
-            """),
-            {"title": f"%{node_data['title']}%"}
-        ).mappings().first()
-    except Exception:
-        content_match = None
-
-    educational_material = content_match["content"] if content_match and content_match["content"] else f"""# {node_data['title']}
-## Core Study Material Objectives
-Comprehensive review and concept breakdowns are fully primed for **{node_data['title']}**.
-"""
-
-    return {
-        "id": str(node_data["id"]),
-        "title": node_data["title"] or "Untitled Node",
-        "content_type": node_data["content_type"] or "CONCEPT",
-        "description": f"Comprehensive study material for {node_data['title']}.",
-        "content_text": educational_material,
-        "video_placeholder_url": "https://www.w3schools.com/html/mov_bbb.mp4",
-        "meta": {
-            "level": node_data["level"],
-            "unit_number": node_data["unit_number"]
-        }
-    }
 
 
 @router.get("/resolve-hub")
@@ -217,16 +161,18 @@ def resolve_curriculum_hub_meta(
         clean_track = str(track_code).strip() if track_code else ""
         clean_grade = str(grade_name).strip() if grade_name else ""
 
-        # CASE A: Competitive Tracks (IITJEE / NEET)
-        if clean_track in ["IITJEE", "NEET"] or not clean_grade:
+        # Competitive paths (IITJEE/NEET)
+        if clean_track in ["IITJEE", "NEET", "IIT-JEE Advance"] or not clean_grade:
             query = text("""
                 SELECT c.id as course_id, es.name as exam_subject_name, es.subject_code 
                 FROM public.courses c
                 JOIN public.exam_subjects es ON c.exam_subject_id = es.id
-                WHERE es.subject_code ILIKE :track OR es.name ILIKE :track
+                WHERE es.subject_code ILIKE :track OR es.name ILIKE :track OR :track ILIKE ('%%' || es.subject_code || '%%')
                 LIMIT 1
             """)
-            record = db.execute(query, {"track": f"%{clean_track}%"}).mappings().first()
+            # Extract basic prefix if full token string like IIT-JEE Advance arrives
+            search_param = "IITJEE" if "IIT" in clean_track else clean_track
+            record = db.execute(query, {"track": f"%{search_param}%"}).mappings().first()
             if record:
                 return {
                     "success": True,
@@ -236,7 +182,7 @@ def resolve_curriculum_hub_meta(
                     "subject_meta": {"name": record["exam_subject_name"], "code": record["subject_code"]}
                 }
         
-        # CASE B: School Board Tracks (CBSE / ICSE)
+        # School board paths
         else:
             query = text("""
                 SELECT 
@@ -248,10 +194,13 @@ def resolve_curriculum_hub_meta(
                 FROM public.courses c
                 JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
                 JOIN public.grades g ON rs.grade_id = g.id
-                WHERE g.name ILIKE :gname
+                WHERE g.name ILIKE :gname OR :gname ILIKE ('%%' || g.name || '%%')
                 LIMIT 1
             """)
-            record = db.execute(query, {"gname": f"%{clean_grade}%"}).mappings().first()
+            # Handles checking strings like "Class 11" safely against database record "11"
+            digit_grade = "".join(filter(str.isdigit, clean_grade))
+            search_grade = f"%{digit_grade}%" if digit_grade else f"%{clean_grade}%"
+            record = db.execute(query, {"gname": search_grade}).mappings().first()
             if record:
                 return {
                     "success": True,
@@ -261,33 +210,27 @@ def resolve_curriculum_hub_meta(
                     "subject_meta": {"name": record["course_title"], "code": record["subject_code"]}
                 }
 
-        # Safe fallback: Prevents breaking initial layout renders if data is missing
-        fallback_query = text("""
-            SELECT c.id as course_id, c.title as course_title, rs.subject_code, g.id as gid
+        # Dynamic fallback row provider
+        fallback_record = db.execute(text("""
+            SELECT c.id as course_id, c.title as course_title, COALESCE(rs.subject_code, 'GEN') as subject_code
             FROM public.courses c
-            JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
-            JOIN public.grades g ON rs.grade_id = g.id
+            LEFT JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
             LIMIT 1
-        """)
-        fallback_record = db.execute(fallback_query).mappings().first()
+        """)).mappings().first()
+        
         if fallback_record:
             return {
                 "success": True,
-                "grade_id": str(fallback_record["gid"]),
+                "grade_id": None,
                 "org_id": None,
                 "subject_id": str(fallback_record["course_id"]),
                 "subject_meta": {"name": fallback_record["course_title"], "code": fallback_record["subject_code"]}
             }
 
-        return {
-            "success": False,
-            "msg": "No active track records managed inside database tables.",
-            "subject_id": None,
-            "grade_id": None
-        }
+        return {"success": False, "subject_id": None, "grade_id": None}
 
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Polymorphic path lookup failed during final route optimization step: {str(e)}"
+            detail=f"Polymorphic engine hub breakdown: {str(e)}"
         )

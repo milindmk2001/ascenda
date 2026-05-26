@@ -131,12 +131,9 @@ class Course(Base):
     title = Column(String, nullable=False)
     rigor_level = Column(String, nullable=True)
     description = Column(TEXT, nullable=True)
-    thumbnail_url = Column(String, nullable=True)
-    is_featured = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=text("now()"))
-    
     organization_id = Column(UUID(as_uuid=True), nullable=True)
-    instructor_id = Column(UUID(as_uuid=True), nullable=True)
+
     regular_subject_id = Column(UUID(as_uuid=True), ForeignKey("regular_subjects.id"), nullable=True)
     exam_subject_id = Column(UUID(as_uuid=True), ForeignKey("exam_subjects.id"), nullable=True)
 
