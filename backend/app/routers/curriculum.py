@@ -45,9 +45,6 @@ class CourseCardResponse(BaseModel):
 
 @admin_router.get("/grades", response_model=List[GradeResponse])
 def get_all_admin_grades(db: Session = Depends(get_db)):
-    """
-    Fetches all registered grades/academic tiers for dashboard drop-downs.
-    """
     try:
         grades_list = db.execute(
             text("SELECT id, name, level, org_id FROM public.grades ORDER BY name ASC")
@@ -61,20 +58,22 @@ def get_all_admin_grades(db: Session = Depends(get_db)):
 
 
 @router.get("/subjects", response_model=List[CourseCardResponse])
-def get_filtered_courses(
+def get_filtered_courses_from_hub(
     track_code: Optional[str] = Query(None, alias="track_code"),
     grade_name: Optional[str] = Query(None, alias="grade_name"),
     db: Session = Depends(get_db)
 ):
     """
-    Polymorphic Course Resolver: Queries public.courses joined with regular_subjects 
-    or exam_subjects to return cards based on selection.
+    Loads courses directly from public.courses table safely bypassing ambiguity issues.
     """
     try:
         courses_output = []
+        clean_track = str(track_code).strip() if track_code else ""
 
-        # CASE A: User selected a Board Track (e.g., CBSE)
-        if track_code == "CBSE" or (grade_name and grade_name.strip()):
+        # Safe multi-conditional check for school boards vs competitive tracks
+        is_board = clean_track in ["CBSE", "ICSE"] or (grade_name and str(grade_name).strip())
+
+        if is_board:
             query = text("""
                 SELECT 
                     c.id as course_id,
@@ -82,16 +81,14 @@ def get_filtered_courses(
                     rs.subject_code,
                     rs.discipline,
                     rs.video_url,
-                    rs.grade_id,
-                    NULL::uuid as exam_id
+                    rs.grade_id
                 FROM public.courses c
                 JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
                 JOIN public.grades g ON rs.grade_id = g.id
                 WHERE c.exam_subject_id IS NULL
-                  AND (g.name ILIKE :gname OR g.level ILIKE :gname)
+                  AND (g.name ILIKE :gname OR g.level ILIKE :gname OR :gname = '%%')
             """)
-            # Default to match '11' if frontend passes variation string configurations
-            g_search = f"%{grade_name}%" if grade_name else "%11%"
+            g_search = f"%{grade_name}%" if grade_name else "%%"
             rows = db.execute(query, {"gname": g_search}).mappings().all()
             
             for r in rows:
@@ -106,7 +103,6 @@ def get_filtered_courses(
                     "exam_id": None
                 })
 
-        # CASE B: User selected a Competitive Track (e.g., IIT-JEE)
         else:
             query = text("""
                 SELECT 
@@ -118,9 +114,9 @@ def get_filtered_courses(
                 FROM public.courses c
                 JOIN public.exam_subjects es ON c.exam_subject_id = es.id
                 WHERE c.regular_subject_id IS NULL
-                  AND (es.subject_code ILIKE :track OR es.name ILIKE :track)
+                  AND (es.subject_code ILIKE :track OR es.name ILIKE :track OR :track = '%%')
             """)
-            track_search = f"%{track_code}%" if track_code else "%IITJEE%"
+            track_search = f"%{clean_track}%" if clean_track else "%%"
             rows = db.execute(query, {"track": track_search}).mappings().all()
             
             for r in rows:
@@ -140,18 +136,13 @@ def get_filtered_courses(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Polymorphic data collection execution error: {str(e)}"
+            detail=f"Failed to load dynamic stream profiles from courses table: {str(e)}"
         )
 
 
 @router.get("/subjects/{subject_id}/tree")
 def get_curriculum_hierarchical_tree(subject_id: str, db: Session = Depends(get_db)):
-    """
-    Constructs a nested tree structure (Units -> Topics -> Chapters/Leaf Concepts).
-    Handles queries whether the incoming ID matches a Course ID, a Regular Subject ID, or an Exam Subject ID.
-    """
     try:
-        # Resolve real mapping reference by examining what type of node clicked
         course_query = text("""
             SELECT regular_subject_id, exam_subject_id 
             FROM public.courses 
@@ -173,7 +164,7 @@ def get_curriculum_hierarchical_tree(subject_id: str, db: Session = Depends(get_
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to query curriculum hierarchy: {str(e)}"
+            detail=f"Failed to query curriculum hierarchical tree parameters: {str(e)}"
         )
 
     all_nodes = [dict(n) for n in nodes]
@@ -193,9 +184,6 @@ def get_curriculum_hierarchical_tree(subject_id: str, db: Session = Depends(get_
 
 @router.get("/leaf/{leaf_id}")
 def get_individual_leaf_node_details(leaf_id: str, db: Session = Depends(get_db)):
-    """
-    Resolves full material textbook references for a single leaf concept node.
-    """
     try:
         query = text("""
             SELECT id, title, content_type, level, unit_number, subject_id
@@ -204,10 +192,16 @@ def get_individual_leaf_node_details(leaf_id: str, db: Session = Depends(get_db)
         """)
         result = db.execute(query, {"lid": leaf_id}).mappings().first()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Leaf node resolution error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database concept processing transaction dropped: {str(e)}"
+        )
 
     if not result:
-        raise HTTPException(status_code=404, detail="Target leaf concept node could not be located.")
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Target leaf concept node reference '{leaf_id}' could not be located."
+        )
 
     node_data = dict(result)
 
@@ -223,13 +217,13 @@ def get_individual_leaf_node_details(leaf_id: str, db: Session = Depends(get_db)
         content_match = None
 
     educational_material = content_match["content"] if content_match and content_match["content"] else f"""# {node_data['title']}
-## Core Study Material Objectives
-Comprehensive review and concept breakdowns are fully primed for **{node_data['title']}**.
+## Core Curriculum Objectives
+Comprehensive study material and structured theoretical benchmarks for **{node_data['title']}**.
 """
 
     return {
         "id": str(node_data["id"]),
-        "title": node_data["title"] or "Untitled Node",
+        "title": node_data["title"] or "Untitled Concept Node",
         "content_type": node_data["content_type"] or "CONCEPT",
         "description": f"Comprehensive study material for {node_data['title']}.",
         "content_text": educational_material,
@@ -248,33 +242,41 @@ def resolve_curriculum_hub_meta(
     db: Session = Depends(get_db)
 ):
     """
-    Resolves incoming track context (e.g. CBSE + Class 11, or IITJEE) down to a real 
-    course entry in the database, passing back a valid ID to initialize the sidebar tree.
+    FIXED: Uses clear column aliasing (`rs.name as subject_name`) to completely 
+    eliminate ambiguous namespace collisions during database compilation steps.
     """
     try:
-        # CASE A: Competitive Stream Profile (e.g., IIT-JEE, NEET)
-        if track_code in ["IITJEE", "NEET"] or not grade_name:
+        clean_track = str(track_code).strip() if track_code else ""
+        clean_grade = str(grade_name).strip() if grade_name else ""
+
+        # CASE A: Competitive Tracks (e.g., IIT-JEE, NEET)
+        if clean_track in ["IITJEE", "NEET"] or not clean_grade:
             query = text("""
-                SELECT c.id as course_id, es.name, es.subject_code 
+                SELECT c.id as course_id, es.name as exam_subject_name, es.subject_code 
                 FROM public.courses c
                 JOIN public.exam_subjects es ON c.exam_subject_id = es.id
                 WHERE es.subject_code ILIKE :track OR es.name ILIKE :track
                 LIMIT 1
             """)
-            record = db.execute(query, {"track": f"%{track_code}%"}).mappings().first()
+            record = db.execute(query, {"track": f"%{clean_track}%"}).mappings().first()
             if record:
                 return {
                     "success": True,
                     "grade_id": None,
                     "org_id": None,
                     "subject_id": str(record["course_id"]),
-                    "subject_meta": {"name": record["name"], "code": record["subject_code"]}
+                    "subject_meta": {"name": record["exam_subject_name"], "code": record["subject_code"]}
                 }
         
-        # CASE B: Standard School Board Profile (e.g., CBSE, ICSE)
+        # CASE B: School Board Tracks (e.g., CBSE, ICSE)
         else:
             query = text("""
-                SELECT c.id as course_id, rs.name, rs.subject_code, g.id as gid, g.org_id
+                SELECT 
+                    c.id as course_id, 
+                    rs.name as subject_name, 
+                    rs.subject_code, 
+                    g.id as gid, 
+                    g.org_id
                 FROM public.courses c
                 JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
                 JOIN public.grades g ON rs.grade_id = g.id
@@ -282,20 +284,20 @@ def resolve_curriculum_hub_meta(
                   AND (rs.subject_code ILIKE :track OR rs.name ILIKE :track)
                 LIMIT 1
             """)
-            record = db.execute(query, {"gname": f"%{grade_name}%", "track": f"%{track_code}%"}).mappings().first()
+            record = db.execute(query, {"gname": f"%{clean_grade}%", "track": f"%{clean_track}%"}).mappings().first()
             if record:
                 return {
                     "success": True,
                     "grade_id": str(record["gid"]),
                     "org_id": str(record["org_id"]) if record["org_id"] else None,
                     "subject_id": str(record["course_id"]),
-                    "subject_meta": {"name": record["name"], "code": record["subject_code"]}
+                    "subject_meta": {"name": record["subject_name"], "code": record["subject_code"]}
                 }
 
-        # Safe fallback if nothing matches yet
+        # Safe default response to prevent 500 crashes if query fields are empty on initialization
         return {
             "success": False,
-            "msg": f"No active course mapping track discovered matching selection criteria: '{track_code}'",
+            "msg": "No active track records managed for criteria modifier selection template tree setups.",
             "subject_id": None,
             "grade_id": None
         }
@@ -303,5 +305,5 @@ def resolve_curriculum_hub_meta(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Polymorphic hub metadata routing layout translation failed: {str(e)}"
+            detail=f"Polymorphic path lookup failed during final route optimization step: {str(e)}"
         )
