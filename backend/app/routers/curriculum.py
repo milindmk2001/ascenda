@@ -67,9 +67,11 @@ def get_filtered_courses_from_hub(
                 JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
                 JOIN public.grades g ON rs.grade_id = g.id
                 WHERE c.exam_subject_id IS NULL
-                  AND (g.name ILIKE :gname OR :gname = '%%')
+                  AND (g.name ILIKE :gname OR :gname ILIKE ('%%' || g.name || '%%') OR :gname = '%%')
             """)
-            g_search = f"%{clean_grade}%" if clean_grade else "%%"
+            # EXTRACT DIGITS: Converts "Class 11" into "11" to perfectly match your database values
+            digit_grade = "".join(filter(str.isdigit, clean_grade))
+            g_search = f"%{digit_grade}%" if digit_grade else (f"%{clean_grade}%" if clean_grade else "%%")
             rows = db.execute(query, {"gname": g_search}).mappings().all()
             
             for r in rows:
