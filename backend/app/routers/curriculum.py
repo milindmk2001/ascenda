@@ -39,8 +39,20 @@ def get_filtered_courses_from_hub(
         clean_track = str(track_code).strip() if track_code else ""
         clean_grade = str(grade_name).strip() if grade_name else ""
 
-        # Check track structure
-        is_board = clean_track in ["CBSE", "ICSE"] or (clean_grade != "")
+        # 1. DYNAMIC MATCH CHECK: Determine path mapping context directly from database shapes
+        comp_check = False
+        if clean_track:
+            check_query = text("""
+                SELECT 1 FROM public.exam_subjects 
+                WHERE subject_code ILIKE :t 
+                   OR name ILIKE :t 
+                   OR :t ILIKE ('%%' || subject_code || '%%') 
+                LIMIT 1
+            """)
+            comp_check = db.execute(check_query, {"t": f"%{clean_track}%"}).scalar() is not None
+
+        # Treat as board standard tier if not mapped explicitly to any database competitive profiles
+        is_board = not comp_check
 
         if is_board:
             query = text("""
@@ -73,6 +85,7 @@ def get_filtered_courses_from_hub(
                 })
 
         else:
+            # Flexible cross-token matches cleanly process strings like "IIT-JEE Mains" against "IITJEE" codes
             query = text("""
                 SELECT 
                     c.id as course_id,
@@ -83,10 +96,11 @@ def get_filtered_courses_from_hub(
                 FROM public.courses c
                 JOIN public.exam_subjects es ON c.exam_subject_id = es.id
                 WHERE c.regular_subject_id IS NULL
-                  AND (es.subject_code ILIKE :track OR es.name ILIKE :track OR :track = '%%')
+                  AND (es.subject_code ILIKE :track 
+                       OR es.name ILIKE :track 
+                       OR :track ILIKE ('%%' || es.subject_code || '%%'))
             """)
-            track_search = f"%{clean_track}%" if clean_track else "%%"
-            rows = db.execute(query, {"track": track_search}).mappings().all()
+            rows = db.execute(query, {"track": f"%{clean_track}%"}).mappings().all()
             
             for r in rows:
                 courses_output.append({
@@ -105,7 +119,7 @@ def get_filtered_courses_from_hub(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to load dynamic stream profiles from courses table: {str(e)}"
+            detail=f"Failed to load dynamic track elements: {str(e)}"
         )
 
 
@@ -147,8 +161,61 @@ def get_curriculum_hierarchical_tree(subject_id: str, db: Session = Depends(get_
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to query curriculum hierarchical tree parameters: {str(e)}"
+            detail=f"Failed to compile recursive tree layout mapping payloads: {str(e)}"
         )
+
+
+@router.get("/leaf/{leaf_id}")
+def get_individual_leaf_node_details(leaf_id: str, db: Session = Depends(get_db)):
+    try:
+        query = text("""
+            SELECT id, title, content_type, level, unit_number, subject_id
+            FROM public.curriculum_tree
+            WHERE id = :lid LIMIT 1
+        """)
+        result = db.execute(query, {"lid": leaf_id}).mappings().first()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database processing transaction dropped: {str(e)}"
+        )
+
+    if not result:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Leaf node reference '{leaf_id}' could not be located."
+        )
+
+    node_data = dict(result)
+
+    try:
+        content_match = db.execute(
+            text("""
+                SELECT content FROM public.generated_content 
+                WHERE topic ILIKE :title AND content_type = 'theory' LIMIT 1
+            """),
+            {"title": f"%{node_data['title']}%"}
+        ).mappings().first()
+    except Exception:
+        content_match = None
+
+    educational_material = content_match["content"] if content_match and content_match["content"] else f"""# {node_data['title']}
+## Core Study Material Objectives
+Comprehensive review and concept breakdowns are fully primed for **{node_data['title']}**.
+"""
+
+    return {
+        "id": str(node_data["id"]),
+        "title": node_data["title"] or "Untitled Node",
+        "content_type": node_data["content_type"] or "CONCEPT",
+        "description": f"Comprehensive study material for {node_data['title']}.",
+        "content_text": educational_material,
+        "video_placeholder_url": "https://www.w3schools.com/html/mov_bbb.mp4",
+        "meta": {
+            "level": node_data["level"],
+            "unit_number": node_data["unit_number"]
+        }
+    }
 
 
 @router.get("/resolve-hub")
@@ -161,76 +228,70 @@ def resolve_curriculum_hub_meta(
         clean_track = str(track_code).strip() if track_code else ""
         clean_grade = str(grade_name).strip() if grade_name else ""
 
-        # Competitive paths (IITJEE/NEET)
-        if clean_track in ["IITJEE", "NEET", "IIT-JEE Advance"] or not clean_grade:
-            query = text("""
-                SELECT c.id as course_id, es.name as exam_subject_name, es.subject_code 
-                FROM public.courses c
-                JOIN public.exam_subjects es ON c.exam_subject_id = es.id
-                WHERE es.subject_code ILIKE :track OR es.name ILIKE :track OR :track ILIKE ('%%' || es.subject_code || '%%')
-                LIMIT 1
-            """)
-            # Extract basic prefix if full token string like IIT-JEE Advance arrives
-            search_param = "IITJEE" if "IIT" in clean_track else clean_track
-            record = db.execute(query, {"track": f"%{search_param}%"}).mappings().first()
-            if record:
-                return {
-                    "success": True,
-                    "grade_id": None,
-                    "org_id": None,
-                    "subject_id": str(record["course_id"]),
-                    "subject_meta": {"name": record["exam_subject_name"], "code": record["subject_code"]}
-                }
-        
-        # School board paths
-        else:
-            query = text("""
-                SELECT 
-                    c.id as course_id, 
-                    c.title as course_title, 
-                    rs.subject_code, 
-                    g.id as gid, 
-                    g.org_id
-                FROM public.courses c
-                JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
-                JOIN public.grades g ON rs.grade_id = g.id
-                WHERE g.name ILIKE :gname OR :gname ILIKE ('%%' || g.name || '%%')
-                LIMIT 1
-            """)
-            # Handles checking strings like "Class 11" safely against database record "11"
-            digit_grade = "".join(filter(str.isdigit, clean_grade))
-            search_grade = f"%{digit_grade}%" if digit_grade else f"%{clean_grade}%"
-            record = db.execute(query, {"gname": search_grade}).mappings().first()
-            if record:
-                return {
-                    "success": True,
-                    "grade_id": str(record["gid"]),
-                    "org_id": str(record["org_id"]) if record["org_id"] else None,
-                    "subject_id": str(record["course_id"]),
-                    "subject_meta": {"name": record["course_title"], "code": record["subject_code"]}
-                }
-
-        # Dynamic fallback row provider
-        fallback_record = db.execute(text("""
-            SELECT c.id as course_id, c.title as course_title, COALESCE(rs.subject_code, 'GEN') as subject_code
+        # 1. Look for competitive mapping profile in DB using data-driven containment checks
+        query = text("""
+            SELECT c.id as course_id, es.name as exam_subject_name, es.subject_code 
             FROM public.courses c
-            LEFT JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
+            JOIN public.exam_subjects es ON c.exam_subject_id = es.id
+            WHERE es.subject_code ILIKE :track 
+               OR es.name ILIKE :track 
+               OR :track ILIKE ('%%' || es.subject_code || '%%')
             LIMIT 1
-        """)).mappings().first()
+        """)
+        record = db.execute(query, {"track": f"%{clean_track}%"}).mappings().first()
         
-        if fallback_record:
+        if record:
             return {
                 "success": True,
                 "grade_id": None,
                 "org_id": None,
-                "subject_id": str(fallback_record["course_id"]),
-                "subject_meta": {"name": fallback_record["course_title"], "code": fallback_record["subject_code"]}
+                "subject_id": str(record["course_id"]),
+                "subject_meta": {"name": record["exam_subject_name"], "code": record["subject_code"]}
+            }
+        
+        # 2. Fallback context handler: Resolve as K-12 board track path
+        board_query = text("""
+            SELECT c.id as course_id, c.title as course_title, rs.subject_code, g.id as gid, g.org_id
+            FROM public.courses c
+            JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
+            JOIN public.grades g ON rs.grade_id = g.id
+            WHERE g.name ILIKE :gname OR :gname ILIKE ('%%' || g.name || '%%')
+            LIMIT 1
+        """)
+        digit_grade = "".join(filter(str.isdigit, clean_grade))
+        search_grade = f"%{digit_grade}%" if digit_grade else f"%{clean_grade}%"
+        record = db.execute(board_query, {"gname": search_grade}).mappings().first()
+        
+        if record:
+            return {
+                "success": True,
+                "grade_id": str(record["gid"]),
+                "org_id": str(record["org_id"]) if record["org_id"] else None,
+                "subject_id": str(record["course_id"]),
+                "subject_meta": {"name": record["course_title"], "code": record["subject_code"]}
+            }
+
+        # 3. Global safety fallback: Prevents layout crashes if empty states hit UI
+        fallback = db.execute(text("""
+            SELECT c.id as course_id, c.title as course_title, COALESCE(es.subject_code, 'GEN') as subject_code
+            FROM public.courses c
+            LEFT JOIN public.exam_subjects es ON c.exam_subject_id = es.id
+            LIMIT 1
+        """)).mappings().first()
+        
+        if fallback:
+            return {
+                "success": True,
+                "grade_id": None,
+                "org_id": None,
+                "subject_id": str(fallback["course_id"]),
+                "subject_meta": {"name": fallback["course_title"], "code": fallback["subject_code"]}
             }
 
         return {"success": False, "subject_id": None, "grade_id": None}
 
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Polymorphic engine hub breakdown: {str(e)}"
+            status_code=500, 
+            detail=f"Polymorphic hub dynamic tracking routing failed: {str(e)}"
         )

@@ -44,7 +44,7 @@ class Grade(GradeBase):
     def transform_uuids(cls, v):
         return str(v) if v is not None else None
 
-# Explicit alias to satisfy routers importing GradeResponse
+# Explicit alias configuration ensures router compatibility
 GradeResponse = Grade
 
 # --- Curriculum Core Subjects ---
@@ -64,7 +64,7 @@ class RegularSubject(RegularSubjectBase):
     def transform_uuids(cls, v):
         return str(v) if v is not None else None
 
-# --- Course Card Schema ---
+# --- Unified Course View Card Schema ---
 class CourseCardResponse(BaseModel):
     id: UUID
     name: str
@@ -76,7 +76,7 @@ class CourseCardResponse(BaseModel):
     exam_id: Optional[UUID] = None
     model_config = ConfigDict(from_attributes=True)
 
-# --- Exam Schemas ---
+# --- Exam Engine Schemas ---
 class ExamCreate(BaseModel):
     name: str
     code: str
@@ -109,7 +109,7 @@ class ExamSubjectResponse(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
 
-# --- Navigation Structural Units ---
+# --- Tree-Walking Structural Navigation Schemas ---
 class RegularSubjectAreaCreate(BaseModel):
     title: str
     sequence_order: int
@@ -162,7 +162,7 @@ class PromptTemplate(PromptTemplateCreate):
     id: UUID
     model_config = ConfigDict(from_attributes=True)
 
-# --- AI Content Studio / Remotion Anim Engine ---
+# --- Code-Driven Animation Tier / Production Engine ---
 class ModularLessonBase(BaseModel):
     title: str
     physics_params: Dict[str, Any] = {}
@@ -177,7 +177,7 @@ class ModularLesson(ModularLessonBase):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# --- AI Tutor System Payloads ---
+# --- Contextual Engine Layer Payload ---
 class AIQueryRequest(BaseModel):
     query: str
     context_node_id: Optional[UUID] = None
