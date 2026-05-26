@@ -26,6 +26,7 @@ class Organization(OrganizationBase):
         return uuid_to_str(v)
 
 # --- Grade ---
+# --- Grade ---
 class GradeBase(BaseModel):
     level: Optional[Union[int, str]] = None
     name: Optional[str] = None
@@ -43,6 +44,9 @@ class Grade(GradeBase):
     @classmethod
     def transform_uuids(cls, v):
         return str(v) if v is not None else None
+
+# Add this explicit alias to satisfy curriculum.py imports cleanly
+GradeResponse = Grade
 
 # --- Curriculum Core Subjects ---
 class RegularSubjectBase(BaseModel):
