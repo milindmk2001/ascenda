@@ -1,43 +1,15 @@
 import uuid
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel, UUID4
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.database import get_db
+# Imports synchronized parameters explicitly from centralized validation layer
+from app.schemas import CourseCardResponse, GradeResponse
 
 router = APIRouter(prefix="/api/curriculum", tags=["Curriculum Framework"])
 admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["Admin Console"])
-
-
-# ==========================================
-# PYDANTIC DATA TRANSFER SCHEMAS
-# ==========================================
-
-class GradeResponse(BaseModel):
-    id: UUID4
-    name: Optional[str] = None
-    level: Optional[str] = None
-    org_id: Optional[UUID4] = None
-
-    class Config:
-        from_attributes = True
-
-
-class CourseCardResponse(BaseModel):
-    id: UUID4  # This is the actual Course ID from public.courses
-    name: str
-    subject_code: str
-    discipline: str
-    track_type: str  # "board" or "competitive"
-    video_url: Optional[str] = None
-    grade_id: Optional[UUID4] = None
-    exam_id: Optional[UUID4] = None
-
-    class Config:
-        from_attributes = True
-
 
 # ==========================================
 # ENDPOINTS
@@ -64,20 +36,20 @@ def get_filtered_courses_from_hub(
     db: Session = Depends(get_db)
 ):
     """
-    Loads courses directly from public.courses table safely bypassing ambiguity issues.
+    Loads courses dynamically from public.courses using actual table columns (title).
     """
     try:
         courses_output = []
         clean_track = str(track_code).strip() if track_code else ""
+        clean_grade = str(grade_name).strip() if grade_name else ""
 
-        # Safe multi-conditional check for school boards vs competitive tracks
-        is_board = clean_track in ["CBSE", "ICSE"] or (grade_name and str(grade_name).strip())
+        is_board = clean_track in ["CBSE", "ICSE"] or (clean_grade != "")
 
         if is_board:
             query = text("""
                 SELECT 
                     c.id as course_id,
-                    rs.name as course_name,
+                    c.title as course_title,
                     rs.subject_code,
                     rs.discipline,
                     rs.video_url,
@@ -86,15 +58,15 @@ def get_filtered_courses_from_hub(
                 JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
                 JOIN public.grades g ON rs.grade_id = g.id
                 WHERE c.exam_subject_id IS NULL
-                  AND (g.name ILIKE :gname OR g.level ILIKE :gname OR :gname = '%%')
+                  AND (g.name ILIKE :gname OR :gname = '%%')
             """)
-            g_search = f"%{grade_name}%" if grade_name else "%%"
+            g_search = f"%{clean_grade}%" if clean_grade else "%%"
             rows = db.execute(query, {"gname": g_search}).mappings().all()
             
             for r in rows:
                 courses_output.append({
                     "id": r["course_id"],
-                    "name": r["course_name"],
+                    "name": r["course_title"],
                     "subject_code": r["subject_code"],
                     "discipline": r["discipline"],
                     "track_type": "board",
@@ -107,7 +79,7 @@ def get_filtered_courses_from_hub(
             query = text("""
                 SELECT 
                     c.id as course_id,
-                    es.name as course_name,
+                    c.title as course_title,
                     es.subject_code,
                     es.discipline,
                     es.exam_id
@@ -122,7 +94,7 @@ def get_filtered_courses_from_hub(
             for r in rows:
                 courses_output.append({
                     "id": r["course_id"],
-                    "name": r["course_name"],
+                    "name": r["course_title"],
                     "subject_code": r["subject_code"],
                     "discipline": r["discipline"],
                     "track_type": "competitive",
@@ -217,13 +189,13 @@ def get_individual_leaf_node_details(leaf_id: str, db: Session = Depends(get_db)
         content_match = None
 
     educational_material = content_match["content"] if content_match and content_match["content"] else f"""# {node_data['title']}
-## Core Curriculum Objectives
-Comprehensive study material and structured theoretical benchmarks for **{node_data['title']}**.
+## Core Study Material Objectives
+Comprehensive review and concept breakdowns are fully primed for **{node_data['title']}**.
 """
 
     return {
         "id": str(node_data["id"]),
-        "title": node_data["title"] or "Untitled Concept Node",
+        "title": node_data["title"] or "Untitled Node",
         "content_type": node_data["content_type"] or "CONCEPT",
         "description": f"Comprehensive study material for {node_data['title']}.",
         "content_text": educational_material,
@@ -241,15 +213,11 @@ def resolve_curriculum_hub_meta(
     grade_name: Optional[str] = Query(None, alias="grade_name"),
     db: Session = Depends(get_db)
 ):
-    """
-    FIXED: Uses clear column aliasing (`rs.name as subject_name`) to completely 
-    eliminate ambiguous namespace collisions during database compilation steps.
-    """
     try:
         clean_track = str(track_code).strip() if track_code else ""
         clean_grade = str(grade_name).strip() if grade_name else ""
 
-        # CASE A: Competitive Tracks (e.g., IIT-JEE, NEET)
+        # CASE A: Competitive Tracks (IITJEE / NEET)
         if clean_track in ["IITJEE", "NEET"] or not clean_grade:
             query = text("""
                 SELECT c.id as course_id, es.name as exam_subject_name, es.subject_code 
@@ -268,36 +236,52 @@ def resolve_curriculum_hub_meta(
                     "subject_meta": {"name": record["exam_subject_name"], "code": record["subject_code"]}
                 }
         
-        # CASE B: School Board Tracks (e.g., CBSE, ICSE)
+        # CASE B: School Board Tracks (CBSE / ICSE)
         else:
             query = text("""
                 SELECT 
                     c.id as course_id, 
-                    rs.name as subject_name, 
+                    c.title as course_title, 
                     rs.subject_code, 
                     g.id as gid, 
                     g.org_id
                 FROM public.courses c
                 JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
                 JOIN public.grades g ON rs.grade_id = g.id
-                WHERE (g.name ILIKE :gname OR g.level ILIKE :gname)
-                  AND (rs.subject_code ILIKE :track OR rs.name ILIKE :track)
+                WHERE g.name ILIKE :gname
                 LIMIT 1
             """)
-            record = db.execute(query, {"gname": f"%{clean_grade}%", "track": f"%{clean_track}%"}).mappings().first()
+            record = db.execute(query, {"gname": f"%{clean_grade}%"}).mappings().first()
             if record:
                 return {
                     "success": True,
                     "grade_id": str(record["gid"]),
                     "org_id": str(record["org_id"]) if record["org_id"] else None,
                     "subject_id": str(record["course_id"]),
-                    "subject_meta": {"name": record["subject_name"], "code": record["subject_code"]}
+                    "subject_meta": {"name": record["course_title"], "code": record["subject_code"]}
                 }
 
-        # Safe default response to prevent 500 crashes if query fields are empty on initialization
+        # Safe fallback: Prevents breaking initial layout renders if data is missing
+        fallback_query = text("""
+            SELECT c.id as course_id, c.title as course_title, rs.subject_code, g.id as gid
+            FROM public.courses c
+            JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
+            JOIN public.grades g ON rs.grade_id = g.id
+            LIMIT 1
+        """)
+        fallback_record = db.execute(fallback_query).mappings().first()
+        if fallback_record:
+            return {
+                "success": True,
+                "grade_id": str(fallback_record["gid"]),
+                "org_id": None,
+                "subject_id": str(fallback_record["course_id"]),
+                "subject_meta": {"name": fallback_record["course_title"], "code": fallback_record["subject_code"]}
+            }
+
         return {
             "success": False,
-            "msg": "No active track records managed for criteria modifier selection template tree setups.",
+            "msg": "No active track records managed inside database tables.",
             "subject_id": None,
             "grade_id": None
         }

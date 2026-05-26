@@ -61,6 +61,27 @@ class RegularSubject(RegularSubjectBase):
     def transform_uuids(cls, v):
         return str(v) if v is not None else None
 
+# --- Course Mappings (New Sync Section) ---
+class CourseResponse(BaseModel):
+    id: UUID
+    title: str
+    rigor_level: Optional[str] = None
+    description: Optional[str] = None
+    regular_subject_id: Optional[UUID] = None
+    exam_subject_id: Optional[UUID] = None
+    model_config = ConfigDict(from_attributes=True)
+
+class CourseCardResponse(BaseModel):
+    id: UUID
+    name: str  # Dynamically receives c.title values
+    subject_code: str
+    discipline: str
+    track_type: str  # "board" or "competitive"
+    video_url: Optional[str] = None
+    grade_id: Optional[UUID] = None
+    exam_id: Optional[UUID] = None
+    model_config = ConfigDict(from_attributes=True)
+
 # --- Exam Schemas ---
 class ExamCreate(BaseModel):
     name: str

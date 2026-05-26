@@ -27,7 +27,6 @@ class Grade(Base):
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
     
     organization = relationship("Organization", back_populates="grades")
-    # ✅ FIX: Point back_populates safely to the corrected property in RegularSubject
     subjects = relationship("RegularSubject", back_populates="grade")
 
 
@@ -36,7 +35,6 @@ class Grade(Base):
 # ==========================================
 
 class RegularSubject(Base):
-    # ✅ FIX: Map this to your actual physical table, bypassing the placeholder
     __tablename__ = "regular_subjects"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -47,7 +45,6 @@ class RegularSubject(Base):
     video_url = Column(String, default="")
 
     grade = relationship("Grade", back_populates="subjects")
-    # ✅ FIX: Synchronize tracking relationship with polymorphic Course table entries
     courses = relationship("Course", back_populates="regular_subject")
 
 
@@ -77,7 +74,6 @@ class ExamSubject(Base):
     created_at = Column(DateTime(timezone=True), server_default=text("now()"))
 
     exam = relationship("Exam", back_populates="subjects")
-    # ✅ FIX: Synchronize tracking relationship with polymorphic Course table entries
     courses = relationship("Course", back_populates="exam_subject")
 
 
@@ -132,16 +128,17 @@ class Course(Base):
     __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String, nullable=False)
-    code = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    rigor_level = Column(String, nullable=True)
     description = Column(TEXT, nullable=True)
+    thumbnail_url = Column(String, nullable=True)
+    is_featured = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=text("now()"))
+    
     organization_id = Column(UUID(as_uuid=True), nullable=True)
-
-    # ✅ FIX: Target valid table metadata tokens ("regular_subjects.id")
+    instructor_id = Column(UUID(as_uuid=True), nullable=True)
     regular_subject_id = Column(UUID(as_uuid=True), ForeignKey("regular_subjects.id"), nullable=True)
     exam_subject_id = Column(UUID(as_uuid=True), ForeignKey("exam_subjects.id"), nullable=True)
 
-    # Properties matching back_populates declarations perfectly
     regular_subject = relationship("RegularSubject", back_populates="courses")
     exam_subject = relationship("ExamSubject", back_populates="courses")
