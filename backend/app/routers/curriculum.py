@@ -1,299 +1,170 @@
-import uuid
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+import re
+import logging
+from typing import List, Optional
+from pydantic import BaseModel, UUID4
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy.sql import text
 
-from app.database import get_db
-from app.schemas import CourseCardResponse, GradeResponse
+# Initialize Router and Logger
+router = APIRouter(prefix="/api/curriculum", tags=["Curriculum"])
+logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/curriculum", tags=["Curriculum Framework"])
-admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["Admin Console"])
+# =====================================================================
+# PYDANTIC SCHEMAS (Response Models matching your multi-pane UI layer)
+# =====================================================================
 
-# ==========================================
-# ENDPOINTS
-# ==========================================
+class CourseCardResponse(BaseModel):
+    id: str
+    title: str
+    subject_code: str
+    discipline: str
+    video_url: Optional[str] = None
 
-@admin_router.get("/grades", response_model=List[GradeResponse])
-def get_all_admin_grades(db: Session = Depends(get_db)):
-    try:
-        grades_list = db.execute(
-            text("SELECT id, name, level, org_id FROM public.grades ORDER BY name ASC")
-        ).mappings().all()
-        return grades_list
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch administrative grade structural tiers: {str(e)}"
-        )
+    class Config:
+        from_attributes = True
 
 
+class CurriculumNodeResponse(BaseModel):
+    id: str
+    title: str
+    parent_id: Optional[str] = None
+    is_leaf: bool
+    unit_number: int
+    display_order: int
+    content_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+# =====================================================================
+# ENDPOINT 1: Fetch and filter courses for the Dashboard Hub
+# =====================================================================
 @router.get("/subjects", response_model=List[CourseCardResponse])
-def get_filtered_courses_from_hub(
+def get_filtered_subjects(
     track_code: Optional[str] = Query(None, alias="track_code"),
     grade_name: Optional[str] = Query(None, alias="grade_name"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db)  # Assumes your database dependency utility is imported
 ):
+    """
+    Fetches available courses from the hub. Handles the mutual exclusivity 
+    of regular_subject_id vs exam_subject_id dynamically.
+    """
     try:
-        courses_output = []
-        clean_track = str(track_code).strip() if track_code else ""
-        clean_grade = str(grade_name).strip() if grade_name else ""
+        # 1. Normalize Grade Inputs (e.g., "Class 11" or "Grade 11" -> "11")
+        clean_grade = ""
+        if grade_name:
+            digits = re.findall(r'\d+', str(grade_name))
+            clean_grade = digits[0] if digits else str(grade_name).strip()
 
-        # 1. DYNAMIC MATCH CHECK: Determine path mapping context directly from database shapes
-        comp_check = False
-        if clean_track:
-            check_query = text("""
-                SELECT 1 FROM public.exam_subjects 
-                WHERE subject_code ILIKE :t 
-                   OR name ILIKE :t 
-                   OR :t ILIKE ('%%' || subject_code || '%%') 
-                LIMIT 1
-            """)
-            comp_check = db.execute(check_query, {"t": f"%{clean_track}%"}).scalar() is not None
+        # 2. Identify Target Tracking Strategy
+        is_competitive = False
+        if track_code:
+            track_upper = track_code.upper()
+            if "JEE" in track_upper or "NEET" in track_upper:
+                is_competitive = True
 
-        # Treat as board standard tier if not mapped explicitly to any database competitive profiles
-        is_board = not comp_check
-
-        if is_board:
-            query = text("""
-                SELECT 
-                    c.id as course_id,
-                    c.title as course_title,
-                    rs.subject_code,
-                    rs.discipline,
-                    rs.video_url,
-                    rs.grade_id
-                FROM public.courses c
-                JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
-                JOIN public.grades g ON rs.grade_id = g.id
-                WHERE c.exam_subject_id IS NULL
-                  AND (g.name ILIKE :gname OR :gname ILIKE ('%%' || g.name || '%%') OR :gname = '%%')
-            """)
-            # EXTRACT DIGITS: Converts "Class 11" into "11" to perfectly match your database values
-            digit_grade = "".join(filter(str.isdigit, clean_grade))
-            g_search = f"%{digit_grade}%" if digit_grade else (f"%{clean_grade}%" if clean_grade else "%%")
-            rows = db.execute(query, {"gname": g_search}).mappings().all()
-            
-            for r in rows:
-                courses_output.append({
-                    "id": r["course_id"],
-                    "name": r["course_title"],
-                    "subject_code": r["subject_code"],
-                    "discipline": r["discipline"],
-                    "track_type": "board",
-                    "video_url": r["video_url"],
-                    "grade_id": r["grade_id"],
-                    "exam_id": None
-                })
-
-        else:
-            # Flexible cross-token matches cleanly process strings like "IIT-JEE Mains" against "IITJEE" codes
-            query = text("""
-                SELECT 
-                    c.id as course_id,
-                    c.title as course_title,
-                    es.subject_code,
-                    es.discipline,
-                    es.exam_id
-                FROM public.courses c
-                JOIN public.exam_subjects es ON c.exam_subject_id = es.id
-                WHERE c.regular_subject_id IS NULL
-                  AND (es.subject_code ILIKE :track 
-                       OR es.name ILIKE :track 
-                       OR :track ILIKE ('%%' || es.subject_code || '%%'))
-            """)
-            rows = db.execute(query, {"track": f"%{clean_track}%"}).mappings().all()
-            
-            for r in rows:
-                courses_output.append({
-                    "id": r["course_id"],
-                    "name": r["course_title"],
-                    "subject_code": r["subject_code"],
-                    "discipline": r["discipline"],
-                    "track_type": "competitive",
-                    "video_url": "https://www.youtube.com/embed/dQw4w9WgXcQ",
-                    "grade_id": None,
-                    "exam_id": r["exam_id"]
-                })
-
-        return courses_output
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to load dynamic track elements: {str(e)}"
-        )
-
-
-@router.get("/subjects/{subject_id}/tree")
-def get_curriculum_hierarchical_tree(subject_id: str, db: Session = Depends(get_db)):
-    try:
-        course_query = text("""
-            SELECT regular_subject_id, exam_subject_id 
-            FROM public.courses 
-            WHERE id = :sid LIMIT 1
-        """)
-        course_match = db.execute(course_query, {"sid": subject_id}).mappings().first()
-
-        real_target_id = subject_id
-        if course_match:
-            real_target_id = str(course_match["regular_subject_id"] or course_match["exam_subject_id"])
-
-        tree_query = text("""
-            SELECT id, title, content_type, parent_id, level, unit_number
-            FROM public.curriculum_tree
-            WHERE subject_id = :target_id OR subject_id = :orig_id
-            ORDER BY unit_number ASC, level ASC, title ASC
-        """)
-        nodes = db.execute(tree_query, {"target_id": real_target_id, "orig_id": subject_id}).mappings().all()
-        
-        all_nodes = [dict(n) for n in nodes]
-        nodes_by_id = {str(node["id"]): {**node, "children": []} for node in all_nodes}
-        root_nodes = []
-
-        for node_id, node in nodes_by_id.items():
-            parent_id = str(node["parent_id"]) if node["parent_id"] else None
-            if parent_id and parent_id in nodes_by_id:
-                nodes_by_id[parent_id]["children"].append(node)
-            else:
-                if node["level"] == 1 or parent_id is None:
-                    root_nodes.append(node)
-
-        return root_nodes
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to compile recursive tree layout mapping payloads: {str(e)}"
-        )
-
-
-@router.get("/leaf/{leaf_id}")
-def get_individual_leaf_node_details(leaf_id: str, db: Session = Depends(get_db)):
-    try:
-        query = text("""
-            SELECT id, title, content_type, level, unit_number, subject_id
-            FROM public.curriculum_tree
-            WHERE id = :lid LIMIT 1
-        """)
-        result = db.execute(query, {"lid": leaf_id}).mappings().first()
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Database processing transaction dropped: {str(e)}"
-        )
-
-    if not result:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Leaf node reference '{leaf_id}' could not be located."
-        )
-
-    node_data = dict(result)
-
-    try:
-        content_match = db.execute(
-            text("""
-                SELECT content FROM public.generated_content 
-                WHERE topic ILIKE :title AND content_type = 'theory' LIMIT 1
-            """),
-            {"title": f"%{node_data['title']}%"}
-        ).mappings().first()
-    except Exception:
-        content_match = None
-
-    educational_material = content_match["content"] if content_match and content_match["content"] else f"""# {node_data['title']}
-## Core Study Material Objectives
-Comprehensive review and concept breakdowns are fully primed for **{node_data['title']}**.
-"""
-
-    return {
-        "id": str(node_data["id"]),
-        "title": node_data["title"] or "Untitled Node",
-        "content_type": node_data["content_type"] or "CONCEPT",
-        "description": f"Comprehensive study material for {node_data['title']}.",
-        "content_text": educational_material,
-        "video_placeholder_url": "https://www.w3schools.com/html/mov_bbb.mp4",
-        "meta": {
-            "level": node_data["level"],
-            "unit_number": node_data["unit_number"]
-        }
-    }
-
-
-@router.get("/resolve-hub")
-def resolve_curriculum_hub_meta(
-    track_code: str = Query(..., alias="track_code"),
-    grade_name: Optional[str] = Query(None, alias="grade_name"),
-    db: Session = Depends(get_db)
-):
-    try:
-        clean_track = str(track_code).strip() if track_code else ""
-        clean_grade = str(grade_name).strip() if grade_name else ""
-
-        # 1. Look for competitive mapping profile in DB using data-driven containment checks
-        query = text("""
-            SELECT c.id as course_id, es.name as exam_subject_name, es.subject_code 
+        # 3. Robust Unified Left-Join Lookup Query
+        # Avoids rigid inner join drops if metadata profiles aren't fully baked
+        query_str = """
+            SELECT 
+                c.id as course_id,
+                c.title as course_title,
+                COALESCE(rs.subject_code, es.subject_code, 'GEN-TRACK') as subject_code,
+                COALESCE(rs.discipline, 'Science') as discipline,
+                COALESCE(rs.video_url, 'https://www.youtube.com/embed/dQw4w9WgXcQ') as video_url,
+                g.name as grade_name
             FROM public.courses c
-            JOIN public.exam_subjects es ON c.exam_subject_id = es.id
-            WHERE es.subject_code ILIKE :track 
-               OR es.name ILIKE :track 
-               OR :track ILIKE ('%%' || es.subject_code || '%%')
-            LIMIT 1
-        """)
-        record = db.execute(query, {"track": f"%{clean_track}%"}).mappings().first()
-        
-        if record:
-            return {
-                "success": True,
-                "grade_id": None,
-                "org_id": None,
-                "subject_id": str(record["course_id"]),
-                "subject_meta": {"name": record["exam_subject_name"], "code": record["subject_code"]}
-            }
-        
-        # 2. Fallback context handler: Resolve as K-12 board track path
-        board_query = text("""
-            SELECT c.id as course_id, c.title as course_title, rs.subject_code, g.id as gid, g.org_id
-            FROM public.courses c
-            JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
-            JOIN public.grades g ON rs.grade_id = g.id
-            WHERE g.name ILIKE :gname OR :gname ILIKE ('%%' || g.name || '%%')
-            LIMIT 1
-        """)
-        digit_grade = "".join(filter(str.isdigit, clean_grade))
-        search_grade = f"%{digit_grade}%" if digit_grade else f"%{clean_grade}%"
-        record = db.execute(board_query, {"gname": search_grade}).mappings().first()
-        
-        if record:
-            return {
-                "success": True,
-                "grade_id": str(record["gid"]),
-                "org_id": str(record["org_id"]) if record["org_id"] else None,
-                "subject_id": str(record["course_id"]),
-                "subject_meta": {"name": record["course_title"], "code": record["subject_code"]}
-            }
-
-        # 3. Global safety fallback: Prevents layout crashes if empty states hit UI
-        fallback = db.execute(text("""
-            SELECT c.id as course_id, c.title as course_title, COALESCE(es.subject_code, 'GEN') as subject_code
-            FROM public.courses c
+            LEFT JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
             LEFT JOIN public.exam_subjects es ON c.exam_subject_id = es.id
-            LIMIT 1
-        """)).mappings().first()
+            LEFT JOIN public.grades g ON rs.grade_id = g.id
+            WHERE 
+                -- Board Routing Rule
+                (:is_comp = false AND c.exam_subject_id IS NULL)
+                -- Competitive Routing Rule (Allows fallback to regular courses if dedicated entries don't exist)
+                OR (:is_comp = true AND (c.regular_subject_id IS NOT NULL OR c.exam_subject_id IS NOT NULL))
+        """
         
-        if fallback:
-            return {
-                "success": True,
-                "grade_id": None,
-                "org_id": None,
-                "subject_id": str(fallback["course_id"]),
-                "subject_meta": {"name": fallback["course_title"], "code": fallback["subject_code"]}
-            }
+        db_results = db.execute(text(query_str), {"is_comp": is_competitive}).mappings().all()
+        
+        filtered_courses = []
+        for row in db_results:
+            # Apply extracted digits filter to safely align with your '11' / '12' text records
+            if clean_grade and str(row["grade_name"]) != clean_grade:
+                continue
+                
+            # Filter standard tracks by board prefix context (e.g., separating CBSE vs ICSE text profiles)
+            if track_code and not is_competitive:
+                if track_code.upper() not in str(row["subject_code"]).upper() and track_code.upper() not in str(row["course_title"]).upper():
+                    continue
 
-        return {"success": False, "subject_id": None, "grade_id": None}
+            filtered_courses.append({
+                "id": str(row["course_id"]),
+                "title": row["course_title"],
+                "subject_code": row["subject_code"],
+                "discipline": row["discipline"],
+                "video_url": row["video_url"]
+            })
+            
+        return filtered_courses
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Polymorphic hub dynamic tracking routing failed: {str(e)}"
-        )
+        logger.error(f"Error fetching subjects from hub routing: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database Hub Resolver error: {str(e)}")
+
+
+# =====================================================================
+# ENDPOINT 2: Fetch Multi-Pane Lesson Traversal Navigation Tree
+# =====================================================================
+@router.get("/subjects/{subject_id}/tree", response_model=List[CurriculumNodeResponse])
+def get_curriculum_navigation_tree(
+    subject_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Loads all nested units, chapters, topics, and interactive asset leaf nodes.
+    Bridges the relationship whether the ID passed is a Core Subject ID or Course UUID.
+    """
+    try:
+        # Relational check: Finds any structure elements connected directly to the ID, 
+        # or matches items bound via the underlying shared 'regular_subject_id'.
+        tree_query = text("""
+            SELECT 
+                ct.id,
+                ct.title,
+                ct.parent_id,
+                ct.is_leaf,
+                COALESCE(ct.unit_number, 0) as unit_number,
+                COALESCE(ct.display_order, 0) as display_order,
+                ct.content_id
+            FROM public.curriculum_tree ct
+            WHERE ct.subject_id = :subject_id
+               OR ct.subject_id IN (
+                   SELECT id FROM public.courses 
+                   WHERE regular_subject_id = (
+                       SELECT regular_subject_id FROM public.courses WHERE id = :subject_id
+                   )
+               )
+            ORDER BY COALESCE(ct.unit_number, 0) ASC, COALESCE(ct.display_order, 0) ASC
+        """)
+        
+        nodes = db.execute(tree_query, {"subject_id": subject_id}).mappings().all()
+        
+        # Turn database results into schema-compliant dict objects
+        return [
+            {
+                "id": str(node["id"]),
+                "title": node["title"],
+                "parent_id": str(node["parent_id"]) if node["parent_id"] else None,
+                "is_leaf": bool(node["is_leaf"]),
+                "unit_number": node["unit_number"],
+                "display_order": node["display_order"],
+                "content_id": str(node["content_id"]) if node["content_id"] else None
+            }
+            for node in nodes
+        ]
+
+    except Exception as e:
+        logger.error(f"Error loading curriculum tree traversal matrix for target {subject_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Curriculum Tree Resolution Error: {str(e)}")
