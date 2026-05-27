@@ -6,19 +6,17 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
-# Import your database session utility injection dependency
+# Database utility dependency
 from app.database import get_db  
 
-# Initialize Router and Logger
+# Initialize Routers to match main.py mounting points
 router = APIRouter(prefix="/api/curriculum", tags=["Curriculum"])
-logger = logging.getLogger(__name__)
-
-# 👇 FIXES RAILWAY CRASH: Added administrative route pointer requested by app/main.py
 admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["Admin Curriculum"])
 
+logger = logging.getLogger(__name__)
 
 # =====================================================================
-# PYDANTIC SCHEMAS (Response Models matching your multi-pane UI layer)
+# PYDANTIC SCHEMAS
 # =====================================================================
 
 class CourseCardResponse(BaseModel):
@@ -27,6 +25,15 @@ class CourseCardResponse(BaseModel):
     subject_code: str
     discipline: str
     video_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class GradeResponse(BaseModel):
+    id: str
+    name: str
+    level: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -46,17 +53,16 @@ class CurriculumNodeResponse(BaseModel):
 
 
 # =====================================================================
-# ENDPOINT 1: Fetch and filter courses for the Dashboard Hub
+# ENDPOINT 1: /resolve-hub (Matches Frontend Dashboard Fetching)
 # =====================================================================
-@router.get("/subjects", response_model=List[CourseCardResponse])
-def get_filtered_subjects(
+@router.get("/resolve-hub", response_model=List[CourseCardResponse])
+def resolve_hub_courses(
     track_code: Optional[str] = Query(None, alias="track_code"),
     grade_name: Optional[str] = Query(None, alias="grade_name"),
     db: Session = Depends(get_db)
 ):
     """
-    Fetches available courses from the hub. Handles the mutual exclusivity 
-    of regular_subject_id vs exam_subject_id dynamically.
+    Resolves matching hub courses dynamically based on user selections.
     """
     try:
         # 1. Normalize Grade Inputs (e.g., "Class 11" or "Grade 11" -> "11")
@@ -72,8 +78,7 @@ def get_filtered_subjects(
             if "JEE" in track_upper or "NEET" in track_upper:
                 is_competitive = True
 
-        # 3. Robust Unified Left-Join Lookup Query
-        # Avoids rigid inner join drops if metadata profiles aren't fully baked
+        # 3. Dynamic Fallback Query
         query_str = """
             SELECT 
                 c.id as course_id,
@@ -87,9 +92,7 @@ def get_filtered_subjects(
             LEFT JOIN public.exam_subjects es ON c.exam_subject_id = es.id
             LEFT JOIN public.grades g ON rs.grade_id = g.id
             WHERE 
-                -- Board Routing Rule
                 (:is_comp = false AND c.exam_subject_id IS NULL)
-                -- Competitive Routing Rule (Allows fallback to regular courses if dedicated entries don't exist)
                 OR (:is_comp = true AND (c.regular_subject_id IS NOT NULL OR c.exam_subject_id IS NOT NULL))
         """
         
@@ -97,11 +100,9 @@ def get_filtered_subjects(
         
         filtered_courses = []
         for row in db_results:
-            # Apply extracted digits filter to safely align with your '11' / '12' text records
             if clean_grade and str(row["grade_name"]) != clean_grade:
                 continue
                 
-            # Filter standard tracks by board prefix context (e.g., separating CBSE vs ICSE text profiles)
             if track_code and not is_competitive:
                 if track_code.upper() not in str(row["subject_code"]).upper() and track_code.upper() not in str(row["course_title"]).upper():
                     continue
@@ -117,25 +118,19 @@ def get_filtered_subjects(
         return filtered_courses
 
     except Exception as e:
-        logger.error(f"Error fetching subjects from hub routing: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Database Hub Resolver error: {str(e)}")
+        logger.error(f"Error resolving hub content: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # =====================================================================
-# ENDPOINT 2: Fetch Multi-Pane Lesson Traversal Navigation Tree
+# ENDPOINT 2: Fetch Multi-Pane Lesson Navigation Tree
 # =====================================================================
 @router.get("/subjects/{subject_id}/tree", response_model=List[CurriculumNodeResponse])
 def get_curriculum_navigation_tree(
     subject_id: str,
     db: Session = Depends(get_db)
 ):
-    """
-    Loads all nested units, chapters, topics, and interactive asset leaf nodes.
-    Bridges the relationship whether the ID passed is a Core Subject ID or Course UUID.
-    """
     try:
-        # Relational check: Finds any structure elements connected directly to the ID, 
-        # or matches items bound via the underlying shared 'regular_subject_id'.
         tree_query = text("""
             SELECT 
                 ct.id,
@@ -158,7 +153,6 @@ def get_curriculum_navigation_tree(
         
         nodes = db.execute(tree_query, {"subject_id": subject_id}).mappings().all()
         
-        # Turn database results into schema-compliant dict objects
         return [
             {
                 "id": str(node["id"]),
@@ -171,15 +165,30 @@ def get_curriculum_navigation_tree(
             }
             for node in nodes
         ]
-
     except Exception as e:
-        logger.error(f"Error loading curriculum tree traversal matrix for target {subject_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Curriculum Tree Resolution Error: {str(e)}")
+        logger.error(f"Error loading curriculum navigation tree matrix: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # =====================================================================
-# ADMIN ROUTE PLACEHOLDERS (Prevents mounting crashes in main.py)
+# ADMIN ROUTE: /grades (Clears Frontend Dropdown Error)
 # =====================================================================
-@admin_router.get("/status")
-def get_admin_status():
-    return {"status": "active", "scope": "curriculum_management"}
+@admin_router.get("/grades", response_model=List[GradeResponse])
+def get_all_grades(db: Session = Depends(get_db)):
+    """
+    Fetches available academic grade slots to populate frontend global selector nodes.
+    """
+    try:
+        query = text("SELECT id, name, level FROM public.grades ORDER BY level ASC NULLS LAST")
+        results = db.execute(query).mappings().all()
+        return [
+            {
+                "id": str(row["id"]),
+                "name": str(row["name"]),
+                "level": row["level"]
+            }
+            for row in results
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching grades metadata lookup: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
