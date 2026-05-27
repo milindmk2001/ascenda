@@ -1,10 +1,14 @@
 import re
 import logging
-from typing import List, Optional
-from pydantic import BaseModel, UUID4
+from typing import List, Optional  # Fixes: Missing Optional import
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
+
+# 👇 Fixes: Missing get_db session dependency injection helper
+# Adjust 'app.database' to match your actual local directory layout if different
+from app.database import get_db  
 
 # Initialize Router and Logger
 router = APIRouter(prefix="/api/curriculum", tags=["Curriculum"])
@@ -45,7 +49,7 @@ class CurriculumNodeResponse(BaseModel):
 def get_filtered_subjects(
     track_code: Optional[str] = Query(None, alias="track_code"),
     grade_name: Optional[str] = Query(None, alias="grade_name"),
-    db: Session = Depends(get_db)  # Assumes your database dependency utility is imported
+    db: Session = Depends(get_db)
 ):
     """
     Fetches available courses from the hub. Handles the mutual exclusivity 
