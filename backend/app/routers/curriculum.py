@@ -205,3 +205,88 @@ def get_all_grades(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Grades fetch error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ── ENDPOINT 3: fetch leaf content ───────────────────────────
+@router.get("/leaf/{leaf_id}")
+def get_leaf_content(
+    leaf_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns content for a curriculum leaf node.
+    Uses content_id FK to fetch from generated_content.
+    """
+    try:
+        query = text("""
+            SELECT
+                gc.id,
+                gc.content,
+                gc.content_type,
+                gc.topic,
+                gc.unit,
+                gc.difficulty,
+                ct.title       AS leaf_title,
+                ct.content_type AS leaf_type,
+                ct.unit_number,
+                ct.is_leaf
+            FROM public.curriculum_tree ct
+            JOIN public.generated_content gc
+              ON gc.id = ct.content_id
+            WHERE ct.id = :leaf_id
+              AND ct.is_leaf = true
+        """)
+        row = db.execute(
+            query, {"leaf_id": leaf_id}
+        ).mappings().first()
+
+        if not row:
+            # content_id may be null — return leaf metadata only
+            meta_query = text("""
+                SELECT
+                    ct.id,
+                    ct.title,
+                    ct.content_type,
+                    ct.unit_number,
+                    ct.is_leaf,
+                    ct.content_id,
+                    parent.title AS topic_title
+                FROM public.curriculum_tree ct
+                LEFT JOIN public.curriculum_tree parent
+                  ON parent.id = ct.parent_id
+                WHERE ct.id = :leaf_id
+            """)
+            meta = db.execute(
+                meta_query, {"leaf_id": leaf_id}
+            ).mappings().first()
+
+            if not meta:
+                raise HTTPException(status_code=404, detail="Leaf node not found")
+
+            return {
+                "id":           str(meta["id"]),
+                "content":      None,
+                "content_type": meta["content_type"],
+                "topic":        meta["topic_title"] or meta["title"],
+                "leaf_title":   meta["title"],
+                "unit_number":  meta["unit_number"],
+                "is_leaf":      True,
+                "content_id":   str(meta["content_id"]) if meta["content_id"] else None,
+            }
+
+        return {
+            "id":           leaf_id,
+            "content":      row["content"],
+            "content_type": row["content_type"],
+            "topic":        row["topic"],
+            "unit":         row["unit"],
+            "leaf_title":   row["leaf_title"],
+            "leaf_type":    row["leaf_type"],
+            "difficulty":   row["difficulty"],
+            "unit_number":  row["unit_number"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Leaf content error for {leaf_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
