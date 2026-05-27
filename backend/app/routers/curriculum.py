@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
-# Database utility dependency
+# Import database session utility injection dependency
 from app.database import get_db  
 
 # Initialize Routers to match main.py mounting points
@@ -16,7 +16,7 @@ admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["Admin Curriculum
 logger = logging.getLogger(__name__)
 
 # =====================================================================
-# PYDANTIC SCHEMAS
+# PYDANTIC SCHEMAS (Response Models matching your multi-pane UI layer)
 # =====================================================================
 
 class CourseCardResponse(BaseModel):
@@ -47,13 +47,15 @@ class CurriculumNodeResponse(BaseModel):
     unit_number: int
     display_order: int
     content_id: Optional[str] = None
+    content_type: Optional[str] = None
+    level: Optional[int] = None
 
     class Config:
         from_attributes = True
 
 
 # =====================================================================
-# ENDPOINT 1: /resolve-hub (Matches Frontend Dashboard Fetching)
+# ENDPOINT 1: /resolve-hub (Refactored to utilize public.v_course_hub)
 # =====================================================================
 @router.get("/resolve-hub", response_model=List[CourseCardResponse])
 def resolve_hub_courses(
@@ -62,96 +64,103 @@ def resolve_hub_courses(
     db: Session = Depends(get_db)
 ):
     """
-    Resolves matching hub courses dynamically based on user selections.
+    Resolves matching hub courses dynamically by routing queries through 
+    the public.v_course_hub view based on track classifications.
     """
+    # 1. Normalize Grade Inputs (Extract pure numeric characters: e.g., 'Class 11' -> '11')
+    clean_grade = ""
+    if grade_name:
+        digits = re.findall(r'\d+', str(grade_name))
+        clean_grade = digits[0] if digits else ""
+
+    # 2. Segment competitive vs board-level parsing branches
+    is_competitive = bool(track_code) and any(
+        k in track_code.upper() for k in ["JEE", "NEET"]
+    )
+
     try:
-        # 1. Normalize Grade Inputs (e.g., "Class 11" or "Grade 11" -> "11")
-        clean_grade = ""
-        if grade_name:
-            digits = re.findall(r'\d+', str(grade_name))
-            clean_grade = digits[0] if digits else str(grade_name).strip()
+        if is_competitive:
+            prefix = "IITJEE" if "JEE" in track_code.upper() else "NEET"
+            query = text("""
+                SELECT
+                    course_id    AS id,
+                    course_title AS title,
+                    subject_code,
+                    subject_name,
+                    discipline,
+                    COALESCE(video_url, 'https://www.youtube.com/embed/dQw4w9WgXcQ') AS video_url
+                FROM public.v_course_hub
+                WHERE track_type   = 'competitive'
+                  AND subject_code LIKE :prefix
+                ORDER BY subject_name
+            """)
+            results = db.execute(query, {"prefix": f"{prefix}%"}).mappings().all()
+        else:
+            query = text("""
+                SELECT
+                    course_id    AS id,
+                    course_title AS title,
+                    subject_code,
+                    subject_name,
+                    discipline,
+                    grade_name,
+                    COALESCE(video_url, 'https://www.youtube.com/embed/dQw4w9WgXcQ') AS video_url
+                FROM public.v_course_hub
+                WHERE track_type   = 'board'
+                  AND grade_number = :grade
+                  AND subject_code ILIKE :track
+                ORDER BY subject_name
+            """)
+            results = db.execute(query, {
+                "grade": clean_grade,
+                "track": f"%{track_code}%"
+            }).mappings().all()
 
-        # 2. Identify Target Tracking Strategy
-        is_competitive = False
-        if track_code:
-            track_upper = track_code.upper()
-            if "JEE" in track_upper or "NEET" in track_upper:
-                is_competitive = True
-
-        # 3. Dynamic Fallback Query
-        query_str = """
-            SELECT 
-                c.id as course_id,
-                c.title as course_title,
-                COALESCE(rs.subject_code, es.subject_code, 'GEN-TRACK') as subject_code,
-                COALESCE(rs.discipline, 'Science') as discipline,
-                COALESCE(rs.video_url, 'https://www.youtube.com/embed/dQw4w9WgXcQ') as video_url,
-                g.name as grade_name
-            FROM public.courses c
-            LEFT JOIN public.regular_subjects rs ON c.regular_subject_id = rs.id
-            LEFT JOIN public.exam_subjects es ON c.exam_subject_id = es.id
-            LEFT JOIN public.grades g ON rs.grade_id = g.id
-            WHERE 
-                (:is_comp = false AND c.exam_subject_id IS NULL)
-                OR (:is_comp = true AND (c.regular_subject_id IS NOT NULL OR c.exam_subject_id IS NOT NULL))
-        """
-        
-        db_results = db.execute(text(query_str), {"is_comp": is_competitive}).mappings().all()
-        
-        filtered_courses = []
-        for row in db_results:
-            if clean_grade and str(row["grade_name"]) != clean_grade:
-                continue
-                
-            if track_code and not is_competitive:
-                if track_code.upper() not in str(row["subject_code"]).upper() and track_code.upper() not in str(row["course_title"]).upper():
-                    continue
-
-            filtered_courses.append({
-                "id": str(row["course_id"]),
-                "title": row["course_title"],
+        return [
+            {
+                "id": str(row["id"]),
+                "title": row["title"],
                 "subject_code": row["subject_code"],
                 "discipline": row["discipline"],
                 "video_url": row["video_url"]
-            })
-            
-        return filtered_courses
+            }
+            for row in results
+        ]
 
     except Exception as e:
-        logger.error(f"Error resolving hub content: {str(e)}")
+        logger.error(f"Error executing resolve-hub mapping: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # =====================================================================
-# ENDPOINT 2: Fetch Multi-Pane Lesson Navigation Tree
+# ENDPOINT 2: Fetch Navigation Tree (Refactored to utilize public.v_curriculum_by_course)
 # =====================================================================
 @router.get("/subjects/{subject_id}/tree", response_model=List[CurriculumNodeResponse])
 def get_curriculum_navigation_tree(
     subject_id: str,
     db: Session = Depends(get_db)
 ):
+    """
+    Loads structure matrices using public.v_curriculum_by_course, bridging 
+    frontend course context IDs cleanly down to exam node definitions.
+    """
     try:
-        tree_query = text("""
-            SELECT 
-                ct.id,
-                ct.title,
-                ct.parent_id,
-                ct.is_leaf,
-                COALESCE(ct.unit_number, 0) as unit_number,
-                COALESCE(ct.display_order, 0) as display_order,
-                ct.content_id
-            FROM public.curriculum_tree ct
-            WHERE ct.subject_id = :subject_id
-               OR ct.subject_id IN (
-                   SELECT id FROM public.courses 
-                   WHERE regular_subject_id = (
-                       SELECT regular_subject_id FROM public.courses WHERE id = :subject_id
-                   )
-               )
-            ORDER BY COALESCE(ct.unit_number, 0) ASC, COALESCE(ct.display_order, 0) ASC
+        query = text("""
+            SELECT
+                id,
+                title,
+                parent_id,
+                is_leaf,
+                COALESCE(unit_number, 0)   AS unit_number,
+                COALESCE(display_order, 0) AS display_order,
+                content_id,
+                content_type,
+                level
+            FROM public.v_curriculum_by_course
+            WHERE linked_course_id = :subject_id
+            ORDER BY unit_number ASC, display_order ASC
         """)
-        
-        nodes = db.execute(tree_query, {"subject_id": subject_id}).mappings().all()
+        nodes = db.execute(query, {"subject_id": subject_id}).mappings().all()
         
         return [
             {
@@ -161,17 +170,20 @@ def get_curriculum_navigation_tree(
                 "is_leaf": bool(node["is_leaf"]),
                 "unit_number": node["unit_number"],
                 "display_order": node["display_order"],
-                "content_id": str(node["content_id"]) if node["content_id"] else None
+                "content_id": str(node["content_id"]) if node["content_id"] else None,
+                "content_type": node["content_type"],
+                "level": node["level"]
             }
             for node in nodes
         ]
+
     except Exception as e:
-        logger.error(f"Error loading curriculum navigation tree matrix: {str(e)}")
+        logger.error(f"Curriculum tree extraction execution error for target {subject_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # =====================================================================
-# ADMIN ROUTE: /grades (Clears Frontend Dropdown Error)
+# ADMIN ROUTE: /grades (Maintains Global Dropdown Selection Integrity)
 # =====================================================================
 @admin_router.get("/grades", response_model=List[GradeResponse])
 def get_all_grades(db: Session = Depends(get_db)):
