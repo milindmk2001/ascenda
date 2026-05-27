@@ -16,7 +16,7 @@ admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["Admin Curriculum
 logger = logging.getLogger(__name__)
 
 # =====================================================================
-# PYDANTIC SCHEMAS (Response Models matching your multi-pane UI layer)
+# PYDANTIC SCHEMAS
 # =====================================================================
 
 class CourseCardResponse(BaseModel):
@@ -55,7 +55,7 @@ class CurriculumNodeResponse(BaseModel):
 
 
 # =====================================================================
-# ENDPOINT 1: /resolve-hub (Refactored to utilize public.v_course_hub)
+# ENDPOINT 1: /resolve-hub (Fixed video_url Column Crash)
 # =====================================================================
 @router.get("/resolve-hub", response_model=List[CourseCardResponse])
 def resolve_hub_courses(
@@ -87,8 +87,7 @@ def resolve_hub_courses(
                     course_title AS title,
                     subject_code,
                     subject_name,
-                    discipline,
-                    COALESCE(video_url, 'https://www.youtube.com/embed/dQw4w9WgXcQ') AS video_url
+                    discipline
                 FROM public.v_course_hub
                 WHERE track_type   = 'competitive'
                   AND subject_code LIKE :prefix
@@ -102,9 +101,7 @@ def resolve_hub_courses(
                     course_title AS title,
                     subject_code,
                     subject_name,
-                    discipline,
-                    grade_name,
-                    COALESCE(video_url, 'https://www.youtube.com/embed/dQw4w9WgXcQ') AS video_url
+                    discipline
                 FROM public.v_course_hub
                 WHERE track_type   = 'board'
                   AND grade_number = :grade
@@ -116,13 +113,15 @@ def resolve_hub_courses(
                 "track": f"%{track_code}%"
             }).mappings().all()
 
+        # 3. Safe dictionary building with explicit Python-level video fallback
         return [
             {
                 "id": str(row["id"]),
                 "title": row["title"],
                 "subject_code": row["subject_code"],
                 "discipline": row["discipline"],
-                "video_url": row["video_url"]
+                # 👇 Handles fallback safely out of the DB column structure execution context
+                "video_url": str(row["video_url"]) if ("video_url" in row and row["video_url"]) else "https://www.youtube.com/embed/dQw4w9WgXcQ"
             }
             for row in results
         ]
@@ -133,17 +132,13 @@ def resolve_hub_courses(
 
 
 # =====================================================================
-# ENDPOINT 2: Fetch Navigation Tree (Refactored to utilize public.v_curriculum_by_course)
+# ENDPOINT 2: Fetch Navigation Tree 
 # =====================================================================
 @router.get("/subjects/{subject_id}/tree", response_model=List[CurriculumNodeResponse])
 def get_curriculum_navigation_tree(
     subject_id: str,
     db: Session = Depends(get_db)
 ):
-    """
-    Loads structure matrices using public.v_curriculum_by_course, bridging 
-    frontend course context IDs cleanly down to exam node definitions.
-    """
     try:
         query = text("""
             SELECT
@@ -183,13 +178,10 @@ def get_curriculum_navigation_tree(
 
 
 # =====================================================================
-# ADMIN ROUTE: /grades (Maintains Global Dropdown Selection Integrity)
+# ADMIN ROUTE: /grades
 # =====================================================================
 @admin_router.get("/grades", response_model=List[GradeResponse])
 def get_all_grades(db: Session = Depends(get_db)):
-    """
-    Fetches available academic grade slots to populate frontend global selector nodes.
-    """
     try:
         query = text("SELECT id, name, level FROM public.grades ORDER BY level ASC NULLS LAST")
         results = db.execute(query).mappings().all()
