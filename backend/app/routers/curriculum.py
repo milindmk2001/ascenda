@@ -1,18 +1,21 @@
 import re
 import logging
-from typing import List, Optional  # Fixes: Missing Optional import
+from typing import List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
-# 👇 Fixes: Missing get_db session dependency injection helper
-# Adjust 'app.database' to match your actual local directory layout if different
+# Import your database session utility injection dependency
 from app.database import get_db  
 
 # Initialize Router and Logger
 router = APIRouter(prefix="/api/curriculum", tags=["Curriculum"])
 logger = logging.getLogger(__name__)
+
+# 👇 FIXES RAILWAY CRASH: Added administrative route pointer requested by app/main.py
+admin_router = APIRouter(prefix="/api/admin/curriculum", tags=["Admin Curriculum"])
+
 
 # =====================================================================
 # PYDANTIC SCHEMAS (Response Models matching your multi-pane UI layer)
@@ -172,3 +175,11 @@ def get_curriculum_navigation_tree(
     except Exception as e:
         logger.error(f"Error loading curriculum tree traversal matrix for target {subject_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Curriculum Tree Resolution Error: {str(e)}")
+
+
+# =====================================================================
+# ADMIN ROUTE PLACEHOLDERS (Prevents mounting crashes in main.py)
+# =====================================================================
+@admin_router.get("/status")
+def get_admin_status():
+    return {"status": "active", "scope": "curriculum_management"}
