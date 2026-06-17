@@ -2,11 +2,11 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine
-from app import models
+#from app import models
 from app.routers import organizations, curriculum, studio, ai_tutor 
 
 # Initialize database schemas
-models.Base.metadata.create_all(bind=engine)
+#models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Ascenda API")
 
