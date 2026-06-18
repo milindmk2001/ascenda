@@ -86,11 +86,39 @@ export default function CourseReader({ subject, onBack }) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
 
+      // Cancel any ongoing or leftover browser speech buffers before beginning a new lecture
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        const token = decoder.decode(value);
+        
+        const token = decoder.decode(value, { stream: true });
         setAiExplanation(prev => prev + token);
+
+        // Read out incoming chunk tokens immediately
+        if ('speechSynthesis' in window) {
+          // Clean out markdown markers and latex math syntax tags ($...$) so it reads smoothly
+          const cleanToken = token.replace(/[*#$`\-]/g, " ").trim();
+          if (cleanToken) {
+            const utterance = new SpeechSynthesisUtterance(cleanToken);
+            const voices = window.speechSynthesis.getVoices();
+            
+            // Map to a premium, high-quality female narrator profile
+            const femaleVoice = voices.find(v => 
+              v.name.includes("Google US English Female") || 
+              v.name.includes("Samantha") || 
+              v.name.includes("Zira")
+            );
+            
+            if (femaleVoice) utterance.voice = femaleVoice;
+            utterance.rate = 0.92;  // Steady textbook/academic lecture pacing velocity
+            utterance.pitch = 1.0;
+            window.speechSynthesis.speak(utterance);
+          }
+        }
       }
     } catch (e) {
       setAiExplanation(prev => prev + "\n\n*[AI Tutor Streaming Pipeline Disconnected]*");
@@ -135,7 +163,7 @@ export default function CourseReader({ subject, onBack }) {
   return (
     <div className="flex h-[calc(100vh-64px)] w-full bg-slate-950 text-slate-100 overflow-hidden">
       {/* SIDEBAR NAVIGATION COLUMN */}
-      <div className="w-80 border-r border-slate-900 bg-slate-950 p-4 flex flex-col overflow-y-auto">
+      <div className="w-80 min-w-[20rem] flex-shrink-0 border-r border-slate-900 bg-slate-950 p-4 flex flex-col overflow-y-auto">
         <button onClick={onBack} className="mb-6 text-left text-[10px] font-mono tracking-widest text-slate-500 hover:text-emerald-400 transition-colors uppercase">
           ← Back to Hub
         </button>

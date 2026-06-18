@@ -350,10 +350,10 @@ def build_prompt(ctx: dict, theory: list, formulae: list,
     # ── Fallback if no DB template found ──────────────────────
     leaf_type = ctx.get("leaf_type", "concept")
     type_instructions = {
-        "concept":           "Deliver a complete masterclass explanation. Build intuition first, then mathematics.",
-        "solved_problems":   "Walk through complete worked solutions step by step.",
-        "unsolved_problems": "Give a strategic entry point and final answer only — no full working.",
-        "concept_test":      "Present MCQs with the correct answer and full explanation immediately.",
+        "concept":           "Deliver an exhaustive, crystal-clear conceptual explanation. Break down the physical mechanics from ground principles to advanced analytical insights. Do not ask questions or use leading dialog elements.",
+        "solved_problems":   "Deconstruct each physics problem analytically. Provide full, unedited derivations and complete mathematical solutions from start to finish. Do not stop to wait for student feedback.",
+        "unsolved_problems": "Provide a complete analytical blueprint detailing the step-by-step physics required to solve the scenario. Do not hide answers or leave variables isolated for the user to solve.",
+        "concept_test":      "Provide an authoritative breakdown explaining why each option is conceptually valid or physically impossible.",
     }
     instruction = type_instructions.get(leaf_type, "Explain this content for a JEE student.")
     raw_content = ctx.get("raw_content", "")
@@ -366,9 +366,9 @@ def build_prompt(ctx: dict, theory: list, formulae: list,
         f"COMMON MISTAKES:\n{format_list(common_mistakes)}"
     )
     system_prompt = (
-        "You are Professor Priya Sharma, an expert IIT JEE Physics tutor. "
-        "Deliver a continuous, authoritative explanation. Never ask questions. "
-        "Never pause for student input."
+        "You are an expert female IIT JEE Physics professor. Give a comprehensive, continuous oral lecture breakdown "
+        "of the topic material using the reference content as your source data. Do not stop to quiz the student, "
+        "do not ask leading questions, and do not use chat check-ins or interactive conversational checkpoints."
     )
     return system_prompt, user_prompt
 
