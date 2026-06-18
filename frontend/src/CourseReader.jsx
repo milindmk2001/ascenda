@@ -104,7 +104,17 @@ export default function CourseReader({ subject, onBack }) {
           const cleanToken = token.replace(/[*#$`\-]/g, " ").trim();
           if (cleanToken) {
             const utterance = new SpeechSynthesisUtterance(cleanToken);
-            const voices = window.speechSynthesis.getVoices();
+            if ('speechSynthesis' in window) {
+                // Force the browser to grab the live up-to-date voice list
+                let voices = window.speechSynthesis.getVoices();
+                
+                // Find a high-quality female lecture profile
+                let femaleVoice = voices.find(v => 
+                  v.name.includes("Google US English Female") || 
+                  v.name.includes("Samantha") || 
+                  v.name.includes("Zira") ||
+                  v.name.includes("Hazel")
+                );
             
             // Map to a premium, high-quality female narrator profile
             const femaleVoice = voices.find(v => 

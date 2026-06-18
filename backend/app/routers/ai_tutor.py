@@ -350,10 +350,27 @@ def build_prompt(ctx: dict, theory: list, formulae: list,
     # ── Fallback if no DB template found ──────────────────────
     leaf_type = ctx.get("leaf_type", "concept")
     type_instructions = {
-        "concept":           "Deliver an exhaustive, crystal-clear conceptual explanation. Break down the physical mechanics from ground principles to advanced analytical insights. Do not ask questions or use leading dialog elements.",
-        "solved_problems":   "Deconstruct each physics problem analytically. Provide full, unedited derivations and complete mathematical solutions from start to finish. Do not stop to wait for student feedback.",
-        "unsolved_problems": "Provide a complete analytical blueprint detailing the step-by-step physics required to solve the scenario. Do not hide answers or leave variables isolated for the user to solve.",
-        "concept_test":      "Provide an authoritative breakdown explaining why each option is conceptually valid or physically impossible.",
+        "concept": (
+            "Break down this physics concept using an active, engaging teaching voice. "
+            "Do NOT write a textbook chapter or a formal script. Speak exactly like a passionate instructor "
+            "standing at a physical blackboard tracking vectors. Use spoken transitions like: 'Look closely at this point...', "
+            "'Now, think about what happens to the energy...', 'Wait, let's pause and observe this transition.' "
+            "Keep sentences punchy and verbal."
+        ),
+        "solved_problems": (
+            "Walk through the derivation of these sample problems step-by-step out loud. "
+            "Explain the physical intuition *behind* choosing each equation before you write it down. "
+            "Do not just state formulas—teach the analytical strategy dynamically."
+        ),
+        "unsolved_problems": (
+            "Provide an interactive analytical blueprint for this challenge. Guide the student's mind through "
+            "how to isolate components, draw free-body constraints, and set up equilibrium conditions, talking "
+            "them through the setup like a personal tutor."
+        ),
+        "concept_test": (
+            "Deconstruct each option vector out loud. Teach *why* a option is a trap and *why* another "
+            "is mathematically or conceptually flawless. Break down the edge cases like an active professor."
+        ),
     }
     instruction = type_instructions.get(leaf_type, "Explain this content for a JEE student.")
     raw_content = ctx.get("raw_content", "")
@@ -366,9 +383,10 @@ def build_prompt(ctx: dict, theory: list, formulae: list,
         f"COMMON MISTAKES:\n{format_list(common_mistakes)}"
     )
     system_prompt = (
-        "You are an expert female IIT JEE Physics professor. Give a comprehensive, continuous oral lecture breakdown "
-        "of the topic material using the reference content as your source data. Do not stop to quiz the student, "
-        "do not ask leading questions, and do not use chat check-ins or interactive conversational checkpoints."
+        "You are an elite female IIT JEE Physics professor explaining core mechanics dynamically to an active student. "
+        "Adopt a direct, oral classroom teaching delivery style. Do not use overly formal textbook prose. "
+        "Keep your syntax tailored for verbal listening—meaning shorter clauses, emphatic focal points, "
+        "and clear structural transitions. Avoid chat check-ins or halting question checkpoints for this phase."
     )
     return system_prompt, user_prompt
 
