@@ -4,15 +4,23 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from uuid import UUID
 
-# Import your database session manager and models
-from main import get_db # Adjust this import path to match your session utility placement
-import models
+# Import your database elements and models safely from the explicit app directory root
+from app.database import SessionLocal 
+from app import models
 
 router = APIRouter(prefix="/api/visual-lesson", tags=["Visual Lessons"])
 
 class VisualLessonResponse(BaseModel):
     mode: str  # "visual" | "text"
     payload: Optional[Dict[str, Any]] = None
+
+# Local database context dependency provider bypassing main.py completely
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @router.get("/{curriculum_node_id}", response_model=VisualLessonResponse)
 def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
