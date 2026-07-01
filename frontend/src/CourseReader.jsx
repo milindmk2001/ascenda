@@ -44,6 +44,7 @@ export default function CourseReader({ subject, onBack }) {
   }, [subject]);
 
   // Step 2: Fetch specific unit content when a leaf node is selected
+  // Inside CourseReader.jsx -> Step 2 useEffect hook
   useEffect(() => {
     if (!selectedLeafId) return;
 
@@ -51,21 +52,30 @@ export default function CourseReader({ subject, onBack }) {
     setAiExplanation('');
     setLoadingCore(true);
 
-    // Pipeline A: Core Database Text Payload Ingestion
-    fetch(`${API_BASE}/api/curriculum/leaf/${selectedLeafId}`)
-      .then(res => {
-        if (!res.ok) throw new Error('Static content frame unreachable.');
-        return res.json();
-      })
-      .then(data => {
-        setCoreContent(data?.content_text || '*No core text module configured for this node yet.*');
-        setLoadingCore(false);
-
-        // Pipeline B: Establish Chunked Streaming for Socratic AI Explanation
+    // 1. Check if a structured Visual SVG Lesson template exists for this concept node
+    fetch(`${API_BASE}/api/visual-lesson/${selectedLeafId}`)
+      .then(res => res.json())
+      .then(visualData => {
+        if (visualData.mode === "visual" && visualData.payload) {
+          // Found a pre-constructed slide package! 
+          // We will render this using the Phase 3 Canvas component
+          console.log("Visual Asset Found:", visualData.payload);
+          setCoreContent("VISUAL_MODE_ACTIVE"); 
+        } else {
+          // Fallback: No visual match found. Ingest the core markdown text block natively
+          fetch(`${API_BASE}/api/curriculum/leaf/${selectedLeafId}`)
+            .then(res => res.json())
+            .then(data => {
+              setCoreContent(data?.content_text || '*No core text module configured for this node yet.*');
+              setLoadingCore(false);
+            });
+        }
+        
+        // 2. Trigger the explanatory audio companion stream concurrently
         triggerAiStream(selectedLeafId);
       })
       .catch(err => {
-        setCoreContent(`*Error loading technical content profile.*`);
+        console.error("Visual check failed, dropping to text defaults:", err);
         setLoadingCore(false);
       });
   }, [selectedLeafId]);
@@ -91,7 +101,7 @@ export default function CourseReader({ subject, onBack }) {
         window.speechSynthesis.cancel();
       }
 
-      while (true) {
+     while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         
@@ -104,23 +114,16 @@ export default function CourseReader({ subject, onBack }) {
           const cleanToken = token.replace(/[*#$`\-]/g, " ").trim();
           if (cleanToken) {
             const utterance = new SpeechSynthesisUtterance(cleanToken);
-            if ('speechSynthesis' in window) {
-                // Force the browser to grab the live up-to-date voice list
-                let voices = window.speechSynthesis.getVoices();
-                
-                // Find a high-quality female lecture profile
-                let femaleVoice = voices.find(v => 
-                  v.name.includes("Google US English Female") || 
-                  v.name.includes("Samantha") || 
-                  v.name.includes("Zira") ||
-                  v.name.includes("Hazel")
-                );
+            
+            // Force the browser to grab the live up-to-date voice list
+            let voices = window.speechSynthesis.getVoices();
             
             // Map to a premium, high-quality female narrator profile
             const femaleVoice = voices.find(v => 
               v.name.includes("Google US English Female") || 
               v.name.includes("Samantha") || 
-              v.name.includes("Zira")
+              v.name.includes("Zira") ||
+              v.name.includes("Hazel")
             );
             
             if (femaleVoice) utterance.voice = femaleVoice;

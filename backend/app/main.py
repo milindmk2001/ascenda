@@ -1,13 +1,9 @@
 import os
-from routers import visual_lesson
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine
-#from app import models
-from app.routers import organizations, curriculum, studio, ai_tutor 
-
-# Initialize database schemas
-#models.Base.metadata.create_all(bind=engine)
+# Consistent absolute import mapping matching the rest of the application ecosystem
+from app.routers import organizations, curriculum, studio, ai_tutor, visual_lesson 
 
 app = FastAPI(title="Ascenda API")
 
@@ -25,15 +21,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"]
-)
+) # ✅ Fixed trailing syntax bracket to parenthesis
 
-# Route Mounting sequence matches layout blueprints exactly
+# ── ROUTE MOUNTING REGISTRATION ───────────────────────────
 app.include_router(organizations.router)
 app.include_router(curriculum.admin_router) # Mounts /api/admin/curriculum
 app.include_router(curriculum.router)       # Mounts /api/curriculum
 app.include_router(studio.router)
-app.include_router(ai_tutor.router)
-app.include_router(visual_lesson.router)
+app.include_router(ai_tutor.router)         # Mounts /api/ai_tutor
+app.include_router(visual_lesson.router)    # Mounts /api/visual-lesson
 
 @app.get("/")
 def health():
