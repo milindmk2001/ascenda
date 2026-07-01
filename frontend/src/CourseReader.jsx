@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
+import LessonCanvas from './LessonCanvas'; // Custom slide interactive component template
 
 const API_BASE = "https://ascenda-production.up.railway.app";
 
@@ -15,6 +16,7 @@ export default function CourseReader({ subject, onBack }) {
   const [loadingCore, setLoadingCore] = useState(false);
   const [loadingAI, setLoadingAI] = useState(false);
   const [expandedNodes, setExpandedNodes] = useState({});
+  const [visualLessonPayload, setVisualLessonPayload] = useState(null);
 
   // Step 1: Fetch the whole structural navigation tree for the current subject
   useEffect(() => {
@@ -44,12 +46,12 @@ export default function CourseReader({ subject, onBack }) {
   }, [subject]);
 
   // Step 2: Fetch specific unit content when a leaf node is selected
-  // Inside CourseReader.jsx -> Step 2 useEffect hook
   useEffect(() => {
     if (!selectedLeafId) return;
 
     setCoreContent('');
     setAiExplanation('');
+    setVisualLessonPayload(null);
     setLoadingCore(true);
 
     // 1. Check if a structured Visual SVG Lesson template exists for this concept node
@@ -57,16 +59,21 @@ export default function CourseReader({ subject, onBack }) {
       .then(res => res.json())
       .then(visualData => {
         if (visualData.mode === "visual" && visualData.payload) {
-          // Found a pre-constructed slide package! 
-          // We will render this using the Phase 3 Canvas component
+          // Found a pre-constructed slide package! Save payload and flip the rendering mode flag
           console.log("Visual Asset Found:", visualData.payload);
+          setVisualLessonPayload(visualData.payload);
           setCoreContent("VISUAL_MODE_ACTIVE"); 
+          setLoadingCore(false);
         } else {
           // Fallback: No visual match found. Ingest the core markdown text block natively
           fetch(`${API_BASE}/api/curriculum/leaf/${selectedLeafId}`)
             .then(res => res.json())
             .then(data => {
               setCoreContent(data?.content_text || '*No core text module configured for this node yet.*');
+              setLoadingCore(false);
+            })
+            .catch(err => {
+              console.error("Error fetching text fallback:", err);
               setLoadingCore(false);
             });
         }
@@ -101,7 +108,7 @@ export default function CourseReader({ subject, onBack }) {
         window.speechSynthesis.cancel();
       }
 
-     while (true) {
+      while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         
@@ -205,9 +212,15 @@ export default function CourseReader({ subject, onBack }) {
           </div>
           {loadingCore ? (
             <div className="text-sm text-slate-500 animate-pulse font-mono">Reading record blocks...</div>
+          ) : coreContent === "VISUAL_MODE_ACTIVE" ? (
+            /* Safe interactive presentation mode mount point */
+            <LessonCanvas lessonPayload={visualLessonPayload} />
           ) : (
+            /* Default Text View fallback markdown view */
             <div className="prose prose-invert max-w-none text-slate-300">
-              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{coreContent || "*Select a specific core lesson concept token from the sidebar hierarchy navigation to spin up content views.*"}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                {coreContent || "*Select a specific core lesson concept token from the sidebar hierarchy navigation to spin up content views.*"}
+              </ReactMarkdown>
             </div>
           )}
         </div>
