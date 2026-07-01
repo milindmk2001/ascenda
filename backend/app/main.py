@@ -1,5 +1,5 @@
 import os
-from backend.app.routers import visual_lesson
+from routers import visual_lesson
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine
