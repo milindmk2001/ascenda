@@ -41,7 +41,7 @@ def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
             "lesson_json" AS lesson_json, 
             "slide_count" AS slide_count
         FROM public.visual_lesson_cache
-        WHERE "curriculum_node_id" = :node_id::uuid
+        WHERE "curriculum_node_id" = CAST(:node_id AS UUID)
         AND "generation_status" = 'complete'
         AND "validation_status" != 'invalid'
         LIMIT 1
