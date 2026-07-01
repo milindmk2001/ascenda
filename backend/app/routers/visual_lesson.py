@@ -8,7 +8,6 @@ from app.database import SessionLocal
 
 router = APIRouter(prefix="/api/visual-lesson", tags=["Visual Lessons"])
 
-# Strict schema alignment matching your exact required response structures
 class VisualLessonResponse(BaseModel):
     mode: str  # "visual" | "text"
     payload: Optional[Dict[str, Any]] = None
@@ -26,7 +25,6 @@ def get_db():
 @router.get("/{curriculum_node_id}", response_model=VisualLessonResponse)
 def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
     try:
-        # Validate that the incoming parameter is a properly formatted UUID string
         node_uuid = UUID(curriculum_node_id)
     except ValueError:
         raise HTTPException(
@@ -34,17 +32,21 @@ def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
             detail="Provided curriculum token is not a valid UUID format."
         )
 
-    # Raw SQLAlchemy text execution with the corrected relaxed filters
+    # ✅ Fixed: Added explicit ::uuid typecasting to the bind parameter
     query = text("""
         SELECT lesson_id, curriculum_node_id, lesson_json, slide_count
         FROM public.visual_lesson_cache
-        WHERE curriculum_node_id = :node_id
+        WHERE curriculum_node_id = :node_id::uuid
         AND generation_status = 'complete'
         AND validation_status != 'invalid'
         LIMIT 1
     """)
     
-    result = db.execute(query, {"node_id": str(node_uuid)}).mappings().first()
+    try:
+        result = db.execute(query, {"node_id": str(node_uuid)}).mappings().first()
+    except Exception as e:
+        print(f"Database execution error: {e}")
+        raise HTTPException(status_code=500, detail="Database operation failed")
     
     if result:
         return VisualLessonResponse(
@@ -55,7 +57,6 @@ def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
             slide_count=result["slide_count"]
         )
         
-    # Standard Fallback Structure when no lesson matching criteria exists
     return VisualLessonResponse(
         mode="text",
         payload=None,
