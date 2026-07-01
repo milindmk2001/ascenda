@@ -1,4 +1,5 @@
 import os
+from backend.app.routers import visual_lesson
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine
@@ -32,6 +33,7 @@ app.include_router(curriculum.admin_router) # Mounts /api/admin/curriculum
 app.include_router(curriculum.router)       # Mounts /api/curriculum
 app.include_router(studio.router)
 app.include_router(ai_tutor.router)
+app.include_router(visual_lesson.router)
 
 @app.get("/")
 def health():

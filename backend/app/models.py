@@ -238,3 +238,24 @@ class ModularLesson(Base):
     latex_formula  = Column(String)
     video_asset_id = Column(String)
     created_at     = Column(DateTime(timezone=True), server_default=func.now())
+
+class VisualLessonCache(Base):
+    __tablename__ = "visual_lesson_cache"
+
+    lesson_id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    curriculum_node_id = Column(UUID(as_uuid=True), ForeignKey("curriculum_tree.id"), nullable=False, index=True)
+    source_chunk_ids = Column(ARRAY(UUID(as_uuid=True)), nullable=True)
+    grade = Column(String(50), nullable=True)
+    subject = Column(String(100), nullable=True)
+    book = Column(String(250), nullable=True)
+    chapter = Column(String(250), nullable=True)
+    topic = Column(String(250), nullable=True)
+    concept = Column(String(250), nullable=True)
+    lesson_json = Column(JSONB, nullable=False)
+    schema_version = Column(String(20), default="1.0")
+    prompt_version = Column(String(20), nullable=True)
+    model_used = Column(String(100), nullable=True)
+    generation_status = Column(String(50), default="completed")
+    validation_status = Column(String(50), default="valid")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
