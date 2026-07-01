@@ -39,7 +39,10 @@ def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
             "curriculum_node_id" AS curriculum_node_id, 
             "lesson_json" AS lesson_json
         FROM public.visual_lesson_cache
-        WHERE "curriculum_node_id" = CAST(:node_id AS UUID)
+        WHERE (
+            "curriculum_node_id" = CAST(:node_id AS UUID) 
+            OR "lesson_id" = CAST(:node_id AS UUID)
+        )
         AND "generation_status" = 'complete'
         AND "validation_status" != 'invalid'
         LIMIT 1
