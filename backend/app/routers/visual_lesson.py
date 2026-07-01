@@ -32,14 +32,12 @@ def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
             detail="Provided curriculum token is not a valid UUID format."
         )
 
-    # ✅ Explicit double-quotes around column names to preserve casing in PostgreSQL
-    # ✅ Explicit aliases matching exactly what Pydantic expects
+    # ✅ Fixed: Removed the non-existent "slide_count" column from selection
     query = text("""
         SELECT 
             "lesson_id" AS lesson_id, 
             "curriculum_node_id" AS curriculum_node_id, 
-            "lesson_json" AS lesson_json, 
-            "slide_count" AS slide_count
+            "lesson_json" AS lesson_json
         FROM public.visual_lesson_cache
         WHERE "curriculum_node_id" = CAST(:node_id AS UUID)
         AND "generation_status" = 'complete'
@@ -50,17 +48,22 @@ def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
     try:
         result = db.execute(query, {"node_id": str(node_uuid)}).mappings().first()
     except Exception as e:
-        # Print the raw engine error code to Railway logs for visibility
         print(f"DATABASE CRITICAL EXCEPTION DETAIL: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database operational failure: {str(e)}")
     
     if result:
+        lesson_data = result["lesson_json"] or {}
+        
+        # ✅ Compute slide count directly from JSON payload structure to maintain the schema contract
+        slides = lesson_data.get("slides", [])
+        calculated_count = len(slides) if isinstance(slides, list) else 0
+
         return VisualLessonResponse(
             mode="visual",
-            payload=result["lesson_json"],
+            payload=lesson_data,
             lesson_id=str(result["lesson_id"]),
             curriculum_node_id=str(result["curriculum_node_id"]),
-            slide_count=result["slide_count"]
+            slide_count=calculated_count
         )
         
     return VisualLessonResponse(
