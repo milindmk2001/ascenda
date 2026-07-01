@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine
-# Consistent absolute import mapping matching the rest of the application ecosystem
+# Clean, consistent absolute import routing matching the rest of the app ecosystem
 from app.routers import organizations, curriculum, studio, ai_tutor, visual_lesson 
 
 app = FastAPI(title="Ascenda API")
@@ -21,7 +21,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"]
-) # ✅ Fixed trailing syntax bracket to parenthesis
+)
 
 # ── ROUTE MOUNTING REGISTRATION ───────────────────────────
 app.include_router(organizations.router)
