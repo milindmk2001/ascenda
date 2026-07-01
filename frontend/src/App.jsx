@@ -5,17 +5,18 @@ import CourseReader from './CourseReader';
 const API_BASE = "https://ascenda-production.up.railway.app";
 
 export default function App() {
-  // Fix 1.4: Change the default initialization token from '11' to '6'
   const [selectedGradeName, setSelectedGradeName] = useState('6');
   const [selectedTrack, setSelectedTrack] = useState('CBSE');
-  
-  // Fix 1.1: Utilizing the single existing state variable for grades array
   const [grades, setGrades] = useState([]);
+  
+  // Restored states expected by UserLearningHub
+  const [subjects, setSubjects] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [activeCourse, setActiveCourse] = useState(null);
 
   const isCompetitiveTrack = selectedTrack === 'IIT-JEE' || selectedTrack === 'NEET';
 
-  // Fix 1.2: Wire up the global grades useEffect to fetch dynamically from the API
+  // Dropdown Fetch: Fetch all available structural grade levels
   useEffect(() => {
     fetch(`${API_BASE}/api/admin/curriculum/grades`)
       .then((res) => {
@@ -28,7 +29,37 @@ export default function App() {
         }
       })
       .catch((err) => console.error("Error populating curriculum grades dropdown:", err));
-  }, []); // Empty dependencies array preserved per specification
+  }, []);
+
+  // Restored Course Fetch: Pulls hub course cards when filters change
+  useEffect(() => {
+    setLoading(true);
+    
+    // Construct search params based on track and grade parameters
+    const params = new URLSearchParams({
+      track_code: selectedTrack,
+      grade_name: selectedGradeName
+    });
+
+    fetch(`${API_BASE}/api/curriculum/resolve-hub?${params.toString()}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Hub resolution endpoint returned an operational error.");
+        return res.json();
+      })
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setSubjects(data);
+        } else {
+          setSubjects([]);
+        }
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Error updating active hub courses:", err);
+        setSubjects([]);
+        setLoading(false);
+      });
+  }, [selectedTrack, selectedGradeName]);
 
   return (
     <div className="min-h-screen bg-[#070b14] text-white antialiased font-sans">
@@ -60,7 +91,6 @@ export default function App() {
           </div>
 
           {/* GRADE SELECTOR */}
-          {/* Fix 1.5: Tailwind conditional styling and layout state preserved perfectly */}
           <div 
             className="flex flex-col transition-all duration-300"
             style={{
@@ -74,22 +104,28 @@ export default function App() {
               onChange={(e) => setSelectedGradeName(e.target.value)}
               className="bg-[#090f1c] border border-slate-800 text-xs rounded px-3 py-1.5 text-slate-300 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors min-w-[120px]"
             >
-              {/* Fix 1.3 & Fix 3: Dynamic option generation, sorted numerically, presenting name vs level */}
-              {grades
-                .filter(g => g.level !== null && g.level !== undefined)
-                .sort((a, b) => Number(a.level) - Number(b.level))
-                .map((g) => (
-                  <option key={g.id} value={String(g.level)} className="bg-[#0d1527]">
-                    {g.name}
-                  </option>
-                ))
-              }
+              {(() => {
+                const seenLevels = new Set();
+                return grades
+                  .filter(g => g.level !== null && g.level !== undefined)
+                  .sort((a, b) => Number(a.level) - Number(b.level))
+                  .filter(g => {
+                    if (seenLevels.has(g.level)) return false;
+                    seenLevels.add(g.level);
+                    return true;
+                  })
+                  .map((g) => (
+                    <option key={g.id} value={String(g.level)} className="bg-[#0d1527]">
+                      {g.name}
+                    </option>
+                  ));
+              })()}
             </select>
           </div>
         </div>
       </header>
 
-      {/* RENDER MAIN CONTROLLER */}
+      {/* RENDER MAIN PANEL VIEWER */}
       <main className="w-full">
         {activeCourse ? (
           <CourseReader 
@@ -98,10 +134,11 @@ export default function App() {
           />
         ) : (
           <UserLearningHub 
-            trackCode={selectedTrack}
+            subjects={subjects}
+            loading={loading}
+            trackName={selectedTrack}
             gradeName={selectedGradeName}
-            isCompetitive={isCompetitiveTrack}
-            onSelectCourse={setActiveCourse}
+            onCourseSelect={setActiveCourse}
           />
         )}
       </main>
