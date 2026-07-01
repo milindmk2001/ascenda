@@ -1,20 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import text
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from uuid import UUID
-
-# Import your database elements and models safely from the explicit app directory root
-from app.database import SessionLocal 
-from app import models
+from app.database import SessionLocal
 
 router = APIRouter(prefix="/api/visual-lesson", tags=["Visual Lessons"])
 
+# Strict schema alignment matching your exact required response structures
 class VisualLessonResponse(BaseModel):
     mode: str  # "visual" | "text"
     payload: Optional[Dict[str, Any]] = None
+    lesson_id: Optional[str] = None
+    curriculum_node_id: Optional[str] = None
+    slide_count: Optional[int] = None
 
-# Local database context dependency provider bypassing main.py completely
 def get_db():
     db = SessionLocal()
     try:
@@ -24,12 +25,8 @@ def get_db():
 
 @router.get("/{curriculum_node_id}", response_model=VisualLessonResponse)
 def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
-    """
-    Retrieves a cached pre-constructed structured visual SVG lesson from storage.
-    Degrades gracefully back to traditional text parsing modes if cache parameters are absent.
-    """
     try:
-        # Validate that incoming string is a well-formed UUID asset token
+        # Validate that the incoming parameter is a properly formatted UUID string
         node_uuid = UUID(curriculum_node_id)
     except ValueError:
         raise HTTPException(
@@ -37,21 +34,32 @@ def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
             detail="Provided curriculum token is not a valid UUID format."
         )
 
-    # Query matching validated records inside cache tables
-    cache_record = db.query(models.VisualLessonCache).filter(
-        models.VisualLessonCache.curriculum_node_id == node_uuid,
-        models.VisualLessonCache.validation_status == "valid",
-        models.VisualLessonCache.generation_status == "completed"
-    ).first()
+    # Raw SQLAlchemy text execution with the corrected relaxed filters
+    query = text("""
+        SELECT lesson_id, curriculum_node_id, lesson_json, slide_count
+        FROM public.visual_lesson_cache
+        WHERE curriculum_node_id = :node_id
+        AND generation_status = 'complete'
+        AND validation_status != 'invalid'
+        LIMIT 1
+    """)
     
-    if cache_record:
+    result = db.execute(query, {"node_id": str(node_uuid)}).mappings().first()
+    
+    if result:
         return VisualLessonResponse(
-            mode="visual", 
-            payload=cache_record.lesson_json
+            mode="visual",
+            payload=result["lesson_json"],
+            lesson_id=str(result["lesson_id"]),
+            curriculum_node_id=str(result["curriculum_node_id"]),
+            slide_count=result["slide_count"]
         )
         
-    # Standard Fallback Handler: Notify frontend canvas interface to trigger standard stream pipes
+    # Standard Fallback Structure when no lesson matching criteria exists
     return VisualLessonResponse(
-        mode="text", 
-        payload=None
+        mode="text",
+        payload=None,
+        lesson_id=None,
+        curriculum_node_id=None,
+        slide_count=None
     )
