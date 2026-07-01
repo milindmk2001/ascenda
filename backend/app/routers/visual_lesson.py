@@ -32,21 +32,27 @@ def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
             detail="Provided curriculum token is not a valid UUID format."
         )
 
-    # ✅ Fixed: Added explicit ::uuid typecasting to the bind parameter
+    # ✅ Explicit double-quotes around column names to preserve casing in PostgreSQL
+    # ✅ Explicit aliases matching exactly what Pydantic expects
     query = text("""
-        SELECT lesson_id, curriculum_node_id, lesson_json, slide_count
+        SELECT 
+            "lesson_id" AS lesson_id, 
+            "curriculum_node_id" AS curriculum_node_id, 
+            "lesson_json" AS lesson_json, 
+            "slide_count" AS slide_count
         FROM public.visual_lesson_cache
-        WHERE curriculum_node_id = :node_id::uuid
-        AND generation_status = 'complete'
-        AND validation_status != 'invalid'
+        WHERE "curriculum_node_id" = :node_id::uuid
+        AND "generation_status" = 'complete'
+        AND "validation_status" != 'invalid'
         LIMIT 1
     """)
     
     try:
         result = db.execute(query, {"node_id": str(node_uuid)}).mappings().first()
     except Exception as e:
-        print(f"Database execution error: {e}")
-        raise HTTPException(status_code=500, detail="Database operation failed")
+        # Print the raw engine error code to Railway logs for visibility
+        print(f"DATABASE CRITICAL EXCEPTION DETAIL: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database operational failure: {str(e)}")
     
     if result:
         return VisualLessonResponse(
