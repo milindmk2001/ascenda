@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import LessonCanvas from './LessonCanvas'; // Custom slide interactive component template
+import LessonCanvas from './components/LessonCanvas';// Custom slide interactive component template
 
 const API_BASE = "https://ascenda-production.up.railway.app";
 
