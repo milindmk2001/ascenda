@@ -75,6 +75,9 @@ def resolve_hub_courses(
         k in track_code.upper() for k in ["JEE", "NEET"]
     )
 
+    # Fix 2 — Minor Hardening: Explicit diagnostic logging for debugging parameter state transitions
+    logger.info(f"resolve-hub called: track={track_code} grade={clean_grade} competitive={is_competitive}")
+
     try:
         if is_competitive:
             prefix = "IITJEE" if "JEE" in track_code.upper() else "NEET"
@@ -206,7 +209,9 @@ def get_all_grades(db: Session = Depends(get_db)):
         logger.error(f"Grades fetch error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ── ENDPOINT 3: fetch leaf content ───────────────────────────
+
 @router.get("/leaf/{leaf_id}")
 def get_leaf_content(
     leaf_id: str,
