@@ -1,78 +1,105 @@
+import logging
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
-from uuid import UUID
-from app.database import SessionLocal
 
-router = APIRouter(prefix="/api/visual-lesson", tags=["Visual Lessons"])
+from app.database import get_db
 
-class VisualLessonResponse(BaseModel):
-    mode: str  # "visual" | "text"
-    payload: Optional[Dict[str, Any]] = None
-    lesson_id: Optional[str] = None
-    curriculum_node_id: Optional[str] = None
-    slide_count: Optional[int] = None
+router = APIRouter(prefix="/api/visual-lesson", tags=["Visual Lesson Engine"])
+logger = logging.getLogger(__name__)
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# ── PYDANTIC APIDOC CONTRACT SCHEMAS ──────────────────────────
 
-@router.get("/{curriculum_node_id}", response_model=VisualLessonResponse)
+class StateSnapshot(BaseModel):
+    visibleElements: List[str] = Field(default_factory=list)
+    currentAnimationStep: int = 0
+    studentAnswer: Optional[str] = None
+
+class TutorActionRequest(BaseModel):
+    lessonId: str
+    slideId: str
+    curriculumNodeId: str
+    studentQuestion: str
+    currentState: StateSnapshot
+
+class TutorActionResponse(BaseModel):
+    action: str  # highlight_existing_elements | replay_animation | explain_with_voice_only | create_new_svg_slide | ask_student_question | give_hint
+    targets: List[str] = Field(default_factory=list)
+    narration: str
+    newSlide: Optional[Dict[str, Any]] = None
+
+# ── ROUTES ───────────────────────────────────────────────────
+
+@router.get("/{curriculum_node_id}")
 def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
+    """
+    Retrieves an orchestrated visual lesson node object from cache.
+    Applies the validation criteria: validation_status != 'invalid'
+    """
     try:
-        node_uuid = UUID(curriculum_node_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provided curriculum token is not a valid UUID format."
-        )
-
-    # ✅ Fixed: Removed the non-existent "slide_count" column from selection
-    query = text("""
-        SELECT 
-            "lesson_id" AS lesson_id, 
-            "curriculum_node_id" AS curriculum_node_id, 
-            "lesson_json" AS lesson_json
-        FROM public.visual_lesson_cache
-        WHERE (
-            "curriculum_node_id" = CAST(:node_id AS UUID) 
-            OR "lesson_id" = CAST(:node_id AS UUID)
-        )
-        AND "generation_status" = 'complete'
-        AND "validation_status" != 'invalid'
-        LIMIT 1
-    """)
-    
-    try:
-        result = db.execute(query, {"node_id": str(node_uuid)}).mappings().first()
+        query = text("""
+            SELECT lesson_id, lesson_json, schema_version, generation_status, validation_status
+            FROM public.visual_lesson_cache
+            WHERE curriculum_node_id = :node_id 
+              AND generation_status = 'complete'
+              AND validation_status != 'invalid'
+            LIMIT 1
+        """)
+        
+        record = db.execute(query, {"node_id": curriculum_node_id}).mappings().first()
+        
+        if record:
+            return {
+                "mode": "visual",
+                "source": "cache",
+                "payload": record["lesson_json"]
+            }
+            
+        return {
+            "mode": "text",
+            "reason": "visual_lesson_not_found",
+            "fallbackExplanation": "No verified interactive slide layers are cached for this concept node yet. Continuing in classic voice instruction mode."
+        }
+        
     except Exception as e:
-        print(f"DATABASE CRITICAL EXCEPTION DETAIL: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Database operational failure: {str(e)}")
-    
-    if result:
-        lesson_data = result["lesson_json"] or {}
-        
-        # ✅ Compute slide count directly from JSON payload structure to maintain the schema contract
-        slides = lesson_data.get("slides", [])
-        calculated_count = len(slides) if isinstance(slides, list) else 0
-
-        return VisualLessonResponse(
-            mode="visual",
-            payload=lesson_data,
-            lesson_id=str(result["lesson_id"]),
-            curriculum_node_id=str(result["curriculum_node_id"]),
-            slide_count=calculated_count
+        logger.error(f"Failed to query visual lesson cache for node {curriculum_node_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error scanning storage cache layers."
         )
-        
-    return VisualLessonResponse(
-        mode="text",
-        payload=None,
-        lesson_id=None,
-        curriculum_node_id=None,
-        slide_count=None
-    )
+
+@router.post("/tutor-action", response_model=TutorActionResponse)
+def post_tutor_action(payload: TutorActionRequest, db: Session = Depends(get_db)):
+    """
+    Accepts contextual analytics state loops to dictate adaptive tutoring behaviors.
+    """
+    try:
+        # Log entry inside public.tutor_interaction_logs via standard execute threads
+        log_query = text("""
+            INSERT INTO public.tutor_interaction_logs (
+                lesson_id, slide_id, student_question, student_answer, interaction_type
+            ) VALUES (
+                (SELECT lesson_id FROM public.visual_lesson_cache WHERE curriculum_node_id = :node_id LIMIT 1),
+                :slide_id, :question, :answer, 'question_asked'
+            )
+        """)
+        db.execute(log_query, {
+            "node_id": payload.curriculumNodeId,
+            "slide_id": payload.slideId,
+            "question": payload.studentQuestion,
+            "answer": payload.currentState.studentAnswer
+        })
+        db.commit()
+
+        return TutorActionResponse(
+            action="highlight_existing_elements",
+            targets=["question_mark"],
+            narration="Let's look closely at the step before this. Do you notice how the terms keep growing?",
+            newSlide=None
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error compiling socratic fallback intercept action: {str(e)}")
+        raise HTTPException(status_code=500, detail="Socratic engine routing execution failure.")
