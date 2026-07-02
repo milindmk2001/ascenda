@@ -24,14 +24,12 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
 
   const slide = useMemo(() => executor.getSlide(currentSceneId), [currentSceneId, executor]);
 
-  // Derive total non-fallback step targets for progress tracking metrics calculation
-  // Derive total linear step targets for progress tracking metrics calculation from slides array
+  // Derive total non-fallback step targets for progress tracking metrics calculation from slides array
   const progressMetrics = useMemo(() => {
     if (!lessonPayload?.slides || !Array.isArray(lessonPayload.slides)) {
       return { current: 1, total: 1 };
     }
     
-    // Find the matching position index based on the active structural slideId
     const currentIndex = lessonPayload.slides.findIndex(s => s.slideId === currentSceneId);
     const totalSlides = lessonPayload.slides.length;
 
@@ -52,9 +50,34 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
     };
   }, [lessonPayload, player]);
 
+  // FIX 4: Safety-first layout visibility initialization loop execution track
+  const resetDelayedAnimationOpacity = () => {
+    if (!svgHostRef.current || !slide?.animationTimeline) return;
+
+    // Scan timeline array items to find DOM target IDs designated for future reveals
+    slide.animationTimeline.forEach((step) => {
+      if (step.id || step.target) {
+        const identifier = step.id || step.target;
+        try {
+          const el = svgHostRef.current.querySelector(`#${CSS.escape(identifier)}`);
+          if (el) {
+            // Enforce initial invisible track baseline state smoothly
+            el.style.opacity = "0";
+            el.style.transition = "opacity 0.4s ease-in-out";
+          }
+        } catch (err) {
+          console.error("Failed to apply Fix 4 initial opacity bounds to target element:", err);
+        }
+      }
+    });
+  };
+
   const runVisualTimeline = async () => {
     if (!slide || isAnimating) return;
     setIsAnimating(true);
+    
+    // FIX 4: Prior to starting timeline audio steps, make sure all milestone IDs are hidden
+    resetDelayedAnimationOpacity();
     
     if (slide.animationTimeline) {
       await animator.current.runTimeline(slide.animationTimeline, (stepText) => {
@@ -82,7 +105,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
 
     if (isCorrect) {
       setScore(p => p + 1);
-      setFeedback("脂 Correct! Fantastic tracking.");
+      setFeedback("Correct! Fantastic tracking.");
       player.speak("Correct! Outstanding job.");
       
       if (slide.revealTarget) {
@@ -98,7 +121,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
       const maxHints = lessonPayload.interactionPolicy?.maxHintsPerSlide || 2;
       if (hintCount < maxHints) {
         setHintCount(p => p + 1);
-        setFeedback(`庁 Hint: ${slide.hint}`);
+        setFeedback(`Hint: ${slide.hint}`);
         player.speak(slide.hint);
         const next = executor.getNextSceneId(slide, "student_wrong");
         if (next) navigateToScene(next);
@@ -152,7 +175,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
         <h2 className="text-xl font-bold text-slate-200">Lesson Complete!</h2>
         <p className="text-sm text-slate-400 mt-2">Accuracy Matrix: {score} / {totalQuestions}</p>
         {passed ? (
-          <p className="text-emerald-400 font-mono text-xs mt-4">醇 Node Mastery Verified!</p>
+          <p className="text-emerald-400 font-mono text-xs mt-4">Node Mastery Verified!</p>
         ) : (
           lessonPayload.assessmentPolicy?.allowRetry && (
             <button 
@@ -172,7 +195,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
       {/* Left Core Interaction Column Block */}
       <div className="flex-1 flex flex-col p-6 justify-between border-r border-slate-900 bg-[#0d1527]">
         
-        {/* THE APP CANVAS WRAPPER — Made relative and overflow-hidden to bound Fix 1 and Fix 8 safely */}
+        {/* THE APP CANVAS WRAPPER — Bounded container frame mapping absolute components */}
         <div className="flex-1 flex flex-col bg-white rounded-xl shadow-inner min-h-[340px] relative overflow-hidden border border-slate-800">
           
           {/* FIX 1: THE FLOATING HEADER — Pinned absolutely inside top parameter coordinate tracks */}
@@ -213,7 +236,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
         {/* Lower System Controls Panel Interface Deck */}
         <div className="flex justify-between items-center bg-[#090f1c]/40 border border-slate-900 p-3 rounded-lg mt-4">
           <button onClick={runVisualTimeline} disabled={isAnimating} className="bg-slate-900 text-slate-300 font-mono text-xs px-4 py-2 border border-slate-800 rounded transition-colors hover:bg-slate-850">
-            {isAnimating ? "Playing..." : "売 Replay Animation"}
+            {isAnimating ? "Playing..." : "Replay Animation"}
           </button>
           <div className="flex gap-2">
             <button onClick={() => { player.pause(); }} className="text-[11px] font-mono text-slate-500 hover:text-slate-300 transition-colors">Pause</button>
@@ -222,7 +245,6 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
         </div>
       </div>
       
-      {/* Right Sidebar Assistant Panel */}
       {/* Right Sidebar Assistant Panel */}
       <aside className="w-[380px] p-6 bg-[#090f1c]/30 flex flex-col gap-6 overflow-y-auto">
         {/* FIX 2: Immersive Avatar Narration Workspace Card */}
