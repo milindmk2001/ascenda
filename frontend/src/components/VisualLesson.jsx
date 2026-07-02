@@ -25,13 +25,19 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
   const slide = useMemo(() => executor.getSlide(currentSceneId), [currentSceneId, executor]);
 
   // Derive total non-fallback step targets for progress tracking metrics calculation
+  // Derive total linear step targets for progress tracking metrics calculation from slides array
   const progressMetrics = useMemo(() => {
-    if (!lessonPayload?.scenes) return { current: 1, total: 1 };
-    const sceneIds = Object.keys(lessonPayload.scenes).filter(id => !id.includes('wrong') && !id.includes('hint'));
-    const currentIndex = sceneIds.indexOf(currentSceneId);
+    if (!lessonPayload?.slides || !Array.isArray(lessonPayload.slides)) {
+      return { current: 1, total: 1 };
+    }
+    
+    // Find the matching position index based on the active structural slideId
+    const currentIndex = lessonPayload.slides.findIndex(s => s.slideId === currentSceneId);
+    const totalSlides = lessonPayload.slides.length;
+
     return {
       current: currentIndex !== -1 ? currentIndex + 1 : 1,
-      total: sceneIds.length || 1
+      total: totalSlides || 1
     };
   }, [lessonPayload, currentSceneId]);
 
