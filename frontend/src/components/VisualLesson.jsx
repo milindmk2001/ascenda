@@ -223,10 +223,27 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
       </div>
       
       {/* Right Sidebar Assistant Panel */}
-      <aside className="w-[380px] p-6 bg-[#090f1c]/10 flex flex-col gap-6 overflow-y-auto">
-        <div>
-          <span className="text-[9px] font-mono text-emerald-400 tracking-widest uppercase font-black block mb-2">Tutor Narration</span>
-          <div className="bg-[#090f1c] border border-slate-900 rounded-xl p-4 italic text-xs text-slate-300">
+      {/* Right Sidebar Assistant Panel */}
+      <aside className="w-[380px] p-6 bg-[#090f1c]/30 flex flex-col gap-6 overflow-y-auto">
+        {/* FIX 2: Immersive Avatar Narration Workspace Card */}
+        <div className="bg-[#090f1c] border border-slate-800 rounded-xl p-4 shadow-xl relative overflow-hidden">
+          <div className="flex items-center gap-2.5 border-b border-slate-800/60 pb-2 mb-3">
+            <div className="relative flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px]">
+              👩‍🏫
+              {/* Active TTS Pipeline Pulsing Engine Node Indicator */}
+              {isAnimating && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+              )}
+            </div>
+            <div>
+              <h4 className="text-[11px] font-mono font-bold text-slate-200 leading-none">Priya (AI Tutor)</h4>
+              <span className="text-[9px] font-mono text-slate-500">Audio Pipeline Active</span>
+            </div>
+          </div>
+          <div className="text-xs font-sans leading-relaxed text-slate-300">
             "{slide?.narration || "Reviewing layout structure..."}"
           </div>
         </div>
