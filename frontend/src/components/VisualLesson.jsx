@@ -24,6 +24,17 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
 
   const slide = useMemo(() => executor.getSlide(currentSceneId), [currentSceneId, executor]);
 
+  // Derive total non-fallback step targets for progress tracking metrics calculation
+  const progressMetrics = useMemo(() => {
+    if (!lessonPayload?.scenes) return { current: 1, total: 1 };
+    const sceneIds = Object.keys(lessonPayload.scenes).filter(id => !id.includes('wrong') && !id.includes('hint'));
+    const currentIndex = sceneIds.indexOf(currentSceneId);
+    return {
+      current: currentIndex !== -1 ? currentIndex + 1 : 1,
+      total: sceneIds.length || 1
+    };
+  }, [lessonPayload, currentSceneId]);
+
   useEffect(() => {
     if (lessonPayload.schemaVersion !== '1.0') {
       console.warn(`Version mismatch: Expected 1.0, got ${lessonPayload.schemaVersion}`);
@@ -65,7 +76,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
 
     if (isCorrect) {
       setScore(p => p + 1);
-      setFeedback("🎉 Correct! Fantastic tracking.");
+      setFeedback("脂 Correct! Fantastic tracking.");
       player.speak("Correct! Outstanding job.");
       
       if (slide.revealTarget) {
@@ -81,12 +92,12 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
       const maxHints = lessonPayload.interactionPolicy?.maxHintsPerSlide || 2;
       if (hintCount < maxHints) {
         setHintCount(p => p + 1);
-        setFeedback(`💡 Hint: ${slide.hint}`);
+        setFeedback(`庁 Hint: ${slide.hint}`);
         player.speak(slide.hint);
         const next = executor.getNextSceneId(slide, "student_wrong");
         if (next) navigateToScene(next);
       } else {
-        setFeedback(`Let's take a look at the solution together.`);
+        setFeedback("Let's take a look at the solution together.");
         const fallback = executor.getNextSceneId(slide, "max_attempts");
         if (fallback) navigateToScene(fallback);
       }
@@ -135,7 +146,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
         <h2 className="text-xl font-bold text-slate-200">Lesson Complete!</h2>
         <p className="text-sm text-slate-400 mt-2">Accuracy Matrix: {score} / {totalQuestions}</p>
         {passed ? (
-          <p className="text-emerald-400 font-mono text-xs mt-4">🏆 Node Mastery Verified!</p>
+          <p className="text-emerald-400 font-mono text-xs mt-4">醇 Node Mastery Verified!</p>
         ) : (
           lessonPayload.assessmentPolicy?.allowRetry && (
             <button 
@@ -152,22 +163,60 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
 
   return (
     <div className="flex flex-1 overflow-hidden bg-[#070b14] h-full w-full">
-      <div className="flex-1 flex flex-col p-6 justify-between border-r border-slate-900">
-        <h3 className="text-xs font-mono uppercase text-slate-500 tracking-wider">{slide?.title || "Explanation Stage"}</h3>
-        <div className="flex-1 my-4">
-          {slide?.svgCache && <VisualRenderer svgContent={slide.svgCache} hostRef={svgHostRef} />}
+      {/* Left Core Interaction Column Block */}
+      <div className="flex-1 flex flex-col p-6 justify-between border-r border-slate-900 bg-[#0d1527]">
+        
+        {/* THE APP CANVAS WRAPPER — Made relative and overflow-hidden to bound Fix 1 and Fix 8 safely */}
+        <div className="flex-1 flex flex-col bg-white rounded-xl shadow-inner min-h-[340px] relative overflow-hidden border border-slate-800">
+          
+          {/* FIX 1: THE FLOATING HEADER — Pinned absolutely inside top parameter coordinate tracks */}
+          <div className="absolute top-0 left-0 right-0 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/60 px-4 py-2.5 flex items-center justify-between z-10">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-mono font-black uppercase tracking-wider text-emerald-400">
+                {slide?.title || "EXPLANATION STAGE"}
+              </span>
+            </div>
+            <span className="text-[9px] font-mono uppercase bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800/40">
+              Interactive Node
+            </span>
+          </div>
+
+          {/* Core SVG Render Workspace Viewport Area */}
+          <div className="flex-1 pt-14 pb-12 flex items-center justify-center p-4">
+            {slide?.svgCache && <VisualRenderer svgContent={slide.svgCache} hostRef={svgHostRef} />}
+          </div>
+
+          {/* FIX 8: SLIDE PROGRESS INDICATOR BAR — Anchored flush against the canvas base coordinates */}
+          <div className="absolute bottom-0 left-0 right-0 bg-slate-950/95 border-t border-slate-800/60 px-4 py-2 flex items-center gap-4 z-10">
+            <span className="text-[10px] font-mono font-bold text-slate-400 whitespace-nowrap">
+              Slide {progressMetrics.current} of {progressMetrics.total}
+            </span>
+            
+            {/* Dynamic visual tracking bar channel */}
+            <div className="flex-1 h-1.5 bg-slate-900 rounded-full overflow-hidden relative">
+              <div 
+                className="absolute top-0 bottom-0 left-0 bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
+                style={{ width: `${(progressMetrics.current / progressMetrics.total) * 100}%` }}
+              />
+            </div>
+          </div>
+
         </div>
-        <div className="flex justify-between items-center bg-[#090f1c]/40 border border-slate-900 p-3 rounded-lg">
-          <button onClick={runVisualTimeline} disabled={isAnimating} className="bg-slate-900 text-slate-300 font-mono text-xs px-4 py-2 border border-slate-800 rounded">
-            {isAnimating ? "Playing..." : "🔄 Replay Animation"}
+
+        {/* Lower System Controls Panel Interface Deck */}
+        <div className="flex justify-between items-center bg-[#090f1c]/40 border border-slate-900 p-3 rounded-lg mt-4">
+          <button onClick={runVisualTimeline} disabled={isAnimating} className="bg-slate-900 text-slate-300 font-mono text-xs px-4 py-2 border border-slate-800 rounded transition-colors hover:bg-slate-850">
+            {isAnimating ? "Playing..." : "売 Replay Animation"}
           </button>
           <div className="flex gap-2">
-            <button onClick={() => { player.pause(); }} className="text-[11px] font-mono text-slate-600 hover:text-slate-400">Pause</button>
-            <button onClick={() => { player.resume(); }} className="text-[11px] font-mono text-slate-600 hover:text-slate-400">Resume</button>
+            <button onClick={() => { player.pause(); }} className="text-[11px] font-mono text-slate-500 hover:text-slate-300 transition-colors">Pause</button>
+            <button onClick={() => { player.resume(); }} className="text-[11px] font-mono text-slate-500 hover:text-slate-300 transition-colors">Resume</button>
           </div>
         </div>
       </div>
       
+      {/* Right Sidebar Assistant Panel */}
       <aside className="w-[380px] p-6 bg-[#090f1c]/10 flex flex-col gap-6 overflow-y-auto">
         <div>
           <span className="text-[9px] font-mono text-emerald-400 tracking-widest uppercase font-black block mb-2">Tutor Narration</span>
