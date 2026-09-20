@@ -189,7 +189,7 @@ def get_curriculum_navigation_tree(
 
 # ── ADMIN: grades ─────────────────────────────────────────────
 @router.get("/grades", response_model=List[GradeResponse])
-@admin_router.get("/grades", response_model=List[GradeResponse])
+##@admin_router.get("/grades", response_model=List[GradeResponse])
 def get_all_grades(db: Session = Depends(get_db)):
     try:
         query   = text(
