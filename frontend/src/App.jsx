@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import UserLearningHub from './UserLearningHub'; 
 import CourseReader from './CourseReader';
 
-const API_BASE = "https://ascenda-production.up.railway.app";
+##const API_BASE = "https://ascenda-production.up.railway.app";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://ascenda-dev.up.railway.app'; // Fallback to dev if not set
 
 export default function App() {
   const [selectedGradeName, setSelectedGradeName] = useState('6');
@@ -18,7 +19,7 @@ export default function App() {
 
   // Dropdown Fetch: Fetch all available structural grade levels
   useEffect(() => {
-    fetch(`${API_BASE}/api/admin/curriculum/grades`)
+    fetch(`${API_BASE}/api/curriculum/grades`)
       .then((res) => {
         if (!res.ok) throw new Error("Grades database interface responded with an error.");
         return res.json();

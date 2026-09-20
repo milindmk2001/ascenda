@@ -15,15 +15,22 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# SQLAlchemy Connection
-if settings.database_url and "postgresql" in settings.database_url:
+# Resolve URL from BaseSettings or direct environment
+db_url = settings.database_url or os.getenv("DATABASE_URL")
+
+# SQLAlchemy Connection Setup
+if db_url and ("postgresql" in db_url or "postgres" in db_url):
+    # Fix legacy dialect prefix if present
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+
     engine = create_engine(
-        settings.database_url,
+        db_url,
         pool_pre_ping=True,
         pool_size=5,
-        echo=True,        # Fixed: Added missing comma
+        echo=True,
         max_overflow=10,
-        pool_recycle=300 
+        pool_recycle=300
     )
 else:
     engine = create_engine(
