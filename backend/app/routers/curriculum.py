@@ -188,7 +188,7 @@ def get_curriculum_navigation_tree(
 
 
 # ── ADMIN: grades ─────────────────────────────────────────────
-
+@router.get("/grades", response_model=List[GradeResponse])
 @admin_router.get("/grades", response_model=List[GradeResponse])
 def get_all_grades(db: Session = Depends(get_db)):
     try:
@@ -209,6 +209,8 @@ def get_all_grades(db: Session = Depends(get_db)):
         logger.error(f"Grades fetch error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# In curriculum.py
 
 # ── ENDPOINT 3: fetch leaf content ───────────────────────────
 
