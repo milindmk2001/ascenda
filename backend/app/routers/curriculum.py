@@ -193,7 +193,7 @@ def get_curriculum_navigation_tree(
 def get_all_grades(db: Session = Depends(get_db)):
     try:
         query   = text(
-            "SELECT id, name, level FROM public.grades "
+            "SELECT id, name, level FROM grades "
             "ORDER BY level ASC NULLS LAST"
         )
         results = db.execute(query).mappings().all()
