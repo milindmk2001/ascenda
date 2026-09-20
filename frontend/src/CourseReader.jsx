@@ -5,7 +5,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import VisualLesson from './components/VisualLesson'; // Correct component path align
 
-const API_BASE = "https://ascenda-dev.up.railway.app'";
+const API_BASE = "https://ascenda-dev.up.railway.app";
 
 export default function CourseReader({ subject, onBack }) {
   const [treeNodes, setTreeNodes] = useState([]);
