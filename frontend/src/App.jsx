@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import UserLearningHub from './UserLearningHub'; 
 import CourseReader from './CourseReader';
 
-##const API_BASE = "https://ascenda-production.up.railway.app";
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://ascenda-dev.up.railway.app'; // Fallback to dev if not set
 
 export default function App() {
