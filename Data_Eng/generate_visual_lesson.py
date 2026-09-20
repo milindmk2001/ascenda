@@ -33,121 +33,34 @@ SLEEP_BETWEEN      = 2   # seconds between API calls
 client = genai.Client(api_key=GEMINI_KEY)
 
 # ── PROMPT — lesson structure (no SVG) ───────────────────────
-PROMPT_STRUCTURE = """You are an educational content designer for an AI tutoring platform for Grade 6 students in India.
+PROMPT_STRUCTURE = """You generate educational JSON for Grade 6 Maths in India.
 
-Generate a visual lesson structure. Return ONLY valid JSON with exactly this structure:
+RULES: Valid JSON only. No apostrophes. No single quotes. Use "do not" not "don't". ASCII only.
+
+Output exactly this JSON structure (replace placeholder values):
+
 {
-  "schemaVersion": "1.0",
-  "lessonId": "ch1-patterns-concept",
-  "initialScene": "s1",
-  "metadata": {
-    "subject": "Mathematics",
-    "grade": 6,
-    "book": "Ganita Prakash",
-    "chapter": "Chapter 1: Patterns in Mathematics",
-    "topic": "topic name",
-    "concept": "concept name"
-  },
-  "learningObjectives": ["objective 1", "objective 2", "objective 3"],
-  "prerequisites": {
-    "curriculumNodes": [],
-    "conceptsRequired": ["concept 1", "concept 2"],
-    "enforcementMode": "warn"
-  },
-  "assessmentPolicy": {
-    "mode": "formative",
-    "passMark": 0.7,
-    "scoreMethod": "correct_answers_ratio",
-    "requireAllSlides": true,
-    "allowRetry": true,
-    "maxRetries": 3
-  },
-  "masteryCriteria": {
-    "minimumScore": 0.7,
-    "minimumSlidesViewed": 3,
-    "requiredInteractions": ["answered_question"],
-    "awardBadge": false,
-    "unlocks": []
-  },
-  "interactionPolicy": {
-    "onCorrect": "reveal_answer",
-    "onWrong": "show_hint",
-    "onStudentQuestion": "call_tutor_router",
-    "onSlideComplete": "follow_transition",
-    "onLessonComplete": "show_summary",
-    "allowSkip": false,
-    "allowReplay": true,
-    "maxHintsPerSlide": 2
-  },
-  "slides": [
-    {
-      "slideId": "s1",
-      "slideIndex": 0,
-      "sceneType": "animated_explanation",
-      "title": "slide title max 6 words",
-      "learningObjective": "one sentence what student will understand",
-      "narration": "2-3 warm spoken sentences using Indian examples",
-      "visualSpec": {
-        "visualType": "number_sequence",
-        "sequence": [5, 10, 15, 20, 25],
-        "rule": "+5",
-        "ruleType": "additive",
-        "showQuestionMark": false
-      },
-      "animationTimeline": [
-        {"action": "fadeIn",    "target": "term_0",     "duration": 400},
-        {"action": "drawArrow", "target": "arrow_0",    "duration": 300},
-        {"action": "reveal",    "target": "term_1",     "duration": 400},
-        {"action": "highlight", "target": "rule_label", "duration": 600}
-      ],
-      "transitions": {
-        "animation_complete": "s1_question",
-        "student_question":   "tutor_router",
-        "replay_requested":   "s1"
-      }
-    },
-    {
-      "slideId": "s1_question",
-      "slideIndex": 1,
-      "sceneType": "student_response",
-      "question": "question text",
-      "answer": "correct answer as string",
-      "hint": "one helpful hint",
-      "misconception": "common error students make",
-      "visualSpec": {
-        "visualType": "number_sequence",
-        "sequence": [5, 10, 15, 20, 25],
-        "rule": "+5",
-        "ruleType": "additive",
-        "showQuestionMark": true
-      },
-      "transitions": {
-        "student_correct":  "s2",
-        "student_wrong":    "s1_hint",
-        "student_question": "tutor_router",
-        "max_attempts":     "s1_reveal"
-      }
-    },
-    {
-      "slideId": "s1_hint",
-      "slideIndex": 2,
-      "sceneType": "hint_delivery",
-      "narration": "gentle re-explanation with Indian example",
-      "transitions": {
-        "animation_complete": "s1_question",
-        "student_question":   "tutor_router"
-      }
-    }
-  ]
+"schemaVersion":"1.0",
+"lessonId":"REPLACE_WITH_SLUG",
+"initialScene":"s1",
+"metadata":{"subject":"Mathematics","grade":6,"book":"Ganita Prakash","chapter":"REPLACE","topic":"REPLACE","concept":"REPLACE"},
+"learningObjectives":["obj1","obj2","obj3"],
+"prerequisites":{"curriculumNodes":[],"conceptsRequired":["prereq1","prereq2"],"enforcementMode":"warn"},
+"assessmentPolicy":{"mode":"formative","passMark":0.7,"scoreMethod":"correct_answers_ratio","requireAllSlides":true,"allowRetry":true,"maxRetries":3},
+"masteryCriteria":{"minimumScore":0.7,"minimumSlidesViewed":3,"requiredInteractions":["answered_question"],"awardBadge":false,"unlocks":[]},
+"interactionPolicy":{"onCorrect":"reveal_answer","onWrong":"show_hint","onStudentQuestion":"call_tutor_router","onSlideComplete":"follow_transition","onLessonComplete":"show_summary","allowSkip":false,"allowReplay":true,"maxHintsPerSlide":2},
+"slides":[
+{"slideId":"s1","slideIndex":0,"sceneType":"animated_explanation","title":"REPLACE","learningObjective":"REPLACE","narration":"REPLACE no apostrophes","visualSpec":{"visualType":"number_sequence","sequence":[1,2,3,4,5],"rule":"REPLACE","ruleType":"additive","showQuestionMark":false},"animationTimeline":[{"action":"fadeIn","target":"term_0","duration":400},{"action":"drawArrow","target":"arrow_0","duration":300},{"action":"reveal","target":"term_1","duration":400},{"action":"highlight","target":"rule_label","duration":600}],"transitions":{"animation_complete":"s1_question","student_question":"tutor_router","replay_requested":"s1"}},
+{"slideId":"s1_question","slideIndex":1,"sceneType":"student_response","question":"REPLACE no apostrophes","answer":"REPLACE","hint":"REPLACE no apostrophes","misconception":"REPLACE no apostrophes","visualSpec":{"visualType":"number_sequence","sequence":[1,2,3,4,5],"rule":"REPLACE","ruleType":"additive","showQuestionMark":true},"transitions":{"student_correct":"lesson_end","student_wrong":"s1_hint","student_question":"tutor_router","max_attempts":"lesson_end"}},
+{"slideId":"s1_hint","slideIndex":2,"sceneType":"hint_delivery","narration":"REPLACE no apostrophes","transitions":{"animation_complete":"s1_question","student_question":"tutor_router"}},
+{"slideId":"lesson_end","slideIndex":3,"sceneType":"lesson_summary","narration":"REPLACE no apostrophes","transitions":{}}
+]
 }
 
-STRICT RULES:
-- sceneType: animated_explanation | student_response | hint_delivery | tutor_response | lesson_summary
-- animationTimeline actions: fadeIn | show | hide | highlight | pulse | reveal | zoomTo | drawArrow
-- transition targets must match slideId values in the slides array OR be: tutor_router
-- visualType: number_sequence | number_line | fraction_strip | geometry_construct | data_bar_chart | symmetry_grid | area_grid | factor_tree
-- narration: warm, simple, Indian examples (mangoes, cricket, rupees, Diwali)
-- Return ONLY the JSON object. No markdown. No explanation."""
+Replace all REPLACE values with content relevant to the chapter and topic given.
+Use Indian examples in narration. No apostrophes anywhere.
+Return ONLY the JSON. Nothing else.
+"""
 
 # ── SVG BUILDER — from visualSpec ────────────────────────────
 def build_svg_from_spec(visual_spec: dict, slide_index: int) -> str:
@@ -299,22 +212,93 @@ def load_md_section(unit_number: int, content_type: str) -> str:
     )
     return match.group(1).strip()[:2000] if match else text[:2000]
 
-# ── GEMINI CALL ───────────────────────────────────────────────
-def call_gemini_json(prompt: str) -> dict:
-    response = client.models.generate_content(
-        model    = GEN_MODEL,
-        contents = prompt,
-        config   = types.GenerateContentConfig(
-            system_instruction = PROMPT_STRUCTURE,
-            response_mime_type = "application/json",
-            temperature        = 0.2,
-            max_output_tokens  = 3000,
-        )
-    )
-    raw = response.text.strip()
-    raw = re.sub(r'^```(?:json)?\s*', '', raw)
-    raw = re.sub(r'\s*```$', '', raw)
-    return json.loads(raw.strip())
+# ── GEMINI CALL — with retry for 503 and JSON errors ─────────
+def call_gemini_json(prompt: str, retries: int = 8) -> dict:
+    import re as _re
+    temperatures = [0.1, 0.2, 0.0, 0.3, 0.1, 0.2, 0.0, 0.1]
+    last_error = None
+    for attempt in range(1, retries + 1):
+        temp = temperatures[min(attempt-1, len(temperatures)-1)]
+        try:
+            response = client.models.generate_content(
+                model    = GEN_MODEL,
+                contents = prompt,
+                config   = types.GenerateContentConfig(
+                    system_instruction = PROMPT_STRUCTURE,
+                    response_mime_type = "application/json",
+                    temperature        = temp,
+                    max_output_tokens  = 4000,
+                )
+            )
+            raw = response.text.strip() if response.text else ""
+
+            if not raw:
+                print(f"     WARNING: Empty response attempt {attempt}")
+                time.sleep(15)
+                continue
+
+            # Strip markdown fences
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                lines = [l for l in lines if not l.startswith("```")]
+                raw = "\n".join(lines).strip()
+
+            # Extract JSON object
+            start = raw.find("{")
+            end   = raw.rfind("}") + 1
+            if start >= 0 and end > start:
+                raw = raw[start:end]
+
+            # Try direct parse
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                pass
+
+            # Clean smart quotes
+            cleaned = raw.replace("\u2019", "").replace("\u2018", "")
+            cleaned = cleaned.replace("\u201c", '"').replace("\u201d", '"')
+            cleaned = cleaned.replace("\u2013", "-").replace("\u2014", "-")
+
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError as e:
+                last_error = e
+                print(f"     WARNING: JSON error attempt {attempt}/{retries}")
+                print(f"     Err: {e}")
+                print(f"     At: {repr(cleaned[max(0,e.pos-30):e.pos+30])}")
+                print(f"     Raw start: {repr(raw[:200])}")
+
+                # Truncation recovery
+                for ep in range(len(cleaned), 100, -1):
+                    if cleaned[ep-1] == "}":
+                        try:
+                            result = json.loads(cleaned[:ep])
+                            print(f"     INFO: Recovered at pos {ep}")
+                            return result
+                        except Exception:
+                            continue
+
+                if attempt < retries:
+                    wait = 15 * attempt
+                    print(f"     Retrying in {wait}s...")
+                    time.sleep(wait)
+
+        except Exception as e:
+            last_error = e
+            err_str = str(e)
+            if "503" in err_str or "UNAVAILABLE" in err_str:
+                wait = 30 * attempt
+                print(f"     WARNING: Gemini 503 attempt {attempt}/{retries} - wait {wait}s")
+                time.sleep(wait)
+            elif "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                print(f"     WARNING: Rate limit - waiting 60s")
+                time.sleep(60)
+            else:
+                raise
+
+    raise last_error or Exception("All retries failed")
+
 
 # ── INSERT TO DB ──────────────────────────────────────────────
 def insert_lesson(conn, lesson_json: dict, node: dict,
@@ -465,9 +449,23 @@ Make the lesson appropriate for the content type:
             # Call Gemini — structure only
             lesson = call_gemini_json(user_prompt)
 
-            # Add source chunk IDs to metadata
-            lesson.setdefault("metadata", {})["sourceChunkIds"] = source_ids
-            lesson["metadata"]["curriculumNodeId"] = node_id
+            # Override metadata with correct dynamic values
+            # regardless of what Gemini filled in from the example
+            lesson["schemaVersion"] = "1.0"
+            lesson["lessonId"] = f"ch{chapter_num}-{content_type}"
+            lesson["initialScene"] = lesson.get("initialScene", "s1")
+            lesson.setdefault("metadata", {}).update({
+                "subject":          "Mathematics",
+                "grade":            6,
+                "book":             "Ganita Prakash",
+                "chapter":          f"Chapter {chapter_num}: {chapter_title}",
+                "topic":            chapter_title,
+                "concept":          content_type,
+                "curriculumNodeId": node_id,
+                "sourceChunkIds":   source_ids,
+                "promptVersion":    "visual-v4",
+                "modelUsed":        GEN_MODEL,
+            })
 
             # Build SVGs from visualSpec for each slide
             for slide in lesson.get("slides", []):

@@ -10,6 +10,7 @@ app = FastAPI(title="Ascenda API")
 # Setup clean explicit allowed frontend production URLs
 origins = [
     "https://ascenda-umber.vercel.app",
+    "https://ascenda-dev.vercel.app",
     "http://localhost:5173",
     "http://localhost:3000"
 ]

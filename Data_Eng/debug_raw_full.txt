@@ -1,0 +1,148 @@
+{
+  "schemaVersion": "1.0",
+  "lessonId": "patterns_common_mistakes_g6_ch1",
+  "initialScene": "s1",
+  "metadata": {
+    "subject": "Mathematics",
+    "grade": 6,
+    "book": "Ganita Prakash",
+    "chapter": "Patterns in Mathematics",
+    "topic": "Common Errors in Number Patterns",
+    "concept": "Identifying and Correcting Errors in Number Patterns"
+  },
+  "learningObjectives": [
+    "Identify common errors in number patterns.",
+    "Correct mistakes in given number sequences.",
+    "Understand rules for simple additive and multiplicative patterns."
+  ],
+  "prerequisites": {
+    "curriculumNodes": [],
+    "conceptsRequired": [
+      "Basic arithmetic operations",
+      "Understanding number sequences"
+    ],
+    "enforcementMode": "warn"
+  },
+  "assessmentPolicy": {
+    "mode": "formative",
+    "passMark": 0.7,
+    "scoreMethod": "correct_answers_ratio",
+    "requireAllSlides": true,
+    "allowRetry": true,
+    "maxRetries": 3
+  },
+  "masteryCriteria": {
+    "minimumScore": 0.7,
+    "minimumSlidesViewed": 3,
+    "requiredInteractions": [
+      "answered_question"
+    ],
+    "awardBadge": false,
+    "unlocks": []
+  },
+  "interactionPolicy": {
+    "onCorrect": "reveal_answer",
+    "onWrong": "show_hint",
+    "onStudentQuestion": "call_tutor_router",
+    "onSlideComplete": "follow_transition",
+    "onLessonComplete": "show_summary",
+    "allowSkip": false,
+    "allowReplay": true,
+    "maxHintsPerSlide": 2
+  },
+  "slides": [
+    {
+      "slideId": "s1",
+      "slideIndex": 0,
+      "sceneType": "animated_explanation",
+      "title": "Spotting Mistakes in Patterns",
+      "learningObjective": "Identify common errors in number patterns.",
+      "narration": "Let us learn to find and fix mistakes in number patterns.",
+      "visualSpec": {
+        "visualType": "number_sequence",
+        "sequence": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rule": "+1",
+        "ruleType": "additive",
+        "showQuestionMark": false
+      },
+      "animationTimeline": [
+        {
+          "action": "fadeIn",
+          "target": "term_0",
+          "duration": 400
+        },
+        {
+          "action": "drawArrow",
+          "target": "arrow_0",
+          "duration": 300
+        },
+        {
+          "action": "reveal",
+          "target": "term_1",
+          "duration": 400
+        },
+        {
+          "action": "highlight",
+          "target": "rule_label",
+          "duration": 600
+        }
+      ],
+      "transitions": {
+        "animation_complete": "s1_question",
+        "student_question": "tutor_router",
+        "replay_requested": "s1"
+      }
+    },
+    {
+      "slideId": "s1_question",
+      "slideIndex": 1,
+      "sceneType": "student_response",
+      "question": "What is the incorrect number in this pattern: 2, 4, 6, 9, 10?",
+      "answer": "9",
+      "hint": "Look at the difference between consecutive numbers.",
+      "misconception": "Students might focus on the last number only.",
+      "visualSpec": {
+        "visualType": "number_sequence",
+        "sequence": [
+          2,
+          4,
+          6,
+          9,
+          10
+        ],
+        "rule": "+2",
+        "ruleType": "additive",
+        "showQuestionMark": true
+      },
+      "transitions": {
+        "student_correct": "lesson_end",
+        "student_wrong": "s1_hint",
+        "student_question": "tutor_router",
+        "max_attempts": "lesson_end"
+      }
+    },
+    {
+      "slideId": "s1_hint",
+      "slideIndex": 2,
+      "sceneType": "hint_delivery",
+      "narration": "The pattern should be adding 2 each time. Check where it breaks.",
+      "transitions": {
+        "animation_complete": "s1_question",
+        "student_question": "tutor_router"
+      }
+    },
+    {
+      "slideId": "lesson_end",
+      "slideIndex": 3,
+      "sceneType": "lesson_summary",
+      "narration": "You have learned to identify and correct errors in number patterns.",
+      "transitions": {}
+    }
+  ]
+}
