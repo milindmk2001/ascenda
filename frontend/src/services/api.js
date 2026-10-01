@@ -1,7 +1,10 @@
 const rawBase = import.meta.env.VITE_API_BASE_URL || '';
 const API_BASE_URL = rawBase ? `${rawBase.replace(/\/$/, '')}/api` : '/api';
 
-// Curriculum & Visual Lesson API Functions
+/**
+ * Curriculum & Visual Lesson API Functions
+ */
+
 export async function fetchSubjectTree(subjectId) {
   const response = await fetch(`${API_BASE_URL}/curriculum/subjects/${subjectId}/tree`);
   if (!response.ok) {
@@ -19,32 +22,42 @@ export async function fetchVisualLesson(nodeId) {
 
     const data = await response.json();
 
-    // 1. Direct normalized response { mode: 'visual', payload: {...} }
-    if (data.mode === "visual" && data.payload) {
-      return data;
-    }
+    // 1. Unwrap payload layer by layer
+    let rawPayload = data.payload || data.lesson_json || data;
 
-    // 2. Database cached record from visual_lesson_cache table
-    let rawPayload = data.lesson_json || data.payload || data;
-
-    // Unpack stringified JSON if stored as JSON string
-    if (typeof rawPayload === 'string') {
+    // Unpack stringified JSON if stored as JSON string (handles double-stringified DB entries)
+    while (typeof rawPayload === 'string') {
       try {
         rawPayload = JSON.parse(rawPayload);
-        if (typeof rawPayload === 'string') {
-          rawPayload = JSON.parse(rawPayload); // Handle double-stringified entries
-        }
       } catch (e) {
-        console.warn("Error parsing lesson payload string:", e);
+        break;
       }
     }
 
-    // Extract payload if nested inside rawPayload object
-    const finalPayload = rawPayload.payload || rawPayload.lesson_json || rawPayload;
+    if (rawPayload && rawPayload.payload) {
+      rawPayload = typeof rawPayload.payload === 'string'
+        ? JSON.parse(rawPayload.payload)
+        : rawPayload.payload;
+    }
+
+    // 2. Normalize slides array and SVG field names
+    if (rawPayload && Array.isArray(rawPayload.slides)) {
+      rawPayload.slides = rawPayload.slides.map((slide) => {
+        const svgContent = slide.svgCache || slide.svgContent || slide.svg || '';
+        return {
+          ...slide,
+          // Support camelCase and snake_case variations across renderers
+          svgCache: svgContent,
+          svgContent: svgContent,
+          svg_cache: svgContent,
+          svg: svgContent,
+        };
+      });
+    }
 
     return {
       mode: "visual",
-      payload: finalPayload
+      payload: rawPayload
     };
   } catch (err) {
     console.warn("fetchVisualLesson fallback active:", err);
@@ -61,7 +74,10 @@ export async function fetchAiStreamResponse(nodeId, metaTag) {
   });
 }
 
-// Hub Navigation Endpoints
+/**
+ * Hub Navigation Endpoints
+ */
+
 export async function getTracks() {
   const response = await fetch(`${API_BASE_URL}/curriculum/tracks`);
   if (!response.ok) {
