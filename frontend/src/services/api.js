@@ -1,5 +1,31 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+export const getTracks = async () => {
+  const res = await fetch(`${API_BASE}/api/curriculum/tracks`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch tracks: ${res.statusText}`);
+  }
+  return await res.json();
+};
 
+export const getGrades = async () => {
+  const res = await fetch(`${API_BASE}/api/curriculum/grades`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch grades: ${res.statusText}`);
+  }
+  return await res.json();
+};
+
+export const resolveHubSubjects = async (trackCode, gradeName) => {
+  const params = new URLSearchParams({
+    track_code: trackCode,
+    grade_name: gradeName,
+  });
+  const res = await fetch(`${API_BASE}/api/curriculum/resolve-hub?${params}`);
+  if (!res.ok) {
+    throw new Error(`Failed to resolve hub: ${res.statusText}`);
+  }
+  return await res.json();
+};
 /**
  * Core JSON request handler
  */
