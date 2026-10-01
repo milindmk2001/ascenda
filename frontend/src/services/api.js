@@ -76,7 +76,7 @@ export async function syncLessonToStudio(lessonPayload) {
 }
 
 /* ==========================================================================
-   AI Stream Reader Helper
+   AI Tutor Stream
    ========================================================================== */
 
 export async function fetchAiStreamResponse(leafId, subjectMeta) {
