@@ -4,7 +4,7 @@ ai_tutor.py
 Streams Gemini AI explanations using:
   1. public.prompt_templates  — system prompt + template text
   2. public.prompt_parameters — topic metadata (joined via curriculum_tree_id)
-  3. Supabase RPC functions   — semantic search (optional — executed via SQLAlchemy)
+  3. Supabase RPC functions   — semantic search (executed via SQLAlchemy)
   4. public.explanations      — cache layer
 """
 
@@ -220,13 +220,13 @@ def search_generated_content(embedding: Optional[list], content_type: str,
                 CAST(NULL AS text),
                 CAST(NULL AS text),
                 CAST(:content_type AS text),
-                CAST(:threshold AS numeric)
+                CAST(:threshold AS double precision)
             )
         """), {
             "vec":          vec,
             "match_count":  top_k,
             "content_type": content_type,
-            "threshold":    threshold,
+            "threshold":    float(threshold),
         }).mappings().all()
         return [dict(r) for r in rows]
     except Exception as e:
@@ -250,15 +250,16 @@ def search_questions(embedding: Optional[list], subject: str, board: str,
                 (:vec)::vector,
                 :match_count,
                 CAST(:subject AS text),
+                CAST(:board AS text),
                 CAST(NULL AS text),
-                CAST(NULL AS text),
-                CAST(:threshold AS numeric)
+                CAST(:threshold AS double precision)
             )
         """), {
             "vec":         vec,
             "match_count": top_k,
             "subject":     subject,
-            "threshold":   threshold,
+            "board":       board,
+            "threshold":   float(threshold),
         }).mappings().all()
         return [dict(r) for r in rows]
     except Exception as e:
@@ -394,7 +395,6 @@ def build_prompt(ctx: dict, theory: list, formulae: list,
             "and encouraging rather than exam-pressure-driven."
         )
 
-    # SAFE SLICING GUARANTEED AGAINST NONE
     raw_content = ctx.get("raw_content") or ""
     safe_content = raw_content[:3000]
 
