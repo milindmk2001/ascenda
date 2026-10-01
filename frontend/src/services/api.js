@@ -1,3 +1,4 @@
+// Existing Curriculum & Visual Lesson API Functions
 export async function fetchSubjectTree(subjectId) {
   const response = await fetch(`/api/curriculum/subjects/${subjectId}/tree`);
   if (!response.ok) {
@@ -45,4 +46,29 @@ export async function fetchAiStreamResponse(nodeId, metaTag) {
       'Accept': 'text/event-stream',
     },
   });
+}
+
+// Added Missing Exports expected by App.jsx
+export async function getTracks() {
+  const response = await fetch('/api/hub/tracks');
+  if (!response.ok) {
+    throw new Error(`Failed to fetch tracks: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function getGrades(trackId) {
+  const response = await fetch(`/api/hub/grades?track_id=${encodeURIComponent(trackId || '')}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch grades: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function resolveHubSubjects(trackId, gradeId) {
+  const response = await fetch(`/api/hub/subjects?track_id=${encodeURIComponent(trackId || '')}&grade_id=${encodeURIComponent(gradeId || '')}`);
+  if (!response.ok) {
+    throw new Error(`Failed to resolve subjects: ${response.status}`);
+  }
+  return response.json();
 }
