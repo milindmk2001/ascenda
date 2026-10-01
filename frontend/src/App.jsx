@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getTracks, getGrades, resolveHubSubjects } from './services/api';
-import './App.css'; // or your preferred CSS import
+import CourseReader from './CourseReader'; // Adjust path if CourseReader is in another folder
+import './App.css';
 
 export default function App() {
   const [tracks, setTracks] = useState([]);
@@ -9,6 +10,7 @@ export default function App() {
   const [selectedGrade, setSelectedGrade] = useState('');
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [activeSubject, setActiveSubject] = useState(null);
 
   // 1. Fetch Dynamic Tracks & Deduplicated Grades from Supabase on mount
   useEffect(() => {
@@ -21,7 +23,7 @@ export default function App() {
 
         if (trackList && trackList.length > 0) {
           setTracks(trackList);
-          setSelectedTrack(trackList[0]); // Defaults to first track (e.g. CBSE)
+          setSelectedTrack(trackList[0]);
         }
 
         if (gradeList && gradeList.length > 0) {
@@ -52,9 +54,20 @@ export default function App() {
     }
   }, [selectedTrack, selectedGrade]);
 
+  // Handle course reader navigation
+  if (activeSubject) {
+    return (
+      <CourseReader
+        subject={activeSubject}
+        subjectId={activeSubject.id}
+        onBack={() => setActiveSubject(null)}
+      />
+    );
+  }
+
   return (
     <div className="app-container">
-      {/* HEADER / NAVBAR — Unwanted tabs removed */}
+      {/* HEADER / NAVBAR */}
       <header className="navbar">
         <div className="brand-logo">
           <span className="dot"></span> ASCENDA LEARNING PLATFORM
@@ -76,7 +89,6 @@ export default function App() {
 
           {/* DYNAMIC DROPDOWNS */}
           <div className="dropdown-group">
-            {/* Dynamic Track Selection */}
             <select
               value={selectedTrack}
               onChange={(e) => setSelectedTrack(e.target.value)}
@@ -89,7 +101,6 @@ export default function App() {
               ))}
             </select>
 
-            {/* Dynamic Grade Selection */}
             <select
               value={selectedGrade}
               onChange={(e) => setSelectedGrade(e.target.value)}
@@ -110,10 +121,23 @@ export default function App() {
             <p className="status-text">Loading curriculum...</p>
           ) : subjects.length > 0 ? (
             subjects.map((subject) => (
-              <div key={subject.id} className="subject-card">
+              <div
+                key={subject.id}
+                className="subject-card"
+                onClick={() => setActiveSubject(subject)}
+                style={{ cursor: 'pointer' }}
+              >
                 <span className="badge">{subject.discipline || 'CORE MODULE'}</span>
                 <h3>{subject.title || subject.subject_name}</h3>
-                <button className="card-action">Launch Reader &rarr;</button>
+                <button
+                  className="card-action"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveSubject(subject);
+                  }}
+                >
+                  Launch Reader &rarr;
+                </button>
               </div>
             ))
           ) : (
