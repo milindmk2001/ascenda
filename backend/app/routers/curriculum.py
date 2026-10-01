@@ -20,7 +20,7 @@ class CourseCardResponse(BaseModel):
     id:           str
     title:        str
     subject_code: str
-    subject_name: Optional[str] = None   # ← added: React uses this for card label
+    subject_name: Optional[str] = None
     discipline:   str
     video_url:    Optional[str] = None
 
@@ -75,7 +75,6 @@ def resolve_hub_courses(
         k in track_code.upper() for k in ["JEE", "NEET"]
     )
 
-    # Fix 2 — Minor Hardening: Explicit diagnostic logging for debugging parameter state transitions
     logger.info(f"resolve-hub called: track={track_code} grade={clean_grade} competitive={is_competitive}")
 
     try:
@@ -133,7 +132,34 @@ def resolve_hub_courses(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── ENDPOINT 2: curriculum tree ───────────────────────────────
+# ── ENDPOINT 2: dynamic tracks ───────────────────────────────
+
+@router.get("/tracks", response_model=List[str])
+def get_available_tracks(db: Session = Depends(get_db)):
+    """
+    Dynamically returns available examination tracks from Supabase (e.g. ['CBSE', 'IIT-JEE', 'NEET']).
+    """
+    try:
+        query = text("""
+            SELECT DISTINCT 
+                CASE 
+                    WHEN subject_code LIKE 'IITJEE%' THEN 'IIT-JEE'
+                    WHEN subject_code LIKE 'NEET%' THEN 'NEET'
+                    WHEN subject_code LIKE 'CBSE%' THEN 'CBSE'
+                    ELSE 'CBSE'
+                END AS track_name
+            FROM public.v_course_hub
+            WHERE subject_code IS NOT NULL
+            ORDER BY track_name ASC
+        """)
+        results = db.execute(query).scalars().all()
+        return list(results)
+    except Exception as e:
+        logger.error(f"Tracks fetch error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── ENDPOINT 3: curriculum tree ───────────────────────────────
 
 @router.get(
     "/subjects/{subject_id}/tree",
@@ -187,15 +213,20 @@ def get_curriculum_navigation_tree(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── ADMIN: grades ─────────────────────────────────────────────
+# ── ADMIN / PUBLIC: deduplicated grades ──────────────────────
+
 @router.get("/grades", response_model=List[GradeResponse])
-##@admin_router.get("/grades", response_model=List[GradeResponse])
 def get_all_grades(db: Session = Depends(get_db)):
+    """
+    Returns deduplicated grades ordered by grade level.
+    """
     try:
-        query   = text(
-            "SELECT id, name, level FROM grades "
-            "ORDER BY level ASC NULLS LAST"
-        )
+        query = text("""
+            SELECT DISTINCT ON (name, level)
+                id, name, level
+            FROM grades
+            ORDER BY level ASC NULLS LAST, name ASC
+        """)
         results = db.execute(query).mappings().all()
         return [
             {
@@ -210,9 +241,7 @@ def get_all_grades(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# In curriculum.py
-
-# ── ENDPOINT 3: fetch leaf content ───────────────────────────
+# ── ENDPOINT 5: fetch leaf content ───────────────────────────
 
 @router.get("/leaf/{leaf_id}")
 def get_leaf_content(
@@ -247,7 +276,6 @@ def get_leaf_content(
         ).mappings().first()
 
         if not row:
-            # content_id may be null — return leaf metadata only
             meta_query = text("""
                 SELECT
                     ct.id,
