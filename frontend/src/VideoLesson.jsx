@@ -11,13 +11,15 @@ export default function VisualLesson({ lessonPayload }) {
   const slides = lessonPayload?.slides || [];
   const currentSlide = slides[currentSlideIndex];
 
-  // Force-reset visibility on diagram SVG target elements on slide mounts/transitions
+  // Force-reset element visibility when swapping slides
   useEffect(() => {
     if (!svgContainerRef.current) return;
 
-    const hiddenElements = svgContainerRef.current.querySelectorAll('[id]');
-    hiddenElements.forEach((el) => {
-      if (el.id !== 'answer_reveal') {
+    const elements = svgContainerRef.current.querySelectorAll('[id]');
+    elements.forEach((el) => {
+      if (el.id === 'answer_reveal') {
+        el.style.opacity = '0';
+      } else {
         el.style.opacity = '1';
         el.style.visibility = 'visible';
       }
@@ -59,9 +61,11 @@ export default function VisualLesson({ lessonPayload }) {
 
     if (isCorrect) {
       setFeedback({ success: true, message: 'Correct!' });
-      // Reveal answer text element in the SVG if present
-      if (svgContainerRef.current && currentSlide.revealTarget) {
-        const revealEl = svgContainerRef.current.querySelector(`#${currentSlide.revealTarget}`);
+      
+      // Target and reveal hidden answer SVG elements (e.g. #answer_reveal)
+      const targetId = currentSlide.revealTarget || 'answer_reveal';
+      if (svgContainerRef.current) {
+        const revealEl = svgContainerRef.current.querySelector(`#${targetId}`);
         if (revealEl) {
           revealEl.style.opacity = '1';
           revealEl.style.visibility = 'visible';
@@ -74,7 +78,7 @@ export default function VisualLesson({ lessonPayload }) {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden">
-      {/* Top Header Controls */}
+      {/* Navigation Header */}
       <div className="flex items-center justify-between p-4 border-b border-slate-900 bg-slate-900/40">
         <div>
           <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest block">
@@ -105,9 +109,9 @@ export default function VisualLesson({ lessonPayload }) {
         </div>
       </div>
 
-      {/* Main Interactive Stage */}
+      {/* Primary Stage */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-3 overflow-hidden">
-        {/* Left / Top 2 Cols: SVG Visual Canvas */}
+        {/* SVG Diagram Canvas */}
         <div className="md:col-span-2 flex items-center justify-center p-6 bg-black border-r border-slate-900 overflow-hidden">
           {rawSvg ? (
             <div
@@ -120,12 +124,12 @@ export default function VisualLesson({ lessonPayload }) {
           )}
         </div>
 
-        {/* Right / Bottom Col: Narration & Interaction Sidebar */}
+        {/* Interactive Side Panel */}
         <div className="flex flex-col justify-between p-6 bg-slate-950 overflow-y-auto border-t md:border-t-0 border-slate-900">
           <div>
             <div className="border-b border-slate-800 pb-2 mb-4">
               <span className="text-[10px] font-mono uppercase text-slate-500 tracking-widest">
-                Explanation & Audio Narration
+                Lesson Narration & Prompts
               </span>
             </div>
             <p className="text-sm text-slate-300 leading-relaxed font-sans mb-6">
@@ -169,7 +173,7 @@ export default function VisualLesson({ lessonPayload }) {
             )}
           </div>
 
-          {/* Navigation Footer Action */}
+          {/* Slide Progress Controls */}
           <div className="pt-4 border-t border-slate-900">
             {currentSlideIndex < slides.length - 1 ? (
               <button
@@ -179,8 +183,8 @@ export default function VisualLesson({ lessonPayload }) {
                 Continue Slide →
               </button>
             ) : (
-              <div className="text-center text-xs font-mono text-emerald-400">
-                Lesson Completed
+              <div className="text-center text-xs font-mono text-emerald-400 font-bold">
+                ✓ Lesson Completed
               </div>
             )}
           </div>
