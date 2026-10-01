@@ -19,21 +19,33 @@ export async function fetchVisualLesson(nodeId) {
 
     const data = await response.json();
 
+    // 1. Direct normalized response { mode: 'visual', payload: {...} }
     if (data.mode === "visual" && data.payload) {
       return data;
     }
 
-    if (data.lesson_json || data.payload) {
-      const rawPayload = data.lesson_json || data.payload;
-      const parsedPayload = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
+    // 2. Database cached record from visual_lesson_cache table
+    let rawPayload = data.lesson_json || data.payload || data;
 
-      return {
-        mode: "visual",
-        payload: parsedPayload
-      };
+    // Unpack stringified JSON if stored as JSON string
+    if (typeof rawPayload === 'string') {
+      try {
+        rawPayload = JSON.parse(rawPayload);
+        if (typeof rawPayload === 'string') {
+          rawPayload = JSON.parse(rawPayload); // Handle double-stringified entries
+        }
+      } catch (e) {
+        console.warn("Error parsing lesson payload string:", e);
+      }
     }
 
-    return { mode: "classic", fallbackExplanation: "Reviewing layout structure..." };
+    // Extract payload if nested inside rawPayload object
+    const finalPayload = rawPayload.payload || rawPayload.lesson_json || rawPayload;
+
+    return {
+      mode: "visual",
+      payload: finalPayload
+    };
   } catch (err) {
     console.warn("fetchVisualLesson fallback active:", err);
     return { mode: "classic", fallbackExplanation: "Reviewing layout structure..." };
