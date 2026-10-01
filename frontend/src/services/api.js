@@ -22,10 +22,9 @@ export async function fetchVisualLesson(nodeId) {
 
     const data = await response.json();
 
-    // 1. Unwrap payload layer by layer
+    // 1. Fully unwrap nested payload objects or double-stringified JSON DB blobs
     let rawPayload = data.payload || data.lesson_json || data;
 
-    // Unpack stringified JSON if stored as JSON string (handles double-stringified DB entries)
     while (typeof rawPayload === 'string') {
       try {
         rawPayload = JSON.parse(rawPayload);
@@ -40,17 +39,22 @@ export async function fetchVisualLesson(nodeId) {
         : rawPayload.payload;
     }
 
-    // 2. Normalize slides array and SVG field names
+    // 2. Normalize slides array, clean control characters, and support field aliases
     if (rawPayload && Array.isArray(rawPayload.slides)) {
       rawPayload.slides = rawPayload.slides.map((slide) => {
-        const svgContent = slide.svgCache || slide.svgContent || slide.svg || '';
+        let rawSvg = slide.svgCache || slide.svgContent || slide.svg || slide.svg_cache || '';
+
+        // Unescape escaped newline characters (\n) that break browser SVG HTML parsing
+        if (typeof rawSvg === 'string') {
+          rawSvg = rawSvg.replace(/\\n/g, '\n').trim();
+        }
+
         return {
           ...slide,
-          // Support camelCase and snake_case variations across renderers
-          svgCache: svgContent,
-          svgContent: svgContent,
-          svg_cache: svgContent,
-          svg: svgContent,
+          svgCache: rawSvg,
+          svgContent: rawSvg,
+          svg_cache: rawSvg,
+          svg: rawSvg
         };
       });
     }
