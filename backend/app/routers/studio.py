@@ -8,12 +8,15 @@ from uuid import UUID
 router = APIRouter(prefix="/api/studio", tags=["Content Studio"])
 
 @router.post("/lesson", response_model=schemas.ModularLesson)
-def sync_lesson_to_db(lesson: schemas.ModularLessonCreate, db: Session = Depends(get_db)):
+def sync_lesson_to_db(
+    lesson: schemas.ModularLessonCreate,
+    db: Annotated[Session, Depends(get_db)],
+):
     db_lesson = models.ModularLesson(
         title=lesson.title,
-        physics_params=lesson.variables,
-        latex_formula=lesson.formula,
-        video_asset_id=lesson.video_asset_id # Matches the model field name
+        physics_params=lesson.physics_params,
+        latex_formula=lesson.latex_formula,
+        video_asset_id=lesson.video_asset_id,
     )
     db.add(db_lesson)
     db.commit()
@@ -22,8 +25,15 @@ def sync_lesson_to_db(lesson: schemas.ModularLessonCreate, db: Session = Depends
 
 # Used by Remotion or the frontend to fetch specific lesson data
 @router.get("/lesson/{lesson_id}", response_model=schemas.ModularLesson)
-def get_render_data(lesson_id: UUID, db: Session = Depends(get_db)):
-    lesson = db.query(models.ModularLesson).filter(models.ModularLesson.id == lesson_id).first()
+def get_render_data(
+    lesson_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+):
+    lesson = (
+        db.query(models.ModularLesson)
+        .filter(models.ModularLesson.id == lesson_id)
+        .first()
+    )
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson data not found")
     return lesson

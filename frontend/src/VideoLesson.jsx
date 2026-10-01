@@ -1,115 +1,90 @@
 import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import { interactWithVideoFrame } from './services/api';
 
-const VideoLesson = () => {
+export default function VideoLesson({ videoUrl }) {
   const videoRef = useRef(null);
-  const [isAsking, setIsAsking] = useState(false);
-  const [aiResponse, setAiResponse] = useState("");
-  const [svgElements, setSvgElements] = useState([]);
+  const [query, setQuery] = useState('');
+  const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleRaiseHand = async () => {
+  const handleAskTutor = async (e) => {
+    e.preventDefault();
+    if (!query.trim() || !videoRef.current) return;
+
+    const timestamp = videoRef.current.currentTime;
     setLoading(true);
-    videoRef.current.pause();
-    setIsAsking(true);
-    
-    const currentTime = videoRef.current.currentTime;
+    setResponse('');
 
     try {
-      const res = await fetch("https://ascenda-production.up.railway.app/api/interact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          timestamp: currentTime,
-          query: "What's happening in this frame?" 
-        }),
-      });
-      
-      const data = await res.json();
-      setAiResponse(data.explanation);
-      setSvgElements(data.visuals);
+      const data = await interactWithVideoFrame(timestamp, query);
+      setResponse(data.explanation || data.response || 'No explanation generated.');
     } catch (err) {
-      setAiResponse("Connection error. Make sure your Railway backend is live!");
+      console.error('Video interaction error:', err);
+      setResponse('*[Error connecting to Video AI Tutor service]*');
     } finally {
       setLoading(false);
     }
   };
 
-  const resume = () => {
-    setIsAsking(false);
-    setSvgElements([]);
-    setAiResponse("");
-    videoRef.current.play();
-  };
-
   return (
-    <div style={styles.container}>
-      <div style={styles.stage}>
-        <div style={styles.videoWrapper}>
-          <video 
-            ref={videoRef}
-            src="https://archive.org/download/electromagnetic-theory/01.%20Electrostatics%20-%20Coulomb%27s%20Law.mp4" 
-            style={styles.video}
-            controls={!isAsking}
-          />
+    <div className="flex h-[calc(100vh-64px)] w-full bg-slate-950 text-slate-100 overflow-hidden">
+      {/* LEFT: Video Player */}
+      <div className="flex-1 flex flex-col items-center justify-center p-6 border-r border-slate-900 bg-black">
+        <video
+          ref={videoRef}
+          controls
+          className="w-full max-h-[70vh] rounded-lg shadow-2xl border border-slate-800"
+          src={videoUrl}
+        />
+      </div>
 
-          <AnimatePresence>
-            {isAsking && (
-              <motion.svg 
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                style={styles.svgLayer}
-                viewBox="0 0 800 450"
-              >
-                {svgElements.map((el, i) => (
-                  el.type === 'arrow' ? (
-                    <motion.line
-                      key={i} x1={el.x1} y1={el.y1} x2={el.x2} y2={el.y2}
-                      stroke="#fbbf24" strokeWidth="6" strokeLinecap="round"
-                      initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
-                    />
-                  ) : (
-                    <motion.circle
-                      key={i} cx={el.cx} cy={el.cy} r={el.r}
-                      fill="transparent" stroke="#60a5fa" strokeWidth="4"
-                      initial={{ scale: 0 }} animate={{ scale: 1 }}
-                    />
-                  )
-                ))}
-              </motion.svg>
-            )}
-          </AnimatePresence>
+      {/* RIGHT: Interactive AI Frame Panel */}
+      <div className="w-96 flex flex-col bg-slate-950 p-4 border-l border-slate-900">
+        <div className="border-b border-slate-800 pb-2 mb-4">
+          <span className="text-[10px] font-mono uppercase text-emerald-400 tracking-widest">
+            Video Frame AI Assistant
+          </span>
         </div>
 
-        <div style={styles.uiPanel}>
-          {!isAsking ? (
-            <button onClick={handleRaiseHand} style={styles.askBtn}>
-              ✋ RAISE HAND TO ASK AI
-            </button>
+        {/* Response Box */}
+        <div className="flex-1 overflow-y-auto mb-4 p-3 bg-slate-900/40 rounded border border-slate-800 text-slate-300 text-sm">
+          {loading ? (
+            <div className="text-xs font-mono text-emerald-400 animate-pulse">
+              Analyzing video frame context...
+            </div>
+          ) : response ? (
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+              {response}
+            </ReactMarkdown>
           ) : (
-            <motion.div initial={{ y: 20 }} animate={{ y: 0 }} style={styles.responseBox}>
-              <h4 style={{color: '#fbbf24', marginTop: 0}}>AI TUTOR</h4>
-              <p style={{fontSize: '0.95rem', lineHeight: '1.5'}}>
-                {loading ? "Analyzing frame..." : aiResponse}
-              </p>
-              <button onClick={resume} style={styles.resumeBtn}>Got it, Continue Lesson</button>
-            </motion.div>
+            <span className="text-xs font-mono text-slate-600">
+              Pause the video at any point and ask a question about the current frame context.
+            </span>
           )}
         </div>
+
+        {/* Input Form */}
+        <form onSubmit={handleAskTutor} className="flex gap-2">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Ask about this moment..."
+            className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-mono"
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded text-xs font-mono text-white transition-colors"
+          >
+            Ask
+          </button>
+        </form>
       </div>
     </div>
   );
-};
-
-const styles = {
-  container: { padding: '40px 20px', backgroundColor: '#0f172a', minHeight: '100vh', color: 'white', fontFamily: 'Inter, sans-serif' },
-  stage: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' },
-  videoWrapper: { position: 'relative', width: '100%', maxWidth: '854px', borderRadius: '16px', overflow: 'hidden', border: '1px solid #334155' },
-  video: { width: '100%', display: 'block' },
-  svgLayer: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', backgroundColor: 'rgba(0,0,0,0.4)' },
-  uiPanel: { width: '100%', maxWidth: '854px' },
-  askBtn: { width: '100%', padding: '20px', borderRadius: '12px', border: 'none', backgroundColor: '#6366f1', color: 'white', fontWeight: 'bold', cursor: 'pointer' },
-  responseBox: { backgroundColor: '#1e293b', padding: '25px', borderRadius: '16px', borderLeft: '6px solid #fbbf24' },
-  resumeBtn: { marginTop: '15px', padding: '10px 25px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: 'white', cursor: 'pointer', fontWeight: 'bold' }
-};
-
-export default VideoLesson;
+}

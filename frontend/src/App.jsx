@@ -1,145 +1,197 @@
 import React, { useState, useEffect } from 'react';
-import UserLearningHub from './UserLearningHub'; 
 import CourseReader from './CourseReader';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://ascenda-dev.up.railway.app'; // Fallback to dev if not set
+import ContentStudio from './ContentStudio';
+import VideoLesson from './VideoLesson';
+import { fetchGrades, resolveHubSubjects } from './services/api';
 
 export default function App() {
-  const [selectedGradeName, setSelectedGradeName] = useState('6');
-  const [selectedTrack, setSelectedTrack] = useState('CBSE');
+  const [activeTab, setActiveTab] = useState('hub'); // 'hub', 'studio', 'video'
+  const [selectedTrack, setSelectedTrack] = useState('IIT-JEE');
+  const [selectedGrade, setSelectedGrade] = useState('Grade 11');
   const [grades, setGrades] = useState([]);
-  
-  // Restored states expected by UserLearningHub
   const [subjects, setSubjects] = useState([]);
+  const [selectedSubject, setSelectedSubject] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [activeCourse, setActiveCourse] = useState(null);
 
-  const isCompetitiveTrack = selectedTrack === 'IIT-JEE' || selectedTrack === 'NEET';
-
-  // Dropdown Fetch: Fetch all available structural grade levels
+  // Step 1: Fetch available grades on component mount
   useEffect(() => {
-    fetch(`${API_BASE}/api/curriculum/grades`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Grades database interface responded with an error.");
-        return res.json();
-      })
+    fetchGrades()
       .then((data) => {
-        if (Array.isArray(data)) {
+        if (Array.isArray(data) && data.length > 0) {
           setGrades(data);
+          setSelectedGrade(data[0].name || 'Grade 11');
         }
       })
-      .catch((err) => console.error("Error populating curriculum grades dropdown:", err));
+      .catch((err) => {
+        console.error('Failed to fetch grades:', err);
+      });
   }, []);
 
-  // Restored Course Fetch: Pulls hub course cards when filters change
+  // Step 2: Fetch hub subjects whenever selectedTrack or selectedGrade changes
   useEffect(() => {
-    setLoading(true);
-    
-    // Construct search params based on track and grade parameters
-    const params = new URLSearchParams({
-      track_code: selectedTrack,
-      grade_name: selectedGradeName
-    });
+    if (!selectedTrack || !selectedGrade) return;
 
-    fetch(`${API_BASE}/api/curriculum/resolve-hub?${params.toString()}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Hub resolution endpoint returned an operational error.");
-        return res.json();
-      })
+    setLoading(true);
+    resolveHubSubjects(selectedTrack, selectedGrade)
       .then((data) => {
-        if (Array.isArray(data)) {
-          setSubjects(data);
-        } else {
-          setSubjects([]);
-        }
+        setSubjects(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Error updating active hub courses:", err);
+        console.error('Failed to resolve hub subjects:', err);
         setSubjects([]);
         setLoading(false);
       });
-  }, [selectedTrack, selectedGradeName]);
+  }, [selectedTrack, selectedGrade]);
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-white antialiased font-sans">
-      {/* GLOBAL NAVBAR HEADER */}
-      <header className="flex items-center justify-between px-8 py-4 border-b border-slate-900 bg-[#090f1c]/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="h-7 w-7 rounded bg-emerald-500 flex items-center justify-center font-black text-xs text-slate-950 font-mono shadow-md shadow-emerald-500/20">
-            A
-          </div>
-          <span className="text-xs font-black tracking-widest uppercase font-mono bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-            Ascenda<span className="text-emerald-400">.pro</span>
-          </span>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      {/* Top Navigation Bar */}
+      <header className="h-16 border-b border-slate-900 bg-slate-950 px-6 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="h-3 w-3 bg-emerald-500 rounded-full animate-pulse" />
+          <h1 className="text-sm font-black font-mono uppercase tracking-widest text-slate-100">
+            Ascenda Learning Platform
+          </h1>
         </div>
 
-        {/* CONTROLS HUB */}
-        <div className="flex items-center gap-4">
-          {/* TRACK SELECTOR */}
-          <div className="flex flex-col">
-            <span className="text-[9px] font-mono uppercase text-slate-500 tracking-wider mb-1">Track</span>
-            <select
-              value={selectedTrack}
-              onChange={(e) => setSelectedTrack(e.target.value)}
-              className="bg-[#090f1c] border border-slate-800 text-xs rounded px-3 py-1.5 text-slate-300 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors"
-            >
-              <option value="CBSE" className="bg-[#0d1527]">CBSE Board</option>
-              <option value="IIT-JEE" className="bg-[#0d1527]">IIT-JEE</option>
-              <option value="NEET" className="bg-[#0d1527]">NEET</option>
-            </select>
-          </div>
-
-          {/* GRADE SELECTOR */}
-          <div 
-            className="flex flex-col transition-all duration-300"
-            style={{
-              opacity: isCompetitiveTrack ? 0.3 : 1,
-              pointerEvents: isCompetitiveTrack ? 'none' : 'auto'
+        <nav className="flex space-x-2">
+          <button
+            onClick={() => {
+              setActiveTab('hub');
+              setSelectedSubject(null);
             }}
+            className={`px-4 py-1.5 rounded text-xs font-mono uppercase transition-colors ${
+              activeTab === 'hub'
+                ? 'bg-slate-800 text-emerald-400 font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
           >
-            <span className="text-[9px] font-mono uppercase text-slate-500 tracking-wider mb-1">Grade</span>
-            <select
-              value={selectedGradeName}
-              onChange={(e) => setSelectedGradeName(e.target.value)}
-              className="bg-[#090f1c] border border-slate-800 text-xs rounded px-3 py-1.5 text-slate-300 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors min-w-[120px]"
-            >
-              {(() => {
-                const seenLevels = new Set();
-                return grades
-                  .filter(g => g.level !== null && g.level !== undefined)
-                  .sort((a, b) => Number(a.level) - Number(b.level))
-                  .filter(g => {
-                    if (seenLevels.has(g.level)) return false;
-                    seenLevels.add(g.level);
-                    return true;
-                  })
-                  .map((g) => (
-                    <option key={g.id} value={String(g.level)} className="bg-[#0d1527]">
-                      {g.name}
-                    </option>
-                  ));
-              })()}
-            </select>
-          </div>
-        </div>
+            Curriculum Hub
+          </button>
+          <button
+            onClick={() => setActiveTab('studio')}
+            className={`px-4 py-1.5 rounded text-xs font-mono uppercase transition-colors ${
+              activeTab === 'studio'
+                ? 'bg-slate-800 text-emerald-400 font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Authoring Studio
+          </button>
+          <button
+            onClick={() => setActiveTab('video')}
+            className={`px-4 py-1.5 rounded text-xs font-mono uppercase transition-colors ${
+              activeTab === 'video'
+                ? 'bg-slate-800 text-emerald-400 font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Video AI Player
+          </button>
+        </nav>
       </header>
 
-      {/* RENDER MAIN PANEL VIEWER */}
-      <main className="w-full">
-        {activeCourse ? (
-          <CourseReader 
-            subject={activeCourse} 
-            onBack={() => setActiveCourse(null)} 
-          />
-        ) : (
-          <UserLearningHub 
-            subjects={subjects}
-            loading={loading}
-            trackName={selectedTrack}
-            gradeName={selectedGradeName}
-            onCourseSelect={setActiveCourse}
-          />
+      {/* Main View Area */}
+      <main className="flex-1 overflow-hidden">
+        {activeTab === 'hub' && (
+          selectedSubject ? (
+            <CourseReader
+              subject={selectedSubject}
+              onBack={() => setSelectedSubject(null)}
+            />
+          ) : (
+            <div className="max-w-6xl mx-auto p-8 space-y-8">
+              {/* Controls Header */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-900 pb-6">
+                <div>
+                  <h2 className="text-xl font-black font-mono uppercase tracking-tight text-slate-100">
+                    Curriculum Index
+                  </h2>
+                  <p className="text-xs font-mono text-slate-500 mt-1">
+                    Select a target exam track and grade level to browse available subjects.
+                  </p>
+                </div>
+
+                <div className="flex space-x-4">
+                  {/* Track Selector */}
+                  <select
+                    value={selectedTrack}
+                    onChange={(e) => setSelectedTrack(e.target.value)}
+                    className="bg-slate-900 border border-slate-800 text-xs font-mono text-slate-200 px-3 py-2 rounded focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="IIT-JEE">IIT-JEE</option>
+                    <option value="NEET">NEET</option>
+                  </select>
+
+                  {/* Grade Selector */}
+                  <select
+                    value={selectedGrade}
+                    onChange={(e) => setSelectedGrade(e.target.value)}
+                    className="bg-slate-900 border border-slate-800 text-xs font-mono text-slate-200 px-3 py-2 rounded focus:outline-none focus:border-emerald-500"
+                  >
+                    {grades.length > 0 ? (
+                      grades.map((g) => (
+                        <option key={g.id || g.name} value={g.name}>
+                          {g.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Grade 11">Grade 11</option>
+                        <option value="Grade 12">Grade 12</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {/* Subject Cards Grid */}
+              {loading ? (
+                <div className="text-xs font-mono text-slate-500 animate-pulse text-center py-12">
+                  Resolving curriculum hub metadata...
+                </div>
+              ) : subjects.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {subjects.map((sub) => (
+                    <div
+                      key={sub.id}
+                      onClick={() => setSelectedSubject(sub)}
+                      className="p-6 bg-slate-900/50 border border-slate-900 hover:border-emerald-500/50 rounded-lg cursor-pointer transition-all hover:bg-slate-900 flex flex-col justify-between group"
+                    >
+                      <div>
+                        <span className="text-[10px] font-mono uppercase text-emerald-400 tracking-wider">
+                          {sub.meta_tag || 'Core Module'}
+                        </span>
+                        <h3 className="text-lg font-bold text-slate-200 group-hover:text-emerald-400 transition-colors mt-2">
+                          {sub.name}
+                        </h3>
+                      </div>
+                      <div className="mt-6 flex items-center justify-between text-xs font-mono text-slate-500">
+                        <span>Launch Reader</span>
+                        <span className="group-hover:translate-x-1 transition-transform">→</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-12 border border-dashed border-slate-900 rounded-lg text-center bg-slate-950">
+                  <div className="text-xs font-mono text-slate-500 uppercase font-bold">
+                    No active modules found
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-600 mt-1">
+                    Select a different grade or track configuration.
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        )}
+
+        {activeTab === 'studio' && <ContentStudio />}
+
+        {activeTab === 'video' && (
+          <VideoLesson videoUrl="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" />
         )}
       </main>
     </div>

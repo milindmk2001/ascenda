@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 # ── PYDANTIC APIDOC CONTRACT SCHEMAS ──────────────────────────
 
 class StateSnapshot(BaseModel):
-    visibleElements: List[str] = Field(default_factory=list)
+    visibleElements: list[str] = Field(default_factory=list)
     currentAnimationStep: int = 0
-    studentAnswer: Optional[str] = None
+    studentAnswer: str | None = None
 
 class TutorActionRequest(BaseModel):
     lessonId: str
@@ -26,14 +26,16 @@ class TutorActionRequest(BaseModel):
 
 class TutorActionResponse(BaseModel):
     action: str  # highlight_existing_elements | replay_animation | explain_with_voice_only | create_new_svg_slide | ask_student_question | give_hint
-    targets: List[str] = Field(default_factory=list)
+    targets: list[str] = Field(default_factory=list)
     narration: str
-    newSlide: Optional[Dict[str, Any]] = None
-
+    newSlide: dict[str, Any] | None = None
 # ── ROUTES ───────────────────────────────────────────────────
 
 @router.get("/{curriculum_node_id}")
-def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
+def get_visual_lesson(
+    curriculum_node_id: str, 
+    db: Session = Depends(get_db)
+):
     """
     Retrieves an orchestrated visual lesson node object from cache.
     Applies the validation criteria: validation_status != 'invalid'
@@ -43,7 +45,7 @@ def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
             SELECT lesson_id, lesson_json, schema_version, generation_status, validation_status
             FROM public.visual_lesson_cache
             WHERE curriculum_node_id = :node_id 
-              AND generation_status = 'complete'
+              AND generation_status IN ('completed', 'complete')
               AND validation_status != 'invalid'
             LIMIT 1
         """)
@@ -71,12 +73,14 @@ def get_visual_lesson(curriculum_node_id: str, db: Session = Depends(get_db)):
         )
 
 @router.post("/tutor-action", response_model=TutorActionResponse)
-def post_tutor_action(payload: TutorActionRequest, db: Session = Depends(get_db)):
+def post_tutor_action(
+    payload: TutorActionRequest, 
+    db: Session = Depends(get_db)
+):
     """
     Accepts contextual analytics state loops to dictate adaptive tutoring behaviors.
     """
     try:
-        # Log entry inside public.tutor_interaction_logs via standard execute threads
         log_query = text("""
             INSERT INTO public.tutor_interaction_logs (
                 lesson_id, slide_id, student_question, student_answer, interaction_type
@@ -99,7 +103,17 @@ def post_tutor_action(payload: TutorActionRequest, db: Session = Depends(get_db)
             narration="Let's look closely at the step before this. Do you notice how the terms keep growing?",
             newSlide=None
         )
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Error compiling socratic fallback intercept action: {e!s}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail="Socratic engine routing execution failure."
+        )
     except Exception as e:
         db.rollback()
-        logger.error(f"Error compiling socratic fallback intercept action: {str(e)}")
-        raise HTTPException(status_code=500, detail="Socratic engine routing execution failure.")
+        logger.error(f"Unexpected error compiling socratic fallback intercept action: {e!s}") # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail="Socratic engine routing execution failure."
+        )

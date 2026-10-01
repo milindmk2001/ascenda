@@ -25,26 +25,6 @@ CRITICAL FIX vs previous version:
   - Removed experimental response_modalities=["TEXT","AUDIO"] — not
     supported reliably via generate_content_stream on gemini-2.5-flash;
     that is a Live API feature and was a silent failure point.
-
-FIX vs previous version (this pass) — removed the hardcoded IITJEE Physics
-fallback that fired for every course with no matching prompt_templates row,
-which in practice means EVERY current CBSE course (prompt_template_id is
-NULL on all of them):
-  - fetch_leaf_context now also pulls gc.exam_type / gc.subject (the
-    board and subject the content was actually generated for — set by
-    chunker_generated_board.py as exam_type=<BOARD>, subject=<Subject>).
-  - embed_query() takes the real board/subject instead of hardcoding
-    "IITJEE Physics" into every embedding query.
-  - search_questions() — match_questions() is a JEE/NEET-style MCQ
-    question bank with no board-content equivalent populated yet, so
-    it's only called for known competitive-exam boards; for school
-    board leaves it's skipped (same no-op shape as semantic search
-    already is when embedding is None), rather than silently querying
-    'Physics' questions against a CBSE Maths topic.
-  - The fallback system_prompt/user_prompt are now built generically
-    from the leaf's real board/subject/grade, with the IITJEE phrasing
-    kept ONLY as the branch used when the content actually is a
-    competitive-exam board.
 """
 
 import os
@@ -71,13 +51,6 @@ SUPABASE_KEY   = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 GEN_MODEL   = "gemini-2.5-flash"
 EMBED_MODEL = "models/gemini-embedding-2"   # matches generated_embeddings table
 EMBED_DIMS  = 3072
-
-# Boards/exams that the legacy question bank (public.questions /
-# match_questions RPC) actually has content for. Everything else is
-# treated as school-board content, which has no equivalent question
-# bank populated yet — searching it with a hardcoded 'Physics' filter
-# was the original bug.
-COMPETITIVE_EXAM_BOARDS = {"IITJEE", "JEE", "NEET"}
 
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
@@ -120,8 +93,6 @@ def fetch_leaf_context(leaf_id: str) -> Optional[dict]:
                 gc.topic            AS gc_topic,
                 gc.unit             AS gc_unit,
                 gc.difficulty       AS gc_difficulty,
-                gc.exam_type        AS gc_exam_type,
-                gc.subject          AS gc_subject,
 
                 pt.template_text,
                 pt.system_prompt,
@@ -224,34 +195,14 @@ def save_explanation(leaf_id: str, template_id: Optional[str],
         db.close()
 
 
-# ── BOARD / SUBJECT RESOLUTION ─────────────────────────────────
-def resolve_board_and_subject(ctx: dict) -> tuple[str, str]:
-    """
-    The one source of truth for "what course is this leaf actually
-    part of" — derived from the generated_content row the leaf points
-    to (gc.exam_type / gc.subject, set by chunker_generated_board.py
-    as exam_type=<BOARD> e.g. 'CBSE', subject=<Subject> e.g.
-    'Mathematics'). Falls back to the unit/topic title text only if
-    generated_content metadata is missing, and finally to generic
-    placeholders — never to a different, unrelated course.
-    """
-    board   = ctx.get("gc_exam_type") or "General Board"
-    subject = ctx.get("gc_subject")   or ctx.get("topic_title") or "this subject"
-    return str(board), str(subject)
-
-
-def is_competitive_exam(board: str) -> bool:
-    return board.strip().upper() in COMPETITIVE_EXAM_BOARDS
-
-
 # ── STEP 3: EMBEDDING (correct model + dims) ──────────────────
-def embed_query(topic: str, unit: str, subject: str, board: str) -> Optional[list]:
+def embed_query(topic: str, unit: str) -> Optional[list]:
     if not gemini_client:
         return None
     try:
         response = gemini_client.models.embed_content(
             model=EMBED_MODEL,
-            contents=f"{topic} {unit} {subject} {board}",
+            contents=f"{topic} {unit} IITJEE Physics",
             config=types.EmbedContentConfig(
                 task_type="RETRIEVAL_QUERY",
                 output_dimensionality=EMBED_DIMS
@@ -308,17 +259,8 @@ def search_generated_content(embedding: Optional[list], content_type: str,
         db.close()
 
 
-def search_questions(embedding: Optional[list], subject: str, board: str,
-                      top_k: int, threshold: float) -> list:
-    """
-    match_questions() searches public.questions — a JEE/NEET-style MCQ
-    bank. There is currently no equivalent question bank populated for
-    school-board (CBSE etc.) content, so this is only called for known
-    competitive-exam boards. Calling it with a hardcoded 'Physics'
-    filter for every course (the original bug) silently returned
-    Physics MCQs into non-Physics, non-exam prompts.
-    """
-    if not embedding or not is_competitive_exam(board):
+def search_questions(embedding: Optional[list], top_k: int, threshold: float) -> list:
+    if not embedding:
         return []
     from app.database import SessionLocal
     db = SessionLocal()
@@ -329,7 +271,7 @@ def search_questions(embedding: Optional[list], subject: str, board: str,
             FROM match_questions(
                 (:vec)::vector,
                 :match_count,
-                :subject,
+                'Physics',
                 NULL,
                 NULL,
                 :threshold
@@ -337,7 +279,6 @@ def search_questions(embedding: Optional[list], subject: str, board: str,
         """), {
             "vec":         vec,
             "match_count": top_k,
-            "subject":     subject,
             "threshold":   threshold,
         }).mappings().all()
         return [dict(r) for r in rows]
@@ -357,7 +298,7 @@ def format_chunks(chunks: list) -> str:
 
 def format_questions(questions: list) -> str:
     if not questions:
-        return "No reference practice questions retrieved."
+        return "No reference JEE questions retrieved."
     lines = []
     for i, q in enumerate(questions, 1):
         lines.append(f"Q{i}. {q.get('question_final', '')}")
@@ -381,12 +322,9 @@ def format_list(items) -> str:
 # ── STEP 5: BUILD PROMPT (DB template, fallback if missing) ──
 def build_prompt(ctx: dict, theory: list, formulae: list,
                   examples: list, questions: list) -> tuple[str, str]:
-    board, subject = resolve_board_and_subject(ctx)
-    exam_mode = is_competitive_exam(board)
-
-    topic     = ctx.get("param_topic") or ctx.get("gc_topic") or ctx.get("topic_title") or "this topic"
-    unit      = ctx.get("param_unit")  or ctx.get("gc_unit")  or ctx.get("unit_title")  or "this unit"
-    diff      = ctx.get("difficulty")  or ctx.get("gc_difficulty") or ("IITJEE Standard" if exam_mode else "Standard")
+    topic     = ctx.get("param_topic") or ctx.get("gc_topic") or ctx.get("topic_title") or "Physics Concept"
+    unit      = ctx.get("param_unit")  or ctx.get("gc_unit")  or ctx.get("unit_title")  or "Unknown Unit"
+    diff      = ctx.get("difficulty")  or ctx.get("gc_difficulty") or "IITJEE Standard"
     weightage = ctx.get("weightage")   or "Not specified"
 
     key_formulae    = ctx.get("key_formulae")    or []
@@ -410,82 +348,45 @@ def build_prompt(ctx: dict, theory: list, formulae: list,
             logger.warning(f"Template placeholder missing ({e}) — using fallback")
 
     # ── Fallback if no DB template found ──────────────────────
-    # This is the path EVERY current CBSE leaf takes today
-    # (prompt_template_id is NULL for all of them) — so it has to be
-    # generic, not hardcoded to one exam/subject.
     leaf_type = ctx.get("leaf_type", "concept")
-
-    if exam_mode:
-        type_instructions = {
-            "concept": (
-                "Break down this physics concept using an active, engaging teaching voice. "
-                "Do NOT write a textbook chapter or a formal script. Speak exactly like a passionate instructor "
-                "standing at a physical blackboard tracking vectors. Use spoken transitions like: 'Look closely at this point...', "
-                "'Now, think about what happens to the energy...', 'Wait, let's pause and observe this transition.' "
-                "Keep sentences punchy and verbal."
-            ),
-            "solved_problems": (
-                "Walk through the derivation of these sample problems step-by-step out loud. "
-                "Explain the physical intuition *behind* choosing each equation before you write it down. "
-                "Do not just state formulas—teach the analytical strategy dynamically."
-            ),
-            "unsolved_problems": (
-                "Provide an interactive analytical blueprint for this challenge. Guide the student's mind through "
-                "how to isolate components, draw free-body constraints, and set up equilibrium conditions, talking "
-                "them through the setup like a personal tutor."
-            ),
-            "concept_test": (
-                "Deconstruct each option vector out loud. Teach *why* a option is a trap and *why* another "
-                "is mathematically or conceptually flawless. Break down the edge cases like an active professor."
-            ),
-        }
-        instruction = type_instructions.get(leaf_type, f"Explain this content for a {board} {subject} student.")
-        system_prompt = (
-            f"You are an elite female {board} {subject} professor explaining core concepts dynamically to an active student. "
-            "Adopt a direct, oral classroom teaching delivery style. Do not use overly formal textbook prose. "
-            "Keep your syntax tailored for verbal listening—meaning shorter clauses, emphatic focal points, "
-            "and clear structural transitions. Avoid chat check-ins or halting question checkpoints for this phase."
-        )
-    else:
-        type_instructions = {
-            "concept": (
-                f"Explain this {subject} concept in a warm, encouraging voice for a school student. "
-                "Do NOT write a textbook chapter. Speak like a friendly classroom teacher standing at the board. "
-                "Use spoken transitions like: 'Let's look at this together...', 'Now notice what happens here...', "
-                "'Think about it this way...'. Keep sentences short, clear, and age-appropriate."
-            ),
-            "worked_example": (
-                "Walk through this worked example step-by-step out loud, the way a teacher would at the board. "
-                "Explain *why* each step is taken before doing it, not just what the step is."
-            ),
-            "practice": (
-                "Guide the student through how to approach these practice questions without simply giving the "
-                "answer away — talk through the first step or two of reasoning like a tutor sitting beside them."
-            ),
-            "common_mistakes": (
-                "Point out, in a friendly non-judgmental tone, the mistakes students commonly make on this topic "
-                "and how to spot and avoid each one."
-            ),
-            "real_life": (
-                "Connect this topic to everyday examples a school student would recognize, keeping it concrete and relatable."
-            ),
-        }
-        instruction = type_instructions.get(leaf_type, f"Explain this {subject} content clearly for a school student.")
-        system_prompt = (
-            f"You are a warm, encouraging {board} {subject} teacher explaining concepts to a school student in "
-            f"{unit}. Adopt a direct, spoken classroom teaching style — not formal textbook prose. "
-            "Keep sentences short and clear, use concrete everyday examples, and keep the tone age-appropriate "
-            "and encouraging rather than exam-pressure-driven."
-        )
-
+    type_instructions = {
+        "concept": (
+            "Break down this physics concept using an active, engaging teaching voice. "
+            "Do NOT write a textbook chapter or a formal script. Speak exactly like a passionate instructor "
+            "standing at a physical blackboard tracking vectors. Use spoken transitions like: 'Look closely at this point...', "
+            "'Now, think about what happens to the energy...', 'Wait, let's pause and observe this transition.' "
+            "Keep sentences punchy and verbal."
+        ),
+        "solved_problems": (
+            "Walk through the derivation of these sample problems step-by-step out loud. "
+            "Explain the physical intuition *behind* choosing each equation before you write it down. "
+            "Do not just state formulas—teach the analytical strategy dynamically."
+        ),
+        "unsolved_problems": (
+            "Provide an interactive analytical blueprint for this challenge. Guide the student's mind through "
+            "how to isolate components, draw free-body constraints, and set up equilibrium conditions, talking "
+            "them through the setup like a personal tutor."
+        ),
+        "concept_test": (
+            "Deconstruct each option vector out loud. Teach *why* a option is a trap and *why* another "
+            "is mathematically or conceptually flawless. Break down the edge cases like an active professor."
+        ),
+    }
+    instruction = type_instructions.get(leaf_type, "Explain this content for a JEE student.")
     raw_content = ctx.get("raw_content", "")
 
     user_prompt = (
-        f"Board: {board}\nSubject: {subject}\nTopic: {topic}\nUnit: {unit}\nDifficulty: {diff}\n\n"
+        f"Topic: {topic}\nUnit: {unit}\nDifficulty: {diff}\n\n"
         f"INSTRUCTION: {instruction}\n\n"
         f"REFERENCE CONTENT:\n{raw_content[:3000]}\n\n"
         f"KEY FORMULAE:\n{format_list(key_formulae)}\n\n"
         f"COMMON MISTAKES:\n{format_list(common_mistakes)}"
+    )
+    system_prompt = (
+        "You are an elite female IIT JEE Physics professor explaining core mechanics dynamically to an active student. "
+        "Adopt a direct, oral classroom teaching delivery style. Do not use overly formal textbook prose. "
+        "Keep your syntax tailored for verbal listening—meaning shorter clauses, emphatic focal points, "
+        "and clear structural transitions. Avoid chat check-ins or halting question checkpoints for this phase."
     )
     return system_prompt, user_prompt
 
@@ -545,13 +446,12 @@ async def stream_explanation_endpoint(request: ExplanationRequest):
 
     template_id = str(ctx["prompt_template_id"]) if ctx.get("prompt_template_id") else None
     param_id    = str(ctx["param_id"])            if ctx.get("param_id")            else None
-    board, subject = resolve_board_and_subject(ctx)
     topic       = ctx.get("param_topic") or ctx.get("gc_topic") or ctx.get("topic_title") or "Unknown"
     unit        = ctx.get("param_unit")  or ctx.get("gc_unit")  or ctx.get("unit_title")  or "Unknown"
     leaf_type   = ctx.get("leaf_type", "concept")
 
     logger.info(
-        f"Stream request: leaf={leaf_id} board={board} subject={subject} topic={topic} type={leaf_type} "
+        f"Stream request: leaf={leaf_id} topic={topic} type={leaf_type} "
         f"template={'found' if template_id else 'MISSING'} "
         f"params={'found' if param_id else 'MISSING'}"
     )
@@ -572,11 +472,11 @@ async def stream_explanation_endpoint(request: ExplanationRequest):
     top_k_questions = ctx.get("top_k_questions") or 4
     threshold       = ctx.get("similarity_threshold") or 0.25
 
-    embedding = embed_query(topic, unit, subject, board)
+    embedding = embed_query(topic, unit)
     theory    = search_generated_content(embedding, "theory", top_k_theory, threshold)
     formulae  = search_generated_content(embedding, "formulae", 1, threshold)
     examples  = search_generated_content(embedding, "worked_example", top_k_examples, threshold)
-    questions = search_questions(embedding, subject, board, top_k_questions, threshold)
+    questions = search_questions(embedding, top_k_questions, threshold)
 
     logger.info(f"Semantic search: theory={len(theory)} formulae={len(formulae)} "
                 f"examples={len(examples)} questions={len(questions)}")

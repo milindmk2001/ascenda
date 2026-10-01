@@ -3,9 +3,12 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import VisualLesson from './components/VisualLesson'; // Correct component path align
-
-const API_BASE = "https://ascenda-dev.up.railway.app";
+import VisualLesson from './components/VisualLesson';
+import { 
+  fetchSubjectTree, 
+  fetchVisualLesson, 
+  fetchAiStreamResponse 
+} from './services/api';
 
 export default function CourseReader({ subject, onBack }) {
   const [treeNodes, setTreeNodes] = useState([]);
@@ -17,32 +20,28 @@ export default function CourseReader({ subject, onBack }) {
   const [loadingAI, setLoadingAI] = useState(false);
   const [expandedNodes, setExpandedNodes] = useState({});
   
-  // Newly mapped states for orchestrating the v1 visual cache layer
+  // States for visual lesson specs
   const [visualLessonPayload, setVisualLessonPayload] = useState(null);
   const [lessonLoading, setLessonLoading] = useState(false);
   const [legacyExplanation, setLegacyExplanation] = useState('');
 
-  // Step 1: Fetch the whole structural navigation tree for the current subject
+  // Step 1: Fetch structural navigation tree for the selected subject
   useEffect(() => {
     if (!subject?.id) return;
     
     setLoadingTree(true);
-    fetch(`${API_BASE}/api/curriculum/subjects/${subject.id}/tree`)
-      .then(res => {
-        if (!res.ok) throw new Error("Server tree interface responded with an error status.");
-        return res.json();
-      })
-      .then(data => {
+    fetchSubjectTree(subject.id)
+      .then((data) => {
         if (Array.isArray(data)) {
           setTreeNodes(data);
         } else {
-          console.error("Malformed payload received at Tree Endpoint. Expected Array:", data);
+          console.error("Malformed payload received from Tree Endpoint. Expected Array:", data);
           setTreeNodes([]);
         }
         setLoadingTree(false);
       })
-      .catch(err => {
-        console.error("Error ingestion downstream tree:", err);
+      .catch((err) => {
+        console.error("Error loading subject tree:", err);
         setTreeNodes([]);
         setLoadingTree(false);
       });
@@ -58,15 +57,14 @@ export default function CourseReader({ subject, onBack }) {
     setLegacyExplanation('');
     setLessonLoading(true);
 
-    fetch(`${API_BASE}/api/visual-lesson/${selectedLeafId}`)
-      .then((res) => res.json())
+    fetchVisualLesson(selectedLeafId)
       .then((data) => {
         if (data.mode === "visual" && data.payload) {
           // Cache verified, feed structural spec straight to the canvas
           setVisualLessonPayload(data.payload);
           setCoreContent("VISUAL_MODE_ACTIVE");
         } else {
-          // Clean fallback handling for markdown nodes
+          // Fallback handling for markdown text nodes
           setVisualLessonPayload(null);
           setLegacyExplanation(data.fallbackExplanation || "Reviewing material...");
           setCoreContent("");
@@ -77,7 +75,7 @@ export default function CourseReader({ subject, onBack }) {
         setLessonLoading(false);
       })
       .catch((err) => {
-        console.error("Error updating canvas orchestrator logic payload:", err);
+        console.error("Error fetching lesson content:", err);
         setVisualLessonPayload(null);
         setLessonLoading(false);
       });
@@ -86,14 +84,7 @@ export default function CourseReader({ subject, onBack }) {
   const triggerAiStream = async (leafId) => {
     setLoadingAI(true);
     try {
-      const response = await fetch(`${API_BASE}/api/ai_tutor/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          leaf_id: leafId,
-          subject_meta: subject?.meta_tag || "general"
-        })
-      });
+      const response = await fetchAiStreamResponse(leafId, subject?.meta_tag);
 
       if (!response.body) return;
       const reader = response.body.getReader();
@@ -108,14 +99,14 @@ export default function CourseReader({ subject, onBack }) {
         if (done) break;
         
         const token = decoder.decode(value, { stream: true });
-        setAiExplanation(prev => prev + token);
+        setAiExplanation((prev) => prev + token);
 
         if ('speechSynthesis' in window) {
           const cleanToken = token.replace(/[*#$`\-]/g, " ").trim();
           if (cleanToken) {
             const utterance = new SpeechSynthesisUtterance(cleanToken);
             let voices = window.speechSynthesis.getVoices();
-            const femaleVoice = voices.find(v => 
+            const femaleVoice = voices.find((v) => 
               v.name.includes("Google US English Female") || 
               v.name.includes("Samantha") || 
               v.name.includes("Zira") ||
@@ -130,14 +121,14 @@ export default function CourseReader({ subject, onBack }) {
         }
       }
     } catch (e) {
-      setAiExplanation(prev => prev + "\n\n*[AI Tutor Streaming Pipeline Disconnected]*");
+      setAiExplanation((prev) => prev + "\n\n*[AI Tutor Streaming Pipeline Disconnected]*");
     } finally {
       setLoadingAI(false);
     }
   };
 
   const toggleNode = (id) => {
-    setExpandedNodes(prev => ({ ...prev, [id]: !prev[id] }));
+    setExpandedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const renderTree = (nodes) => {
@@ -145,7 +136,7 @@ export default function CourseReader({ subject, onBack }) {
 
     return (
       <ul className="pl-4 border-l border-slate-800 space-y-1 font-mono text-xs text-slate-400">
-        {nodes.map(node => {
+        {nodes.map((node) => {
           const hasChildren = node.children && node.children.length > 0;
           const isExpanded = expandedNodes[node.id];
 
@@ -153,7 +144,9 @@ export default function CourseReader({ subject, onBack }) {
             <li key={node.id} className="py-1">
               <div 
                 onClick={() => hasChildren ? toggleNode(node.id) : setSelectedLeafId(node.id)}
-                className={`flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-slate-900 transition-all ${selectedLeafId === node.id ? 'text-emerald-400 bg-slate-900 font-bold' : ''}`}
+                className={`flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-slate-900 transition-all ${
+                  selectedLeafId === node.id ? 'text-emerald-400 bg-slate-900 font-bold' : ''
+                }`}
               >
                 {hasChildren && (<span>{isExpanded ? '▼' : '►'}</span>)}
                 <span className={node.is_leaf ? "text-slate-300" : "text-slate-500 font-bold uppercase tracking-wide text-[10px]"}>
