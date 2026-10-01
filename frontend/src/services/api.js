@@ -1,6 +1,7 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const rawBase = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE_URL = rawBase ? `${rawBase.replace(/\/$/, '')}/api` : '/api';
 
-// Existing Curriculum & Visual Lesson API Functions
+// Curriculum & Visual Lesson API Functions
 export async function fetchSubjectTree(subjectId) {
   const response = await fetch(`${API_BASE_URL}/curriculum/subjects/${subjectId}/tree`);
   if (!response.ok) {
@@ -48,9 +49,9 @@ export async function fetchAiStreamResponse(nodeId, metaTag) {
   });
 }
 
-// Fixed Hub Endpoints
+// Hub Navigation Endpoints
 export async function getTracks() {
-  const response = await fetch(`${API_BASE_URL}/tracks`);
+  const response = await fetch(`${API_BASE_URL}/curriculum/tracks`);
   if (!response.ok) {
     throw new Error(`Failed to fetch tracks: ${response.status}`);
   }
@@ -58,15 +59,15 @@ export async function getTracks() {
 }
 
 export async function getGrades(trackId) {
-  const response = await fetch(`${API_BASE_URL}/grades?track_id=${encodeURIComponent(trackId || '')}`);
+  const response = await fetch(`${API_BASE_URL}/curriculum/grades?track_id=${encodeURIComponent(trackId || '')}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch grades: ${response.status}`);
   }
   return response.json();
 }
 
-export async function resolveHubSubjects(trackId, gradeId) {
-  const response = await fetch(`${API_BASE_URL}/subjects?track_id=${encodeURIComponent(trackId || '')}&grade_id=${encodeURIComponent(gradeId || '')}`);
+export async function resolveHubSubjects(trackCode, gradeName) {
+  const response = await fetch(`${API_BASE_URL}/curriculum/resolve-hub?track_code=${encodeURIComponent(trackCode || '')}&grade_name=${encodeURIComponent(gradeName || '')}`);
   if (!response.ok) {
     throw new Error(`Failed to resolve subjects: ${response.status}`);
   }
