@@ -1,3 +1,5 @@
+// src/services/api.js
+
 const rawBase = import.meta.env.VITE_API_BASE_URL || '';
 const API_BASE_URL = rawBase ? `${rawBase.replace(/\/$/, '')}/api` : '/api';
 
@@ -22,7 +24,7 @@ export async function fetchVisualLesson(nodeId) {
 
     const data = await response.json();
 
-    // 1. Fully unwrap nested payload objects or double-stringified JSON DB blobs
+    // 1. Unwrap payload structure
     let rawPayload = data.payload || data.lesson_json || data;
 
     while (typeof rawPayload === 'string') {
@@ -39,14 +41,17 @@ export async function fetchVisualLesson(nodeId) {
         : rawPayload.payload;
     }
 
-    // 2. Normalize slides array, clean control characters, and support field aliases
+    // 2. Clean SVG string artifacts (non-breaking spaces & escaped newlines)
     if (rawPayload && Array.isArray(rawPayload.slides)) {
       rawPayload.slides = rawPayload.slides.map((slide) => {
         let rawSvg = slide.svgCache || slide.svgContent || slide.svg || slide.svg_cache || '';
 
-        // Unescape escaped newline characters (\n) that break browser SVG HTML parsing
         if (typeof rawSvg === 'string') {
-          rawSvg = rawSvg.replace(/\\n/g, '\n').trim();
+          rawSvg = rawSvg
+            .replace(/\\n/g, '\n')           // Convert escaped \n to real newlines
+            .replace(/\u00a0/g, ' ')         // Replace non-breaking spaces with standard spaces
+            .replace(/[\r\n\t]+/g, ' ')     // Flatten excess whitespace
+            .trim();
         }
 
         return {
