@@ -4,47 +4,8 @@ ai_tutor.py
 Streams Gemini AI explanations using:
   1. public.prompt_templates  — system prompt + template text
   2. public.prompt_parameters — topic metadata (joined via curriculum_tree_id)
-  3. Supabase RPC functions   — semantic search (optional — only if
-                                 SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY set)
+  3. Supabase RPC functions   — semantic search (optional — executed via SQLAlchemy)
   4. public.explanations      — cache layer
-
-CRITICAL FIX vs previous version:
-  - Database lookups (curriculum_tree, prompt_templates, prompt_parameters,
-    explanations) use SQLAlchemy SessionLocal — the SAME working connection
-    as curriculum.py. They do NOT depend on the supabase-py REST client.
-  - Only semantic search (RPC calls) requires the supabase-py client.
-    If that client is unavailable, semantic search is skipped gracefully
-    and the fallback prompt still works — it no longer causes a 404.
-  - Column names corrected to match actual schema:
-      curriculum_tree.prompt_template_id  (no prompt_param_id column exists)
-      prompt_parameters.curriculum_tree_id (join key, not ct.prompt_param_id)
-      explanations.curriculum_tree_id / prompt_template_id /
-        prompt_parameter_id / explanation_text / is_cached / cache_version
-  - Embedding model corrected to models/gemini-embedding-2 @ 3072 dims
-    (matches what generated_embeddings/question_embeddings were built with).
-  - Removed experimental response_modalities=["TEXT","AUDIO"] — not
-    supported reliably via generate_content_stream on gemini-2.5-flash;
-    that is a Live API feature and was a silent failure point.
-
-FIX vs previous version (this pass) — removed the hardcoded IITJEE Physics
-fallback that fired for every course with no matching prompt_templates row,
-which in practice means EVERY current CBSE course (prompt_template_id is
-NULL on all of them):
-  - fetch_leaf_context now also pulls gc.exam_type / gc.subject (the
-    board and subject the content was actually generated for — set by
-    chunker_generated_board.py as exam_type=<BOARD>, subject=<Subject>).
-  - embed_query() takes the real board/subject instead of hardcoding
-    "IITJEE Physics" into every embedding query.
-  - search_questions() — match_questions() is a JEE/NEET-style MCQ
-    question bank with no board-content equivalent populated yet, so
-    it's only called for known competitive-exam boards; for school
-    board leaves it's skipped (same no-op shape as semantic search
-    already is when embedding is None), rather than silently querying
-    'Physics' questions against a CBSE Maths topic.
-  - The fallback system_prompt/user_prompt are now built generically
-    from the leaf's real board/subject/grade, with the IITJEE phrasing
-    kept ONLY as the branch used when the content actually is a
-    competitive-exam board.
 """
 
 import os
@@ -65,26 +26,14 @@ logger = logging.getLogger(__name__)
 
 # ── CONFIG ────────────────────────────────────────────────────
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-SUPABASE_URL   = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY   = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
 GEN_MODEL   = "gemini-2.5-flash"
 EMBED_MODEL = "models/gemini-embedding-2"   # matches generated_embeddings table
 EMBED_DIMS  = 3072
 
-# Boards/exams that the legacy question bank (public.questions /
-# match_questions RPC) actually has content for. Everything else is
-# treated as school-board content, which has no equivalent question
-# bank populated yet — searching it with a hardcoded 'Physics' filter
-# was the original bug.
 COMPETITIVE_EXAM_BOARDS = {"IITJEE", "JEE", "NEET"}
 
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-
-# NOTE: supabase-py REST client is no longer needed anywhere in this file.
-# All database access — including semantic search RPC calls — goes
-# through SQLAlchemy / DATABASE_URL, which is already configured on
-# Railway. SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not required.
 
 
 # ── REQUEST SCHEMA ────────────────────────────────────────────
@@ -96,12 +45,8 @@ class ExplanationRequest(BaseModel):
         populate_by_name = True
 
 
-# ── STEP 1: FETCH LEAF + TEMPLATE + PARAMETERS (SQLAlchemy only) ──
+# ── STEP 1: FETCH LEAF + TEMPLATE + PARAMETERS ────────────────
 def fetch_leaf_context(leaf_id: str) -> Optional[dict]:
-    """
-    Uses SQLAlchemy SessionLocal exclusively — same connection pattern
-    as curriculum.py. Never depends on the supabase REST client.
-    """
     from app.database import SessionLocal
     db = SessionLocal()
     try:
@@ -165,7 +110,7 @@ def fetch_leaf_context(leaf_id: str) -> Optional[dict]:
         db.close()
 
 
-# ── STEP 2: CACHE LOOKUP (correct explanations schema) ────────
+# ── STEP 2: CACHE LOOKUP ──────────────────────────────────────
 def get_cached_explanation(leaf_id: str) -> Optional[str]:
     from app.database import SessionLocal
     db = SessionLocal()
@@ -226,15 +171,6 @@ def save_explanation(leaf_id: str, template_id: Optional[str],
 
 # ── BOARD / SUBJECT RESOLUTION ─────────────────────────────────
 def resolve_board_and_subject(ctx: dict) -> tuple[str, str]:
-    """
-    The one source of truth for "what course is this leaf actually
-    part of" — derived from the generated_content row the leaf points
-    to (gc.exam_type / gc.subject, set by chunker_generated_board.py
-    as exam_type=<BOARD> e.g. 'CBSE', subject=<Subject> e.g.
-    'Mathematics'). Falls back to the unit/topic title text only if
-    generated_content metadata is missing, and finally to generic
-    placeholders — never to a different, unrelated course.
-    """
     board   = ctx.get("gc_exam_type") or "General Board"
     subject = ctx.get("gc_subject")   or ctx.get("topic_title") or "this subject"
     return str(board), str(subject)
@@ -244,7 +180,7 @@ def is_competitive_exam(board: str) -> bool:
     return board.strip().upper() in COMPETITIVE_EXAM_BOARDS
 
 
-# ── STEP 3: EMBEDDING (correct model + dims) ──────────────────
+# ── STEP 3: EMBEDDING ──────────────────────────────────────────
 def embed_query(topic: str, unit: str, subject: str, board: str) -> Optional[list]:
     if not gemini_client:
         return None
@@ -264,15 +200,7 @@ def embed_query(topic: str, unit: str, subject: str, board: str) -> Optional[lis
 
 
 # ── STEP 4: SEMANTIC SEARCH ────────────────────────────────────
-# Calls the Postgres RPC functions DIRECTLY via the existing
-# DATABASE_URL / SQLAlchemy connection — no supabase-py REST client
-# and no SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY required at all.
-# match_generated_content / match_questions are plain SQL functions
-# already created in Supabase — calling them via SQL is identical
-# to calling them via supabase.rpc(), just over the existing
-# Postgres connection instead of REST.
 def _embedding_to_pgvector(embedding: list) -> str:
-    """Format a Python float list as a pgvector literal string."""
     return "[" + ",".join(str(v) for v in embedding) + "]"
 
 
@@ -289,10 +217,10 @@ def search_generated_content(embedding: Optional[list], content_type: str,
             FROM match_generated_content(
                 (:vec)::vector,
                 :match_count,
-                NULL,
-                NULL,
-                :content_type,
-                :threshold
+                CAST(NULL AS text),
+                CAST(NULL AS text),
+                CAST(:content_type AS text),
+                CAST(:threshold AS numeric)
             )
         """), {
             "vec":          vec,
@@ -310,14 +238,6 @@ def search_generated_content(embedding: Optional[list], content_type: str,
 
 def search_questions(embedding: Optional[list], subject: str, board: str,
                       top_k: int, threshold: float) -> list:
-    """
-    match_questions() searches public.questions — a JEE/NEET-style MCQ
-    bank. There is currently no equivalent question bank populated for
-    school-board (CBSE etc.) content, so this is only called for known
-    competitive-exam boards. Calling it with a hardcoded 'Physics'
-    filter for every course (the original bug) silently returned
-    Physics MCQs into non-Physics, non-exam prompts.
-    """
     if not embedding or not is_competitive_exam(board):
         return []
     from app.database import SessionLocal
@@ -329,10 +249,10 @@ def search_questions(embedding: Optional[list], subject: str, board: str,
             FROM match_questions(
                 (:vec)::vector,
                 :match_count,
-                :subject,
-                NULL,
-                NULL,
-                :threshold
+                CAST(:subject AS text),
+                CAST(NULL AS text),
+                CAST(NULL AS text),
+                CAST(:threshold AS numeric)
             )
         """), {
             "vec":         vec,
@@ -378,7 +298,7 @@ def format_list(items) -> str:
     return str(items)
 
 
-# ── STEP 5: BUILD PROMPT (DB template, fallback if missing) ──
+# ── STEP 5: BUILD PROMPT ───────────────────────────────────────
 def build_prompt(ctx: dict, theory: list, formulae: list,
                   examples: list, questions: list) -> tuple[str, str]:
     board, subject = resolve_board_and_subject(ctx)
@@ -409,10 +329,6 @@ def build_prompt(ctx: dict, theory: list, formulae: list,
         except KeyError as e:
             logger.warning(f"Template placeholder missing ({e}) — using fallback")
 
-    # ── Fallback if no DB template found ──────────────────────
-    # This is the path EVERY current CBSE leaf takes today
-    # (prompt_template_id is NULL for all of them) — so it has to be
-    # generic, not hardcoded to one exam/subject.
     leaf_type = ctx.get("leaf_type", "concept")
 
     if exam_mode:
@@ -478,12 +394,14 @@ def build_prompt(ctx: dict, theory: list, formulae: list,
             "and encouraging rather than exam-pressure-driven."
         )
 
-    raw_content = ctx.get("raw_content", "")
+    # SAFE SLICING GUARANTEED AGAINST NONE
+    raw_content = ctx.get("raw_content") or ""
+    safe_content = raw_content[:3000]
 
     user_prompt = (
         f"Board: {board}\nSubject: {subject}\nTopic: {topic}\nUnit: {unit}\nDifficulty: {diff}\n\n"
         f"INSTRUCTION: {instruction}\n\n"
-        f"REFERENCE CONTENT:\n{raw_content[:3000]}\n\n"
+        f"REFERENCE CONTENT:\n{safe_content}\n\n"
         f"KEY FORMULAE:\n{format_list(key_formulae)}\n\n"
         f"COMMON MISTAKES:\n{format_list(common_mistakes)}"
     )
@@ -507,10 +425,6 @@ async def stream_gemini(system_prompt: str, user_prompt: str, leaf_id: str,
                 system_instruction=system_prompt or None,
                 temperature=0.5,
                 max_output_tokens=2000,
-                # NOTE: response_modalities=["TEXT","AUDIO"] removed —
-                # not supported via generate_content_stream on this model;
-                # that requires the Gemini Live API. Add back only after
-                # testing against the Live API endpoint separately.
             )
         )
         for chunk in response:
@@ -566,7 +480,6 @@ async def stream_explanation_endpoint(request: ExplanationRequest):
             headers={"X-Cache": "HIT", "X-Topic": topic}
         )
 
-    # Semantic search (skipped gracefully if supabase REST client unavailable)
     top_k_theory    = ctx.get("top_k_theory")    or 3
     top_k_examples  = ctx.get("top_k_examples")  or 3
     top_k_questions = ctx.get("top_k_questions") or 4
