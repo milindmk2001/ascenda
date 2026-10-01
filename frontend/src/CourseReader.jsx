@@ -10,13 +10,57 @@ import {
   fetchAiStreamResponse 
 } from './services/api';
 
+/**
+ * Transforms flat API nodes from /api/curriculum/subjects/{id}/tree
+ * into a hierarchically sorted Chapter -> Children tree.
+ */
+function buildSyllabusTree(flatNodes) {
+  if (!Array.isArray(flatNodes) || flatNodes.length === 0) return [];
+
+  const parentMap = new Map();
+  const topLevelNodes = [];
+
+  // Pass 1: Identify parents / root containers
+  flatNodes.forEach((node) => {
+    if (!node.parent_id || node.level === 1 || !node.is_leaf) {
+      const parentObj = { ...node, children: [] };
+      parentMap.set(node.id, parentObj);
+      topLevelNodes.push(parentObj);
+    }
+  });
+
+  // Pass 2: Attach children under their designated parent_id
+  flatNodes.forEach((node) => {
+    if (node.parent_id && parentMap.has(node.parent_id)) {
+      parentMap.get(node.parent_id).children.push({ ...node });
+    } else if (node.is_leaf && (!node.parent_id || !parentMap.has(node.parent_id))) {
+      // Fallback for root-level unparented leaf nodes
+      topLevelNodes.push({ ...node, children: [] });
+    }
+  });
+
+  // Pass 3: Sort top-level chapters by unit_number, then display_order
+  topLevelNodes.sort((a, b) => {
+    if (a.unit_number !== b.unit_number) return (a.unit_number || 0) - (b.unit_number || 0);
+    return (a.display_order || 0) - (b.display_order || 0);
+  });
+
+  // Pass 4: Sort leaf children inside each chapter strictly by display_order
+  topLevelNodes.forEach((parent) => {
+    if (parent.children && parent.children.length > 0) {
+      parent.children.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+    }
+  });
+
+  return topLevelNodes;
+}
+
 export default function CourseReader({ subject, onBack }) {
   const [treeNodes, setTreeNodes] = useState([]);
   const [selectedLeafId, setSelectedLeafId] = useState(null);
   const [coreContent, setCoreContent] = useState('');
   const [aiExplanation, setAiExplanation] = useState('');
   const [loadingTree, setLoadingTree] = useState(false);
-  const [loadingCore, setLoadingCore] = useState(false);
   const [loadingAI, setLoadingAI] = useState(false);
   const [expandedNodes, setExpandedNodes] = useState({});
   
@@ -25,7 +69,7 @@ export default function CourseReader({ subject, onBack }) {
   const [lessonLoading, setLessonLoading] = useState(false);
   const [legacyExplanation, setLegacyExplanation] = useState('');
 
-  // Step 1: Fetch structural navigation tree for the selected subject
+  // Step 1: Fetch and structure the navigation tree for the selected subject
   useEffect(() => {
     if (!subject?.id) return;
     
@@ -33,7 +77,8 @@ export default function CourseReader({ subject, onBack }) {
     fetchSubjectTree(subject.id)
       .then((data) => {
         if (Array.isArray(data)) {
-          setTreeNodes(data);
+          const structuredTree = buildSyllabusTree(data);
+          setTreeNodes(structuredTree);
         } else {
           console.error("Malformed payload received from Tree Endpoint. Expected Array:", data);
           setTreeNodes([]);
@@ -59,14 +104,14 @@ export default function CourseReader({ subject, onBack }) {
 
     fetchVisualLesson(selectedLeafId)
       .then((data) => {
-        if (data.mode === "visual" && data.payload) {
+        if (data && data.mode === "visual" && data.payload) {
           // Cache verified, feed structural spec straight to the canvas
           setVisualLessonPayload(data.payload);
           setCoreContent("VISUAL_MODE_ACTIVE");
         } else {
           // Fallback handling for markdown text nodes
           setVisualLessonPayload(null);
-          setLegacyExplanation(data.fallbackExplanation || "Reviewing material...");
+          setLegacyExplanation(data?.fallbackExplanation || "Reviewing material...");
           setCoreContent("");
           
           // Trigger companion stream ONLY when visual mode is inactive
@@ -137,7 +182,7 @@ export default function CourseReader({ subject, onBack }) {
     return (
       <ul className="pl-4 border-l border-slate-800 space-y-1 font-mono text-xs text-slate-400">
         {nodes.map((node) => {
-          const hasChildren = node.children && node.children.length > 0;
+          const hasChildren = Array.isArray(node.children) && node.children.length > 0;
           const isExpanded = expandedNodes[node.id];
 
           return (
