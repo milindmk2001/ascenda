@@ -1,6 +1,8 @@
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+
 // Existing Curriculum & Visual Lesson API Functions
 export async function fetchSubjectTree(subjectId) {
-  const response = await fetch(`/api/curriculum/subjects/${subjectId}/tree`);
+  const response = await fetch(`${API_BASE_URL}/curriculum/subjects/${subjectId}/tree`);
   if (!response.ok) {
     throw new Error(`Failed to fetch tree: ${response.status}`);
   }
@@ -9,19 +11,17 @@ export async function fetchSubjectTree(subjectId) {
 
 export async function fetchVisualLesson(nodeId) {
   try {
-    const response = await fetch(`/api/visual-lesson/${nodeId}`);
+    const response = await fetch(`${API_BASE_URL}/visual-lesson/${nodeId}`);
     if (!response.ok) {
       return { mode: "classic", fallbackExplanation: "No cached visual slide found for this concept." };
     }
 
     const data = await response.json();
 
-    // Case A: Endpoint returns normalized object { mode: 'visual', payload: {...} }
     if (data.mode === "visual" && data.payload) {
       return data;
     }
 
-    // Case B: Endpoint returns raw DB record from visual_lesson_cache
     if (data.lesson_json || data.payload) {
       const rawPayload = data.lesson_json || data.payload;
       const parsedPayload = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
@@ -40,7 +40,7 @@ export async function fetchVisualLesson(nodeId) {
 }
 
 export async function fetchAiStreamResponse(nodeId, metaTag) {
-  return fetch(`/api/ai_tutor/stream?node_id=${encodeURIComponent(nodeId)}&meta_tag=${encodeURIComponent(metaTag || '')}`, {
+  return fetch(`${API_BASE_URL}/ai_tutor/stream?node_id=${encodeURIComponent(nodeId)}&meta_tag=${encodeURIComponent(metaTag || '')}`, {
     method: 'GET',
     headers: {
       'Accept': 'text/event-stream',
@@ -48,9 +48,9 @@ export async function fetchAiStreamResponse(nodeId, metaTag) {
   });
 }
 
-// Added Missing Exports expected by App.jsx
+// Fixed Hub Endpoints
 export async function getTracks() {
-  const response = await fetch('/api/hub/tracks');
+  const response = await fetch(`${API_BASE_URL}/tracks`);
   if (!response.ok) {
     throw new Error(`Failed to fetch tracks: ${response.status}`);
   }
@@ -58,7 +58,7 @@ export async function getTracks() {
 }
 
 export async function getGrades(trackId) {
-  const response = await fetch(`/api/hub/grades?track_id=${encodeURIComponent(trackId || '')}`);
+  const response = await fetch(`${API_BASE_URL}/grades?track_id=${encodeURIComponent(trackId || '')}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch grades: ${response.status}`);
   }
@@ -66,7 +66,7 @@ export async function getGrades(trackId) {
 }
 
 export async function resolveHubSubjects(trackId, gradeId) {
-  const response = await fetch(`/api/hub/subjects?track_id=${encodeURIComponent(trackId || '')}&grade_id=${encodeURIComponent(gradeId || '')}`);
+  const response = await fetch(`${API_BASE_URL}/subjects?track_id=${encodeURIComponent(trackId || '')}&grade_id=${encodeURIComponent(gradeId || '')}`);
   if (!response.ok) {
     throw new Error(`Failed to resolve subjects: ${response.status}`);
   }
