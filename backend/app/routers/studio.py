@@ -1,11 +1,15 @@
+from typing import Annotated
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
 from .. import models, schemas
 from ..database import get_db
-from uuid import UUID
 
 # Use /api/studio to match your frontend fetch calls
 router = APIRouter(prefix="/api/studio", tags=["Content Studio"])
+
 
 @router.post("/lesson", response_model=schemas.ModularLesson)
 def sync_lesson_to_db(
@@ -22,6 +26,7 @@ def sync_lesson_to_db(
     db.commit()
     db.refresh(db_lesson)
     return db_lesson
+
 
 # Used by Remotion or the frontend to fetch specific lesson data
 @router.get("/lesson/{lesson_id}", response_model=schemas.ModularLesson)
