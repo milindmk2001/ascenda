@@ -24,7 +24,7 @@ export async function fetchVisualLesson(nodeId) {
 
     const data = await response.json();
 
-    // 1. Unwrap payload structure
+    // 1. Unwrap nested payload objects or stringified JSON DB blobs
     let rawPayload = data.payload || data.lesson_json || data;
 
     while (typeof rawPayload === 'string') {
@@ -41,16 +41,16 @@ export async function fetchVisualLesson(nodeId) {
         : rawPayload.payload;
     }
 
-    // 2. Clean SVG string artifacts (non-breaking spaces & escaped newlines)
+    // 2. Sanitize SVG string artifacts (non-breaking spaces, escaped newlines, extra tabs)
     if (rawPayload && Array.isArray(rawPayload.slides)) {
       rawPayload.slides = rawPayload.slides.map((slide) => {
         let rawSvg = slide.svgCache || slide.svgContent || slide.svg || slide.svg_cache || '';
 
         if (typeof rawSvg === 'string') {
           rawSvg = rawSvg
-            .replace(/\\n/g, '\n')           // Convert escaped \n to real newlines
-            .replace(/\u00a0/g, ' ')         // Replace non-breaking spaces with standard spaces
-            .replace(/[\r\n\t]+/g, ' ')     // Flatten excess whitespace
+            .replace(/\\n/g, '\n')         // Convert escaped \n to real newlines
+            .replace(/\u00a0/g, ' ')       // Replace non-breaking spaces (\u00a0) with normal spaces
+            .replace(/[\r\t]+/g, ' ')      // Clean control characters
             .trim();
         }
 
