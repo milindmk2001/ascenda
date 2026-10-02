@@ -1,112 +1,109 @@
 // src/services/api.js
 
-const rawBase = import.meta.env.VITE_API_BASE_URL || '';
-const API_BASE_URL = rawBase ? `${rawBase.replace(/\/$/, '')}/api` : '/api';
+// Vite exposes env variables through import.meta.env
+const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL || 
+  import.meta.env.VITE_API_URL || 
+  "https://ascenda-production.up.railway.app"
+).replace(/\/$/, ""); // Strips trailing slash if accidentally added
 
 /**
- * Curriculum & Visual Lesson API Functions
+ * Helper to execute standard JSON fetch requests
  */
-
-export async function fetchSubjectTree(subjectId) {
-  const response = await fetch(`${API_BASE_URL}/curriculum/subjects/${subjectId}/tree`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch tree: ${response.status}`);
-  }
-  return response.json();
-}
-
-export async function fetchVisualLesson(nodeId) {
-  try {
-    const response = await fetch(`${API_BASE_URL}/visual-lesson/${nodeId}`);
-    if (!response.ok) {
-      return { mode: "classic", fallbackExplanation: "No cached visual slide found for this concept." };
-    }
-
-    const data = await response.json();
-
-    // 1. Unwrap nested payload objects or stringified JSON DB blobs
-    let rawPayload = data.payload || data.lesson_json || data;
-
-    while (typeof rawPayload === 'string') {
-      try {
-        rawPayload = JSON.parse(rawPayload);
-      } catch (e) {
-        break;
-      }
-    }
-
-    if (rawPayload && rawPayload.payload) {
-      rawPayload = typeof rawPayload.payload === 'string'
-        ? JSON.parse(rawPayload.payload)
-        : rawPayload.payload;
-    }
-
-    // 2. Sanitize SVG string artifacts (\u00a0 non-breaking spaces, escaped newlines, extra tabs)
-    if (rawPayload && Array.isArray(rawPayload.slides)) {
-      rawPayload.slides = rawPayload.slides.map((slide) => {
-        let rawSvg = slide.svgCache || slide.svgContent || slide.svg || slide.svg_cache || '';
-
-        if (typeof rawSvg === 'string') {
-          rawSvg = rawSvg
-            .replace(/\\n/g, '\n')         // Convert escaped \n to real newlines
-            .replace(/\u00a0/g, ' ')       // Replace non-breaking spaces (\u00a0) with standard spaces
-            .replace(/[\r\t]+/g, ' ')      // Clean control whitespace
-            .trim();
-        }
-
-        return {
-          ...slide,
-          svgCache: rawSvg,
-          svgContent: rawSvg,
-          svg_cache: rawSvg,
-          svg: rawSvg
-        };
-      });
-    }
-
-    return {
-      mode: "visual",
-      payload: rawPayload
-    };
-  } catch (err) {
-    console.warn("fetchVisualLesson fallback active:", err);
-    return { mode: "classic", fallbackExplanation: "Reviewing layout structure..." };
-  }
-}
-
-export async function fetchAiStreamResponse(nodeId, metaTag) {
-  return fetch(`${API_BASE_URL}/ai_tutor/stream?node_id=${encodeURIComponent(nodeId)}&meta_tag=${encodeURIComponent(metaTag || '')}`, {
-    method: 'GET',
+async function request(endpoint, options = {}) {
+  const url = endpoint.startsWith("http") ? endpoint : `${API_BASE}${endpoint}`;
+  
+  const res = await fetch(url, {
     headers: {
-      'Accept': 'text/event-stream',
+      "Content-Type": "application/json",
+      ...options.headers,
     },
+    ...options,
   });
-}
 
-/**
- * Hub Navigation Endpoints
- */
-
-export async function getTracks() {
-  const response = await fetch(`${API_BASE_URL}/curriculum/tracks`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch tracks: ${response.status}`);
+  if (!res.ok) {
+    const errorBody = await res.text().catch(() => null);
+    throw new Error(
+      `API Error [${res.status} ${res.statusText}]: ${endpoint} - ${errorBody || "No details"}`
+    );
   }
-  return response.json();
+
+  return res.json();
 }
 
-export async function getGrades(trackId) {
-  const response = await fetch(`${API_BASE_URL}/curriculum/grades?track_id=${encodeURIComponent(trackId || '')}`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch grades: ${response.status}`);
-  }
-  return response.json();
-}
+export const api = {
+  // ── CURRICULUM ENDPOINTS ───────────────────────────────────
 
-export async function resolveHubSubjects(trackCode, gradeName) {
-  const response = await fetch(`${API_BASE_URL}/curriculum/resolve-hub?track_code=${encodeURIComponent(trackCode || '')}&grade_name=${encodeURIComponent(gradeName || '')}`);
-  if (!response.ok) {
-    throw new Error(`Failed to resolve subjects: ${response.status}`);
-  }
-  return response.json();
-}
+  /**
+   * Fetches available grade levels
+   */
+  getGrades: () => request("/api/admin/curriculum/grades"),
+
+  /**
+   * Resolves hub course cards based on track code and grade
+   */
+  resolveHub: (trackCode, gradeName) => {
+    const params = new URLSearchParams({
+      track_code: trackCode || "",
+      grade_name: gradeName || "",
+    });
+    return request(`/api/curriculum/resolve-hub?${params.toString()}`);
+  },
+
+  /**
+   * Fetches full curriculum tree for a subject/course ID
+   */
+  getCurriculumTree: (subjectId) =>
+    request(`/api/curriculum/subjects/${subjectId}/tree`),
+
+  /**
+   * Fetches content/metadata for a leaf node
+   */
+  getLeafContent: (leafId) => request(`/api/curriculum/leaf/${leafId}`),
+
+  // ── VISUAL LESSON ENDPOINTS ────────────────────────────────
+
+  /**
+   * Retrieves visual lesson cache payload for a curriculum node ID
+   */
+  getVisualLesson: (curriculumNodeId) =>
+    request(`/api/visual-lesson/${curriculumNodeId}`),
+
+  /**
+   * Posts student interactions to the adaptive Socratic tutor engine
+   */
+  postTutorAction: (payload) =>
+    request("/api/visual-lesson/tutor-action", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  // ── INTERACTIVE VIDEO ENDPOINTS ───────────────────────────
+
+  /**
+   * Interacts with video frame analyzer
+   */
+  interactVideo: (timestamp, query) =>
+    request("/api/interact", {
+      method: "POST",
+      body: JSON.stringify({ timestamp, query }),
+    }),
+
+  // ── STREAMING ENDPOINTS ────────────────────────────────────
+
+  /**
+   * Returns a raw ReadableStream response for AI Socratic explanations
+   */
+  streamAiExplanation: (leafId, subjectMeta = "general") => {
+    return fetch(`${API_BASE}/api/ai_tutor/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        leaf_id: leafId,
+        subject_meta: subjectMeta,
+      }),
+    });
+  },
+};
+
+export default api;

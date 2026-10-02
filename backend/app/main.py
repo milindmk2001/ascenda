@@ -18,6 +18,8 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins, 
+    # REGEX matches ALL Vercel preview URLs (e.g., ascenda-git-dev-username.vercel.app)
+    #allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
