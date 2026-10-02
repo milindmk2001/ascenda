@@ -30,11 +30,11 @@ async function request(endpoint, options = {}) {
   return res.json();
 }
 
-// ── NAMED EXPORTS REQUIRED BY APP.JSX & COURSEREADER.JSX ───────────────────
+// ── NAMED EXPORTS (Fixes App.jsx & CourseReader.jsx) ──────────────────────
 
-export const getTracks = () => request("/api/admin/curriculum/tracks");
+export const getTracks = () => request("/api/curriculum/tracks");
 
-export const getGrades = () => request("/api/admin/curriculum/grades");
+export const getGrades = () => request("/api/curriculum/grades");
 
 export const fetchGrades = getGrades;
 
