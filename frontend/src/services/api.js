@@ -1,11 +1,10 @@
 // src/services/api.js
 
-// Vite exposes env variables through import.meta.env
 const API_BASE = (
   import.meta.env.VITE_API_BASE_URL || 
   import.meta.env.VITE_API_URL || 
   "https://ascenda-production.up.railway.app"
-).replace(/\/$/, ""); // Strips trailing slash if accidentally added
+).replace(/\/$/, "");
 
 /**
  * Helper to execute standard JSON fetch requests
@@ -31,17 +30,23 @@ async function request(endpoint, options = {}) {
   return res.json();
 }
 
-// ── INDIVIDUAL NAMED EXPORTS (Fixes CourseReader.jsx imports) ─────────
+// ── NAMED EXPORTS REQUIRED BY APP.JSX & COURSEREADER.JSX ───────────────────
 
-export const fetchGrades = () => request("/api/admin/curriculum/grades");
+export const getTracks = () => request("/api/admin/curriculum/tracks");
 
-export const fetchResolveHub = (trackCode, gradeName) => {
+export const getGrades = () => request("/api/admin/curriculum/grades");
+
+export const fetchGrades = getGrades;
+
+export const resolveHubSubjects = (trackCode, gradeName) => {
   const params = new URLSearchParams({
     track_code: trackCode || "",
     grade_name: gradeName || "",
   });
   return request(`/api/curriculum/resolve-hub?${params.toString()}`);
 };
+
+export const fetchResolveHub = resolveHubSubjects;
 
 export const fetchSubjectTree = (subjectId) =>
   request(`/api/curriculum/subjects/${subjectId}/tree`);
@@ -75,11 +80,15 @@ export const fetchAiStreamResponse = (leafId, subjectMeta = "general") => {
   });
 };
 
-// ── DEFAULT OBJECT EXPORT ──────────────────────────────────────────────
+// ── DEFAULT OBJECT EXPORT ──────────────────────────────────────────────────
 
 export const api = {
-  getGrades: fetchGrades,
-  resolveHub: fetchResolveHub,
+  getTracks,
+  getGrades,
+  fetchGrades,
+  resolveHubSubjects,
+  fetchResolveHub,
+  resolveHub: resolveHubSubjects,
   getCurriculumTree: fetchSubjectTree,
   getLeafContent: fetchLeafContent,
   getVisualLesson: fetchVisualLesson,
