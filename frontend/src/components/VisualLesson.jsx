@@ -4,6 +4,15 @@ import { AnimationController } from '../utils/AnimationController';
 import { SceneExecutor } from '../utils/SceneExecutor';
 import { NarrationPlayer } from '../utils/NarrationPlayer';
 
+// Quick inline sanitisation helper
+export function sanitizeSvgString(rawSvg) {
+  if (typeof rawSvg !== 'string') return '';
+  return rawSvg
+    .replace(/\\n/g, '\n')
+    .replace(/\u00a0/g, ' ') // Replace non-breaking space with standard space
+    .trim();
+}
+
 export default function VisualLesson({ lessonPayload, onFinished }) {
   const executor = useMemo(() => new SceneExecutor(lessonPayload), [lessonPayload]);
   const player = useMemo(() => new NarrationPlayer(), []);
@@ -50,7 +59,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
     };
   }, [lessonPayload, player]);
 
-  // FIX 4: Safety-first layout visibility initialization loop execution track
+  // Safety-first layout visibility initialization loop execution track
   const resetDelayedAnimationOpacity = () => {
     if (!svgHostRef.current || !slide?.animationTimeline) return;
 
@@ -66,7 +75,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
             el.style.transition = "opacity 0.4s ease-in-out";
           }
         } catch (err) {
-          console.error("Failed to apply Fix 4 initial opacity bounds to target element:", err);
+          console.error("Failed to apply initial opacity bounds to target element:", err);
         }
       }
     });
@@ -76,7 +85,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
     if (!slide || isAnimating) return;
     setIsAnimating(true);
     
-    // FIX 4: Prior to starting timeline audio steps, make sure all milestone IDs are hidden
+    // Prior to starting timeline audio steps, make sure all milestone IDs are hidden
     resetDelayedAnimationOpacity();
     
     if (slide.animationTimeline) {
@@ -198,7 +207,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
         {/* THE APP CANVAS WRAPPER — Bounded container frame mapping absolute components */}
         <div className="flex-1 flex flex-col bg-white rounded-xl shadow-inner min-h-[340px] relative overflow-hidden border border-slate-800">
           
-          {/* FIX 1: THE FLOATING HEADER — Pinned absolutely inside top parameter coordinate tracks */}
+          {/* THE FLOATING HEADER — Pinned absolutely inside top parameter coordinate tracks */}
           <div className="absolute top-0 left-0 right-0 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/60 px-4 py-2.5 flex items-center justify-between z-10">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -213,10 +222,15 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
 
           {/* Core SVG Render Workspace Viewport Area */}
           <div className="flex-1 pt-14 pb-12 flex items-center justify-center p-4">
-            {slide?.svgCache && <VisualRenderer svgContent={slide.svgCache} hostRef={svgHostRef} />}
+            {slide?.svgCache && (
+              <VisualRenderer 
+                svgContent={sanitizeSvgString(slide.svgCache)} 
+                hostRef={svgHostRef} 
+              />
+            )}
           </div>
 
-          {/* FIX 8: SLIDE PROGRESS INDICATOR BAR — Anchored flush against the canvas base coordinates */}
+          {/* SLIDE PROGRESS INDICATOR BAR — Anchored flush against the canvas base coordinates */}
           <div className="absolute bottom-0 left-0 right-0 bg-slate-950/95 border-t border-slate-800/60 px-4 py-2 flex items-center gap-4 z-10">
             <span className="text-[10px] font-mono font-bold text-slate-400 whitespace-nowrap">
               Slide {progressMetrics.current} of {progressMetrics.total}
@@ -247,7 +261,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
       
       {/* Right Sidebar Assistant Panel */}
       <aside className="w-[380px] p-6 bg-[#090f1c]/30 flex flex-col gap-6 overflow-y-auto">
-        {/* FIX 2: Immersive Avatar Narration Workspace Card */}
+        {/* Immersive Avatar Narration Workspace Card */}
         <div className="bg-[#090f1c] border border-slate-800 rounded-xl p-4 shadow-xl relative overflow-hidden">
           <div className="flex items-center gap-2.5 border-b border-slate-800/60 pb-2 mb-3">
             <div className="relative flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px]">
