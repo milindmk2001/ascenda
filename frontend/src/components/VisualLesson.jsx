@@ -1,17 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import VisualRenderer from './VisualRenderer';
+import VisualRenderer, { sanitizeSvgString } from './VisualRenderer';
 import { AnimationController } from '../utils/AnimationController';
 import { SceneExecutor } from '../utils/SceneExecutor';
 import { NarrationPlayer } from '../utils/NarrationPlayer';
 
-// Quick inline sanitisation helper
-export function sanitizeSvgString(rawSvg) {
-  if (typeof rawSvg !== 'string') return '';
-  return rawSvg
-    .replace(/\\n/g, '\n')
-    .replace(/\u00a0/g, ' ') // Replace non-breaking space with standard space
-    .trim();
-}
+export { sanitizeSvgString };
 
 export default function VisualLesson({ lessonPayload, onFinished }) {
   const executor = useMemo(() => new SceneExecutor(lessonPayload), [lessonPayload]);
@@ -220,13 +213,12 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
             </span>
           </div>
 
-          {/* Core SVG Render Workspace Viewport Area */}
-          <div className="flex-1 pt-14 pb-12 flex items-center justify-center p-4">
-            {slide?.svgCache && (
-              <VisualRenderer 
-                svgContent={sanitizeSvgString(slide.svgCache)} 
-                hostRef={svgHostRef} 
-              />
+          {/* Slide Canvas Viewport */}
+          <div className="flex-1 w-full h-full min-h-[320px] flex items-center justify-center p-4 bg-white rounded-lg shadow-sm overflow-hidden">
+            {slide?.svgCache ? (
+              <VisualRenderer svgContent={slide.svgCache} hostRef={svgHostRef} />
+            ) : (
+              <div className="text-xs font-mono text-slate-400">No visual cache available</div>
             )}
           </div>
 
