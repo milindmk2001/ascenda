@@ -4,18 +4,45 @@ export class NarrationPlayer {
   }
 
   speak(text, onEndCallback) {
-    if (!window.speechSynthesis) return;
-    this.stop();
-
-    this.utterance = new SpeechSynthesisUtterance(text);
-    this.utterance.rate = 0.95;
-    this.utterance.pitch = 1.0;
-    
-    if (onEndCallback) {
-      this.utterance.onend = onEndCallback;
+    if (!window.speechSynthesis || !text) {
+      if (onEndCallback) onEndCallback();
+      return;
     }
 
-    window.speechSynthesis.speak(this.utterance);
+    this.stop();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+
+    // Prevent Chrome garbage collection by storing on global window context
+    window._activeUtterance = utterance;
+
+    let executed = false;
+    const handleCompletion = () => {
+      if (!executed) {
+        executed = true;
+        window._activeUtterance = null;
+        if (onEndCallback) onEndCallback();
+      }
+    };
+
+    utterance.onend = handleCompletion;
+    utterance.onerror = (err) => {
+      console.warn("SpeechSynthesis error encountered, forcing scene transition:", err);
+      handleCompletion();
+    };
+
+    // Fallback timer in case the browser blocks audio autoplay entirely
+    const estimatedDuration = Math.max((text.length / 15) * 1000, 3000);
+    setTimeout(() => {
+      if (window._activeUtterance === utterance && !executed) {
+        console.warn("SpeechSynthesis onend timed out, advancing scene.");
+        handleCompletion();
+      }
+    }, estimatedDuration);
+
+    window.speechSynthesis.speak(utterance);
   }
 
   pause() {
