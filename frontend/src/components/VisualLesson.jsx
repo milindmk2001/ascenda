@@ -9,8 +9,13 @@ export { sanitizeSvgString };
 export default function VisualLesson({ lessonPayload, onFinished }) {
   const executor = useMemo(() => new SceneExecutor(lessonPayload), [lessonPayload]);
   const player = useMemo(() => new NarrationPlayer(), []);
-  
-  const [currentSceneId, setCurrentSceneId] = useState(() => executor.getInitialScene());
+
+  const [currentSceneId, setCurrentSceneId] = useState(() => {
+    const initial = executor.getInitialScene();
+    if (initial) return initial;
+    return lessonPayload?.slides?.[0]?.slideId || 'slide_1';
+  });
+
   const [studentAnswer, setStudentAnswer] = useState("");
   const [feedback, setFeedback] = useState("");
   const [hintCount, setHintCount] = useState(0);
@@ -24,27 +29,40 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
   const svgHostRef = useRef(null);
   const animator = useRef(null);
 
-  const slide = useMemo(() => executor.getSlide(currentSceneId), [currentSceneId, executor]);
+  // Resilient Slide Lookup
+  const slide = useMemo(() => {
+    if (!lessonPayload?.slides || !Array.isArray(lessonPayload.slides)) return null;
 
-  // Derive total non-fallback step targets for progress tracking metrics calculation from slides array
+    let found = executor.getSlide(currentSceneId);
+    if (!found) {
+      found = lessonPayload.slides.find(s => s.slideId === currentSceneId);
+    }
+    if (!found && typeof currentSceneId === 'number') {
+      found = lessonPayload.slides[currentSceneId];
+    }
+    return found || lessonPayload.slides[0] || null;
+  }, [currentSceneId, executor, lessonPayload]);
+
+  // Ref to protect against stale closures in async TTS callbacks
+  const slideRef = useRef(slide);
+  useEffect(() => {
+    slideRef.current = slide;
+  }, [slide]);
+
   const progressMetrics = useMemo(() => {
     if (!lessonPayload?.slides || !Array.isArray(lessonPayload.slides)) {
       return { current: 1, total: 1 };
     }
-    
-    const currentIndex = lessonPayload.slides.findIndex(s => s.slideId === currentSceneId);
+    const currentIndex = lessonPayload.slides.findIndex(s => s.slideId === (slide?.slideId || currentSceneId));
     const totalSlides = lessonPayload.slides.length;
 
     return {
       current: currentIndex !== -1 ? currentIndex + 1 : 1,
       total: totalSlides || 1
     };
-  }, [lessonPayload, currentSceneId]);
+  }, [lessonPayload, currentSceneId, slide]);
 
   useEffect(() => {
-    if (lessonPayload.schemaVersion !== '1.0') {
-      console.warn(`Version mismatch: Expected 1.0, got ${lessonPayload.schemaVersion}`);
-    }
     animator.current = new AnimationController(svgHostRef);
     return () => {
       player.stop();
@@ -52,52 +70,60 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
     };
   }, [lessonPayload, player]);
 
-  // Safety-first layout visibility initialization loop execution track
+  // Safe Opacity Reset for Concept Cards & Dynamic SVGs
   const resetDelayedAnimationOpacity = () => {
     if (!svgHostRef.current || !slide?.animationTimeline) return;
-
-    // Scan timeline array items to find DOM target IDs designated for future reveals
     slide.animationTimeline.forEach((step) => {
-      if (step.id || step.target) {
-        const identifier = step.id || step.target;
-        try {
-          const el = svgHostRef.current.querySelector(`#${CSS.escape(identifier)}`);
-          if (el) {
-            // Enforce initial invisible track baseline state smoothly
-            el.style.opacity = "0";
-            el.style.transition = "opacity 0.4s ease-in-out";
-          }
-        } catch (err) {
-          console.error("Failed to apply initial opacity bounds to target element:", err);
+      const identifier = step.id || step.target;
+      if (!identifier) return;
+      try {
+        const el = svgHostRef.current.querySelector(`#${CSS.escape(identifier)}`);
+        if (el) {
+          el.style.opacity = "0";
+          el.style.transition = "opacity 0.4s ease-in-out";
         }
+      } catch (err) {
+        console.warn("Element target missing in SVG:", identifier);
       }
     });
   };
 
-  const runVisualTimeline = async () => {
-    if (!slide || isAnimating) return;
-    setIsAnimating(true);
-    
-    // Prior to starting timeline audio steps, make sure all milestone IDs are hidden
-    resetDelayedAnimationOpacity();
-    
-    if (slide.animationTimeline) {
-      await animator.current.runTimeline(slide.animationTimeline, (stepText) => {
-        player.speak(stepText);
-      });
-    }
-    
-    setIsAnimating(false);
-    if (slide.narration) {
-      player.speak(slide.narration, () => {
-        const next = executor.getNextSceneId(slide, "animation_complete");
-        if (next) setCurrentSceneId(next);
-      });
-    }
-  };
-
+  // Run animation and audio progression pipeline with cancellation safety
   useEffect(() => {
+    let isCancelled = false;
+
+    const runVisualTimeline = async () => {
+      if (!slide || isAnimating) return;
+      setIsAnimating(true);
+      
+      resetDelayedAnimationOpacity();
+      
+      if (slide.animationTimeline && animator.current) {
+        await animator.current.runTimeline(slide.animationTimeline, (stepText) => {
+          if (stepText && !isCancelled) player.speak(stepText);
+        });
+      }
+      
+      if (isCancelled) return;
+      setIsAnimating(false);
+
+      if (slide.narration) {
+        player.speak(slide.narration, () => {
+          if (isCancelled) return;
+          const currentActiveSlide = slideRef.current;
+          const next = executor.getNextSceneId(currentActiveSlide, "animation_complete");
+          if (next) setCurrentSceneId(next);
+        });
+      }
+    };
+
     runVisualTimeline();
+
+    return () => {
+      isCancelled = true;
+      player.stop();
+      if (animator.current) animator.current.clear();
+    };
   }, [currentSceneId, slide]);
 
   const handleSubmitAnswer = () => {
@@ -107,12 +133,16 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
 
     if (isCorrect) {
       setScore(p => p + 1);
-      setFeedback("Correct! Fantastic tracking.");
+      setFeedback("Correct! Outstanding job.");
       player.speak("Correct! Outstanding job.");
       
-      if (slide.revealTarget) {
-        const el = svgHostRef.current?.querySelector(`#${CSS.escape(slide.revealTarget)}`);
-        if (el) el.style.opacity = "1";
+      if (slide.revealTarget && svgHostRef.current) {
+        try {
+          const el = svgHostRef.current.querySelector(`#${CSS.escape(slide.revealTarget)}`);
+          if (el) el.style.opacity = "1";
+        } catch (e) {
+          console.warn("Could not reveal target:", slide.revealTarget);
+        }
       }
       
       setTimeout(() => {
@@ -124,11 +154,11 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
       if (hintCount < maxHints) {
         setHintCount(p => p + 1);
         setFeedback(`Hint: ${slide.hint}`);
-        player.speak(slide.hint);
+        if (slide.hint) player.speak(slide.hint);
         const next = executor.getNextSceneId(slide, "student_wrong");
         if (next) navigateToScene(next);
       } else {
-        setFeedback("Let's take a look at the solution together.");
+        setFeedback("Let's review the solution together.");
         const fallback = executor.getNextSceneId(slide, "max_attempts");
         if (fallback) navigateToScene(fallback);
       }
@@ -139,12 +169,12 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
     if (!customQuestion.trim()) return;
     setTutorLoading(true);
     try {
-      const res = await fetch("https://ascenda-production.up.railway.app/api/visual-lesson/tutor-action", {
+      const res = await fetch("https://ascenda-dev.up.railway.app/api/visual-lesson/tutor-action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           lessonId: lessonPayload.lessonId,
-          slideId: currentSceneId,
+          slideId: slide?.slideId || currentSceneId,
           curriculumNodeId: lessonPayload.metadata?.curriculumNodeId,
           studentQuestion: customQuestion,
           currentState: { visibleElements: [], currentAnimationStep: 0, studentAnswer }
@@ -152,15 +182,16 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
       });
       const data = await res.json();
       setCustomResponse(data.narration);
-      player.speak(data.narration);
+      if (data.narration) player.speak(data.narration);
     } catch (e) {
-      console.error(e);
+      console.error("Tutor Action API Error:", e);
     } finally {
       setTutorLoading(false);
     }
   };
 
   const navigateToScene = (nextId) => {
+    player.stop();
     setFeedback("");
     setStudentAnswer("");
     setCustomResponse("");
@@ -194,13 +225,13 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
 
   return (
     <div className="flex flex-1 overflow-hidden bg-[#070b14] h-full w-full">
-      {/* Left Core Interaction Column Block */}
+      {/* Left Workspace Block */}
       <div className="flex-1 flex flex-col p-6 justify-between border-r border-slate-900 bg-[#0d1527]">
         
-        {/* THE APP CANVAS WRAPPER — Bounded container frame mapping absolute components */}
+        {/* Visual Viewport Canvas Frame */}
         <div className="flex-1 flex flex-col bg-white rounded-xl shadow-inner min-h-[340px] relative overflow-hidden border border-slate-800">
           
-          {/* THE FLOATING HEADER — Pinned absolutely inside top parameter coordinate tracks */}
+          {/* Top Canvas Status Header */}
           <div className="absolute top-0 left-0 right-0 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/60 px-4 py-2.5 flex items-center justify-between z-10">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -209,26 +240,27 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
               </span>
             </div>
             <span className="text-[9px] font-mono uppercase bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800/40">
-              Interactive Node
+              {slide?.sceneType || "Interactive Node"}
             </span>
           </div>
 
-          {/* Slide Canvas Viewport */}
-          <div className="flex-1 w-full h-full min-h-[320px] flex items-center justify-center p-4 bg-white rounded-lg shadow-sm overflow-hidden">
+          {/* SVG Viewport Container */}
+          <div className="flex-1 w-full h-full min-h-[320px] flex items-center justify-center p-4 bg-white rounded-lg shadow-sm overflow-hidden pt-12 pb-10">
             {slide?.svgCache ? (
               <VisualRenderer svgContent={slide.svgCache} hostRef={svgHostRef} />
             ) : (
-              <div className="text-xs font-mono text-slate-400">No visual cache available</div>
+              <div className="text-xs font-mono text-slate-500 p-8 text-center">
+                <p className="font-bold text-slate-700 mb-1">{slide?.title}</p>
+                <p className="text-[11px] text-slate-400">Concept Card Stage — Review explanation audio on the right.</p>
+              </div>
             )}
           </div>
 
-          {/* SLIDE PROGRESS INDICATOR BAR — Anchored flush against the canvas base coordinates */}
+          {/* Canvas Progress Bar */}
           <div className="absolute bottom-0 left-0 right-0 bg-slate-950/95 border-t border-slate-800/60 px-4 py-2 flex items-center gap-4 z-10">
             <span className="text-[10px] font-mono font-bold text-slate-400 whitespace-nowrap">
               Slide {progressMetrics.current} of {progressMetrics.total}
             </span>
-            
-            {/* Dynamic visual tracking bar channel */}
             <div className="flex-1 h-1.5 bg-slate-900 rounded-full overflow-hidden relative">
               <div 
                 className="absolute top-0 bottom-0 left-0 bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
@@ -239,30 +271,35 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
 
         </div>
 
-        {/* Lower System Controls Panel Interface Deck */}
+        {/* Lower Control Deck */}
         <div className="flex justify-between items-center bg-[#090f1c]/40 border border-slate-900 p-3 rounded-lg mt-4">
-          <button onClick={runVisualTimeline} disabled={isAnimating} className="bg-slate-900 text-slate-300 font-mono text-xs px-4 py-2 border border-slate-800 rounded transition-colors hover:bg-slate-850">
+          <button 
+            onClick={() => {
+              setIsAnimating(false);
+              setCurrentSceneId(c => c); // Triggers re-run of pipeline
+            }} 
+            disabled={isAnimating} 
+            className="bg-slate-900 text-slate-300 font-mono text-xs px-4 py-2 border border-slate-800 rounded transition-colors hover:bg-slate-850 disabled:opacity-50"
+          >
             {isAnimating ? "Playing..." : "Replay Animation"}
           </button>
           <div className="flex gap-2">
-            <button onClick={() => { player.pause(); }} className="text-[11px] font-mono text-slate-500 hover:text-slate-300 transition-colors">Pause</button>
-            <button onClick={() => { player.resume(); }} className="text-[11px] font-mono text-slate-500 hover:text-slate-300 transition-colors">Resume</button>
+            <button onClick={() => player.pause()} className="text-[11px] font-mono text-slate-500 hover:text-slate-300 transition-colors">Pause</button>
+            <button onClick={() => player.resume()} className="text-[11px] font-mono text-slate-500 hover:text-slate-300 transition-colors">Resume</button>
           </div>
         </div>
       </div>
       
       {/* Right Sidebar Assistant Panel */}
       <aside className="w-[380px] p-6 bg-[#090f1c]/30 flex flex-col gap-6 overflow-y-auto">
-        {/* Immersive Avatar Narration Workspace Card */}
         <div className="bg-[#090f1c] border border-slate-800 rounded-xl p-4 shadow-xl relative overflow-hidden">
           <div className="flex items-center gap-2.5 border-b border-slate-800/60 pb-2 mb-3">
             <div className="relative flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px]">
               👩‍🏫
-              {/* Active TTS Pipeline Pulsing Engine Node Indicator */}
               {isAnimating && (
                 <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                 </span>
               )}
             </div>
@@ -285,6 +322,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
               onChange={e => setStudentAnswer(e.target.value)}
               placeholder="Your answer..." 
               className="w-full bg-[#070b14] border border-slate-800 text-xs rounded p-2 text-slate-200 font-mono focus:outline-none focus:border-emerald-500/50"
+              onKeyDown={e => e.key === 'Enter' && handleSubmitAnswer()}
             />
             <button onClick={handleSubmitAnswer} className="w-full bg-emerald-500 text-slate-950 font-bold font-mono text-xs py-2 rounded">Submit Answer</button>
             {feedback && <div className="p-3 bg-slate-900/40 border border-slate-900 rounded text-xs font-mono text-slate-400">{feedback}</div>}
@@ -299,6 +337,7 @@ export default function VisualLesson({ lessonPayload, onFinished }) {
               onChange={e => setCustomQuestion(e.target.value)} 
               placeholder="Ask a question..." 
               className="flex-1 bg-[#070b14] border border-slate-800 text-xs rounded p-2 text-slate-200 font-mono focus:outline-none"
+              onKeyDown={e => e.key === 'Enter' && handleAskCustomQuestion()}
             />
             <button onClick={handleAskCustomQuestion} disabled={tutorLoading} className="bg-slate-900 text-slate-300 font-mono text-xs px-3 rounded border border-slate-800">{tutorLoading ? "..." : "Ask"}</button>
           </div>

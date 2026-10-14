@@ -30,11 +30,14 @@ async function request(endpoint, options = {}) {
   return res.json();
 }
 
-// ── NAMED EXPORTS (Fixes App.jsx & CourseReader.jsx) ──────────────────────
+// ── NAMED EXPORTS ──────────────────────────────────────────────────────────
 
 export const getTracks = () => request("/api/curriculum/tracks");
 
-export const getGrades = () => request("/api/curriculum/grades");
+export const getGrades = (trackCode) => {
+  if (!trackCode) return Promise.resolve([]);
+  return request(`/api/curriculum/grades?track_code=${encodeURIComponent(trackCode)}`);
+};
 
 export const fetchGrades = getGrades;
 
